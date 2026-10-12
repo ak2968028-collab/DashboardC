@@ -12,7 +12,7 @@ The system integrates:
 * **Spatial Cadastral Boundaries** from the **Survey of India (SOI)**
 * **Census 2011 & Field Survey Database** (demographics, land use, water bodies, household energy, transportation, municipal solid waste, and livestock)
 * **IPCC Tier-1 & Central Electricity Authority (CEA) GHG Accounting Models**
-* **Interactive Web GIS (Folium/Leaflet)** with synchronized village selectors and thematic choropleth layers
+* **Interactive Web GIS (Leaflet)** with synchronized village selectors and thematic choropleth layers
 * **Comparative Analytics & Ranking** across all Community Development Blocks
 * **Academic PDF Reporting** (ReportLab) adhering to MoEFCC reporting standards
 
@@ -38,38 +38,54 @@ The system integrates:
 
 ## 📂 3. Project Directory Structure
 ```text
-dashboard main/
+mtech-thesis/
 │
-├── app.py                         # Master Streamlit Application
-├── requirements.txt               # Python package dependencies
-├── README.md                      # Project thesis documentation
+├── docker-compose.yml             # fast_backend + database + frontend + geoserver
+├── del.sh                         # Full clean of this project's Docker containers, volumes, images & caches
+├── .env.example                   # Ports & credentials overrides
 │
-├── VARANASI_VILLages/
-│   └── VARANASI_VILL.gpkg         # Primary Survey of India Cadastral GPKG
-│
-├── data/
-│   ├── raw/
-│   │   └── village_data.xlsx      # Master survey database (1,334 villages)
-│   └── processed/
-│       ├── varanasi_district.geojson # Dissolved District Boundary
-│       ├── varanasi_blocks.geojson   # Dissolved 8 Block Boundaries
-│       └── varanasi_villages_optimized.geojson # Fast Web GIS Polygons
+├── fast_backend/                  # FastAPI backend (Python)
+│   ├── app/
+│   │   ├── main.py                # FastAPI app (docs at /docs)
+│   │   ├── conf/                  # settings.py (env vars), logging
+│   │   ├── database/
+│   │   │   ├── config/            # session.py (async engine), dependency.py (db_read / db_write)
+│   │   │   ├── models/            # SQLAlchemy models: village.py, emission.py, spatial.py (PostGIS)
+│   │   │   └── crud/              # Database queries per area (village, emission, spatial)
+│   │   └── api/
+│   │       ├── routes/            # Endpoints: villages, district, emissions, data_io, geo
+│   │       ├── schema/            # Pydantic request / response models
+│   │       └── service/           # carbon_svc (IPCC model), report_svc (PDF), import_svc (Excel),
+│   │                              # geoserver_svc (layer publishing), village_svc, emission_svc
+│   ├── alembic/                   # Database migrations (alembic.ini alongside)
+│   │   └── versions/
+│   ├── script/
+│   │   ├── geoserver_publish.py   # Publishes PostGIS vector layers & SLD styles to GeoServer
+│   │   └── geoserver_raster.py    # Uploads media/Rasters GeoTIFFs to GeoServer with their SLDs
+│   ├── media/
+│   │   ├── run_all.py             # Runs the loader scripts below in order
+│   │   ├── scripts/               # One loader per table (read file -> df.to_sql), skips filled tables
+│   │   │   ├── db_connection.py   # DB connection details (from POSTGRES_* env vars)
+│   │   │   ├── masters/           # emission_factors.py
+│   │   │   ├── survey/            # villages.py, demographics.py, land_use.py, ... (village_data.xlsx)
+│   │   │   ├── emissions/         # village_emissions.py (IPCC Tier-1 model)
+│   │   │   └── boundaries/        # district / block / village polygons -> PostGIS
+│   │   ├── data/raw/              # village_data.xlsx (1,334 villages), VARANASI_VILL.gpkg (SOI cadastral)
+│   │   ├── data/processed/        # District, block & village GeoJSON
+│   │   ├── config/                # emission_factors.csv (IPCC & CEA)
+│   │   ├── geoserver/             # SLD styles for the vector layers
+│   │   └── Rasters/               # files/<group>/*.tif + SLD/<group>/*.sld (same file names)
+│   ├── start.sh                   # Setup: migrations, data, GeoServer (run after docker compose up)
+│   ├── Dockerfile, gunicorn.conf.py, requirements.txt
+│   └── .fastdb.env.example        # Settings for running outside Docker
 │
 ├── database/
-│   ├── database.db                # SQLite Relational Database (10 tables)
-│   └── schema.sql                 # DDL Schema with Foreign Keys & Indexes
+│   ├── init-databases.sql         # Enables PostGIS on first start
+│   └── views.sql                  # villages_carbon view (applied by start.sh)
 │
-├── config/
-│   └── emission_factors.csv       # Configurable IPCC & CEA Emission Factors
-│
-├── modules/
-│   ├── database.py                # Database connection, queries & Excel upserts
-│   ├── carbon.py                  # GHG emissions accounting engine
-│   ├── gis.py                     # Folium mapping & thematic styling
-│   └── reporting.py               # ReportLab Academic PDF generator
-│
-└── scripts/
-    └── init_database_and_emissions.py # Database & Carbon pipeline initializer
+└── frontend/                      # Next.js dashboard (React + Recharts + Leaflet)
+    ├── Dockerfile
+    └── src/app/                   # One folder per dashboard page
 ```
 
 ---
@@ -92,19 +108,90 @@ $$\text{Emissions } (\text{t CO}_2\text{e/year}) = \frac{\text{Annual Activity D
 
 ---
 
-## 🚀 5. Execution on Windows
+## 🚀 5. Running the Dashboard
 
-Open PowerShell or Command Prompt in the project folder:
-
-```powershell
-# 1. (Optional) Create and activate virtual environment
-python -m venv venv
-venv\Scripts\activate
-
-# 2. Install dependencies
-pip install -r requirements.txt
-
-# 3. Launch Dashboard
-streamlit run app.py
+### With Docker (recommended)
+```bash
+docker compose up -d --build      # 1. start the services (database starts empty)
+./fast_backend/start.sh           # 2. migrations + data + GeoServer layers
 ```
-The browser will automatically open at `http://localhost:8501`.
+This starts four services:
+
+| Service | Image | URL |
+|---|---|---|
+| `fast_backend` | FastAPI backend | `http://localhost:8000/docs` (interactive API docs) |
+| `database` | PostgreSQL 17 + PostGIS 3.5 | `localhost:5432` (user / password / database: `varanasi`) |
+| `frontend` | Next.js dashboard | `http://localhost:3000` |
+| `geoserver` | GeoServer 2.28 (WMS / WFS) | `http://localhost:8080/geoserver` (login `admin` / `geoserver`) |
+
+`docker compose up` only runs the services. `fast_backend/start.sh` (run from the host, like SLCR's) then:
+1. deletes the existing Alembic migration files (and clears Alembic's applied-revision record with `alembic stamp --purge base`;
+   tables and data are kept), then autogenerates a fresh migration from the models (`alembic revision --autogenerate`),
+2. applies it (`alembic upgrade head`) and creates the views in `database/views.sql`,
+3. pushes data with `media/run_all.py` — each loader fills its table from `media/data/raw/village_data.xlsx`,
+   `emission_factors.csv` or the boundary GeoJSON; tables that already have data are skipped,
+4. publishes the vector layers (workspace `varanasi`) and the rasters (workspace `varanasi_raster`) to GeoServer.
+
+Re-running it is safe: after a model change it migrates the tables, and existing data and rasters are kept.
+
+| Layer | Contents | Style |
+|---|---|---|
+| `varanasi:villages_carbon` | Village polygons + live activity data & emissions (view) | Carbon choropleth (`media/geoserver/varanasi_carbon.sld`) |
+| `varanasi:village_boundaries` | Village polygons | Default |
+| `varanasi:block_boundaries` | Block polygons | Dashed outline |
+| `varanasi:district_boundary` | District polygon | Dashed outline |
+
+The rasters also appear on the dashboard's **Village Map** as `Raster: …` overlays in the layer control (with their
+legend), served through the frontend's `/geoserver` proxy.
+
+Every GeoTIFF in `media/Rasters/files/<group>/` is published as `varanasi_raster:<file name>`, styled with
+`media/Rasters/SLD/<group>/<file name>.sld`. To add a raster, drop the `.tif` and its `.sld` there and run
+`docker compose exec fast_backend python -m script.geoserver_raster` (add `--replace` to re-upload changed files).
+
+Add them to QGIS via *Layer → Add WMS/WFS Layer* with `http://localhost:8080/geoserver/varanasi/wms` (or `/wfs`).
+Data lives in the `varanasi_pgdata` and `varanasi_geoserver` Docker volumes; `docker compose down -v` wipes them so the next start reloads all data and re-uploads the rasters.
+
+To wipe everything and start over: `./del.sh` (asks for confirmation; `-y` skips it) removes this project's containers,
+volumes, images, the Docker build cache and local caches — then run the two commands above again.
+
+Ports and credentials can be changed with a `.env` file (see `.env.example`), e.g. `WEB_PORT=3100 docker compose up -d --build` if port 3000 is in use.
+
+### Without Docker (development)
+```bash
+# PostgreSQL + PostGIS only (port 5432)
+docker compose up -d database
+
+# Terminal 1 — FastAPI backend (port 8000; settings from fast_backend/.fastdb.env)
+cd fast_backend
+cp .fastdb.env.example .fastdb.env
+python -m venv venv && source venv/bin/activate   # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+alembic upgrade head
+python media/run_all.py
+uvicorn app.main:app --reload --port 8000
+
+# Terminal 2 — Next.js frontend (port 3000, proxies /api to port 8000)
+cd frontend
+npm install
+npm run dev
+```
+
+### Database Migrations (Alembic)
+After changing a model in `fast_backend/app/database/models/`, run `./fast_backend/start.sh` again — it regenerates the
+migration in `fast_backend/alembic/versions/` (the folder is mounted into the container) and applies it.
+Views are not tracked by Alembic; change them in `database/views.sql`.
+
+### Main API Endpoints
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/api/blocks` | Block names |
+| GET | `/api/villages?block=` | All villages with activity data & emissions |
+| GET | `/api/villages/{code}` | Full record for one village |
+| GET | `/api/villages/{code}/report.pdf` | Academic PDF report |
+| GET | `/api/villages/{code}/export.csv` | Village record as CSV |
+| GET | `/api/summary` | District KPIs, block & sector emissions |
+| GET | `/api/emission-factors` | Active emission factors |
+| POST | `/api/emissions/recompute` | Recalculate all village emissions |
+| POST | `/api/import/excel` | Upload survey `.xlsx` (then recomputes) |
+| GET | `/api/export/excel` | Download full database as Excel |
+| GET | `/api/geo/{district\|blocks\|villages}` | Boundary GeoJSON |
