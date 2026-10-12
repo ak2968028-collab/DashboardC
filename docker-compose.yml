@@ -48,25 +48,25 @@ services:
       retries: 10
     restart: unless-stopped
 
-  frontend:
-    build:
-      context: ./frontend
-      # Next.js bakes its /api and /geoserver rewrites in at build time.
-      # The browser only ever calls the public domain (relative URLs); the
-      # Next.js server forwards those requests to these internal addresses.
-      args:
-        API_URL: ${FRONTEND_API_URL:-http://fast_backend:8000}
-        GEOSERVER_URL: ${FRONTEND_GEOSERVER_URL:-http://geoserver:8080}
-    image: varanasi-carbon-frontend
-    environment:
-      API_URL: ${FRONTEND_API_URL:-http://fast_backend:8000}
-      GEOSERVER_URL: ${FRONTEND_GEOSERVER_URL:-http://geoserver:8080}
-    ports:
-      - "${WEB_PORT:-3000}:3000"
-    depends_on:
-      fast_backend:
-        condition: service_healthy
-    restart: unless-stopped
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #     # Next.js bakes its /api and /geoserver rewrites in at build time.
+  #     # The browser only ever calls the public domain (relative URLs); the
+  #     # Next.js server forwards those requests to these internal addresses.
+  #     args:
+  #       API_URL: ${FRONTEND_API_URL:-http://fast_backend:8000}
+  #       GEOSERVER_URL: ${FRONTEND_GEOSERVER_URL:-http://geoserver:8080}
+  #   image: varanasi-carbon-frontend
+  #   environment:
+  #     API_URL: ${FRONTEND_API_URL:-http://fast_backend:8000}
+  #     GEOSERVER_URL: ${FRONTEND_GEOSERVER_URL:-http://geoserver:8080}
+  #   ports:
+  #     - "${WEB_PORT:-3000}:3000"
+  #   depends_on:
+  #     fast_backend:
+  #       condition: service_healthy
+  #   restart: unless-stopped
 
   geoserver:
     image: docker.osgeo.org/geoserver:2.28.5
@@ -86,15 +86,41 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  cloudflared:
+  # The frontend runs on Vercel; its Next.js server proxies /api/* and
+  # /geoserver/* to API_URL and GEOSERVER_URL (set in Vercel). These quick
+  # tunnels expose the backend and GeoServer on this machine for that.
+  # Opt-in: `docker compose --profile tunnel up`. No account or token needed;
+  # Cloudflare assigns a new random https://<name>.trycloudflare.com URL on
+  # each start, printed in `docker compose logs cloudflared-api cloudflared-geoserver`.
+  cloudflared-api:
     image: cloudflare/cloudflared:latest
-    # Remotely-managed tunnel: in the Cloudflare Zero Trust dashboard add a
-    # public hostname ${PUBLIC_DOMAIN} -> http://frontend:3000
+    profiles: ["tunnel"]
+    command: tunnel --no-autoupdate --url http://fast_backend:8000
+    depends_on:
+      - fast_backend
+    restart: unless-stopped
+
+  cloudflared-geoserver:
+    image: cloudflare/cloudflared:latest
+    profiles: ["tunnel"]
+    command: tunnel --no-autoupdate --url http://geoserver:8080
+    depends_on:
+      - geoserver
+    restart: unless-stopped
+
+  cloudflared-named:
+    image: cloudflare/cloudflared:latest
+    # Opt-in: `docker compose --profile named-tunnel up`. Remotely-managed
+    # tunnel with fixed hostnames on your own domain; in the Cloudflare Zero
+    # Trust dashboard add public hostnames -> http://fast_backend:8000 and
+    # http://geoserver:8080.
+    profiles: ["named-tunnel"]
     command: tunnel --no-autoupdate run
     environment:
-      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN in .env}
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
     depends_on:
-      - frontend
+      - fast_backend
+      - geoserver
     restart: unless-stopped
 
 volumes:
