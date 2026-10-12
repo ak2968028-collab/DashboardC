@@ -86,42 +86,29 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # The frontend runs on Vercel; its Next.js server proxies /api/* and
-  # /geoserver/* to API_URL and GEOSERVER_URL (set in Vercel). These quick
-  # tunnels expose the backend and GeoServer on this machine for that.
-  # Opt-in: `docker compose --profile tunnel up`. No account or token needed;
-  # Cloudflare assigns a new random https://<name>.trycloudflare.com URL on
-  # each start, printed in `docker compose logs cloudflared-api cloudflared-geoserver`.
-  cloudflared-api:
+  cloudflared:
     image: cloudflare/cloudflared:latest
+    # Opt-in: `docker compose --profile tunnel up`. One free quick tunnel with a
+    # random https://<words>.trycloudflare.com URL (new on every restart; see
+    # `docker compose logs cloudflared`). Routed by path, so the same URL serves
+    # /api/* (FastAPI) and /geoserver/* (GeoServer).
     profiles: ["tunnel"]
-    command: tunnel --no-autoupdate --url http://fast_backend:8000
-    depends_on:
-      - fast_backend
-    restart: unless-stopped
-
-  cloudflared-geoserver:
-    image: cloudflare/cloudflared:latest
-    profiles: ["tunnel"]
-    command: tunnel --no-autoupdate --url http://geoserver:8080
-    depends_on:
-      - geoserver
-    restart: unless-stopped
-
-  cloudflared-named:
-    image: cloudflare/cloudflared:latest
-    # Opt-in: `docker compose --profile named-tunnel up`. Remotely-managed
-    # tunnel with fixed hostnames on your own domain; in the Cloudflare Zero
-    # Trust dashboard add public hostnames -> http://fast_backend:8000 and
-    # http://geoserver:8080.
-    profiles: ["named-tunnel"]
-    command: tunnel --no-autoupdate run
-    environment:
-      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml --url http://fast_backend:8000
+    configs:
+      - source: cloudflared
+        target: /etc/cloudflared/config.yml
     depends_on:
       - fast_backend
       - geoserver
     restart: unless-stopped
+
+configs:
+  cloudflared:
+    content: |
+      ingress:
+        - path: ^/geoserver(/.*)?$$
+          service: http://geoserver:8080
+        - service: http://fast_backend:8000
 
 volumes:
   varanasi_pgdata:
