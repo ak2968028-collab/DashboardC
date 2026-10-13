@@ -118,6 +118,22 @@ services:
       - ./logs:/logs
     restart: unless-stopped
 
+  # Writes the current quick-tunnel URL to frontend/tunnel.json and, when
+  # GITHUB_TOKEN is set (in ./.env), commits + pushes it so Vercel redeploys.
+  # See update-tunnel-url.sh.
+  tunnel_url:
+    image: docker:27-cli
+    entrypoint: ["sh", "-c", "apk add --no-cache -q git && exec sh /repo/update-tunnel-url.sh"]
+    environment:
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      LOG_OWNER: ${LOG_OWNER:-1000:1000}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - .:/repo
+    depends_on:
+      - cloudflared
+    restart: unless-stopped
+
 configs:
   cloudflared:
     content: |
