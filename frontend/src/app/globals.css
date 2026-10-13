@@ -9,7 +9,6 @@
   --border: #e0e6ea;
   --bg: #f6f8f7;
   --card: #ffffff;
-  --sidebar-w: 260px;
 }
 
 * { box-sizing: border-box; }
@@ -26,34 +25,91 @@ code { background: #eceff1; padding: 1px 5px; border-radius: 4px; font-size: 12p
 hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
 
 /* ---------- Layout ---------- */
-.layout { display: flex; min-height: 100vh; }
-.sidebar {
-  width: var(--sidebar-w); flex-shrink: 0; background: var(--card); border-right: 1px solid var(--border);
-  padding: 18px 14px; position: sticky; top: 0; height: 100vh; overflow-y: auto;
+.layout { display: flex; flex-direction: column; min-height: 100vh; }
+.navbar {
+  position: sticky; top: 0; z-index: 2000; display: flex; align-items: center; gap: 20px; padding: 8px 26px;
+  background: rgba(255, 255, 255, 0.92); backdrop-filter: saturate(180%) blur(8px); -webkit-backdrop-filter: saturate(180%) blur(8px);
+  border-bottom: 1px solid var(--border); transition: box-shadow 0.2s;
 }
-.sidebar-head { display: flex; align-items: center; justify-content: space-between; }
-.sidebar h2 { display: flex; align-items: center; gap: 8px; font-size: 18px; margin: 0 0 12px; color: var(--green-900); }
+.navbar.scrolled { box-shadow: 0 4px 16px rgba(27, 94, 32, 0.08); }
+.navbar-head { display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+.brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--green-900); }
+.brand-badge {
+  display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; color: #fff;
+  background: linear-gradient(135deg, var(--green-700), var(--green-900)); box-shadow: 0 2px 6px rgba(27, 94, 32, 0.3);
+}
+.brand-text { display: flex; flex-direction: column; font-weight: 800; font-size: 16px; line-height: 1.15; white-space: nowrap; }
+.brand-text small { font-size: 11px; font-weight: 600; color: var(--faint); letter-spacing: 0.04em; text-transform: uppercase; }
+.navbar nav {
+  display: flex; gap: 4px; min-width: 0; flex: 1; overflow-x: auto; scrollbar-width: none; padding: 2px 12px;
+  mask-image: linear-gradient(to right, transparent, #000 14px, #000 calc(100% - 14px), transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 14px, #000 calc(100% - 14px), transparent);
+}
+.navbar nav::-webkit-scrollbar { display: none; }
 .nav-link {
-  display: flex; align-items: center; gap: 9px; padding: 7px 10px; border-radius: 6px; margin-bottom: 2px;
-  text-decoration: none; color: var(--text); border-left: 3px solid transparent; transition: background 0.15s;
+  position: relative; display: flex; align-items: center; gap: 6px; padding: 7px 11px; border-radius: 8px; flex-shrink: 0;
+  white-space: nowrap; text-decoration: none; color: var(--muted); font-weight: 500;
+  transition: background 0.15s, color 0.15s;
 }
-.nav-link span { flex: 1; }
-.nav-link .nav-arrow { color: var(--faint); transition: transform 0.15s; }
-.nav-link:hover { background: var(--green-25); }
-.nav-link:hover .nav-arrow { transform: translateX(3px); color: var(--green-900); }
-.nav-link.active { background: var(--green-50); border-left-color: var(--green-900); color: var(--green-900); font-weight: 700; }
-.nav-link.active .nav-arrow { color: var(--green-900); }
-.info-list { margin: 0; display: grid; gap: 4px; font-size: 13px; }
-.info-list div { display: flex; justify-content: space-between; gap: 8px; }
+.nav-link svg { transition: transform 0.15s; }
+.nav-link:hover { background: var(--green-25); color: var(--green-900); }
+.nav-link:hover svg { transform: translateY(-1px) scale(1.08); }
+.nav-link:focus-visible, .menu-btn:focus-visible { outline: 2px solid var(--green-700); outline-offset: 2px; }
+.nav-link.active { background: var(--green-50); color: var(--green-900); font-weight: 700; }
+.nav-link.active::after {
+  content: ""; position: absolute; left: 11px; right: 11px; bottom: -9px; height: 3px; border-radius: 3px 3px 0 0; background: var(--green-900);
+}
+.info-list { margin: 0 0 8px; display: flex; flex-wrap: wrap; gap: 6px 22px; font-size: 13px; }
+.info-list div { display: flex; gap: 6px; }
 .info-list dt { color: var(--muted); font-weight: 600; }
-.info-list dd { margin: 0; text-align: right; }
+.info-list dt::after { content: ":"; }
+.info-list dd { margin: 0; }
 .caption { font-size: 12px; color: var(--faint); margin: 0; }
+.footer { margin-top: 32px; padding-top: 14px; border-top: 1px solid var(--border); }
 
 .main { flex: 1; min-width: 0; padding: 18px 26px 40px; }
-.topbar { display: flex; align-items: flex-start; gap: 10px; }
-.main-title { display: flex; align-items: center; gap: 8px; color: var(--green-900); font-weight: 800; font-size: 24px; margin: 0 0 2px; }
-.main-title svg { flex-shrink: 0; }
-.sub-title { color: #455a64; font-size: 14px; margin: 0 0 12px; }
+/* ---------- Institutional header ---------- */
+.site-header {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 24px; padding: 10px 26px;
+  background: #fff; border-top: 4px solid var(--green-900); border-bottom: 1px solid var(--border);
+}
+.site-header img { height: auto; display: block; }
+.site-header-logos { display: flex; align-items: center; gap: 14px; }
+.site-header .seal { width: 64px; }
+.site-header .iit-logo { width: 220px; }
+.site-header .slcr-logo { width: 150px; }
+.site-header-title { display: flex; align-items: center; justify-content: center; gap: 14px; text-align: center; min-width: 0; }
+.co2-icon { flex-shrink: 0; width: 56px; height: 56px; border-radius: 50%; overflow: hidden; background: #f4fbf4; box-shadow: 0 0 0 2px var(--green-50); }
+.site-header .co2-icon img { width: 100%; height: 100%; object-fit: cover; transform: scale(1.9) translateY(-2%); }
+.site-header-title h1 { margin: 0; color: var(--green-900); font-size: clamp(16px, 1.6vw, 22px); font-weight: 800; letter-spacing: 0.01em; text-transform: uppercase; }
+.site-header-title p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+
+/* ---------- Carbon hero ---------- */
+.carbon-hero { position: relative; overflow: hidden; border-radius: 14px; margin-bottom: 16px; color: #fff; isolation: isolate; }
+.carbon-hero-bg { object-fit: cover; object-position: center 30%; z-index: -2; }
+.carbon-hero::before {
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  background: linear-gradient(100deg, rgba(10, 46, 16, 0.9) 0%, rgba(20, 70, 26, 0.7) 45%, rgba(20, 70, 26, 0.4) 100%);
+}
+.carbon-hero-body { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 22px 26px; flex-wrap: wrap; }
+.carbon-hero-text { max-width: 440px; }
+.carbon-hero .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #a5d6a7; }
+.carbon-hero h2 { margin: 4px 0 6px; font-size: clamp(18px, 2vw, 24px); line-height: 1.25; }
+.carbon-hero p { margin: 0; color: rgba(255, 255, 255, 0.85); font-size: 13px; }
+.gas-cards { display: grid; grid-template-columns: repeat(3, minmax(130px, 1fr)); gap: 10px; flex: 1; max-width: 560px; }
+.gas-card {
+  display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border-radius: 10px;
+  background: rgba(255, 255, 255, 0.12); border: 1px solid rgba(255, 255, 255, 0.22); border-top: 3px solid var(--gas);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+}
+.gas-card.co2 { --gas: #81c784; }
+.gas-card.ch4 { --gas: #ffb74d; }
+.gas-card.n2o { --gas: #64b5f6; }
+.gas-formula { font-size: 24px; font-weight: 800; line-height: 1.1; color: var(--gas); }
+.gas-formula sub { font-size: 0.6em; }
+.gas-name { font-weight: 700; font-size: 13px; }
+.gas-gwp { align-self: flex-start; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: rgba(0, 0, 0, 0.3); }
+.gas-sources { font-size: 12px; color: rgba(255, 255, 255, 0.8); }
 
 .controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-bottom: 16px; }
 .field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); font-weight: 600; min-width: 180px; }
@@ -155,6 +211,11 @@ select:focus, .btn:focus-visible { outline: 2px solid var(--green-700); outline-
 .legend-range { display: flex; justify-content: space-between; color: var(--muted); }
 
 /* ---------- Responsive ---------- */
+@media (max-width: 1200px) {
+  .site-header { gap: 16px; }
+  .site-header .iit-logo { width: 170px; }
+  .site-header .slcr-logo { width: 120px; }
+}
 @media (max-width: 1100px) {
   .grid-5 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -162,12 +223,56 @@ select:focus, .btn:focus-visible { outline: 2px solid var(--green-700); outline-
 }
 @media (max-width: 800px) {
   .mobile-only { display: inline-flex; }
-  .sidebar { position: fixed; left: 0; top: 0; z-index: 2000; transform: translateX(-100%); transition: transform 0.2s; box-shadow: 2px 0 12px rgba(0, 0, 0, 0.15); }
-  .sidebar.open { transform: none; }
-  .backdrop { display: block; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.3); z-index: 1500; }
+  .navbar { flex-direction: column; align-items: stretch; gap: 0; padding: 8px 16px; }
+  .menu-btn { border-radius: 8px; padding: 6px; }
+  .menu-btn:hover { background: var(--green-25); }
+  .navbar nav {
+    display: none; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; padding: 10px 0 6px; overflow: visible;
+    max-height: calc(100vh - 60px); overflow-y: auto; mask-image: none; -webkit-mask-image: none;
+  }
+  .navbar.open nav { display: grid; animation: nav-drop 0.18s ease-out; }
+  .nav-link { padding: 10px 12px; }
+  .nav-link.active::after { left: 0; right: auto; top: 8px; bottom: 8px; width: 3px; height: auto; border-radius: 0 3px 3px 0; }
+  .backdrop { display: block; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.3); z-index: 1500; animation: fade-in 0.18s; }
   .main { padding: 14px 16px 32px; }
-  .main-title { font-size: 18px; }
+  .site-header { grid-template-columns: auto auto; justify-content: space-between; gap: 12px; padding: 8px 16px; }
+  .site-header-title { grid-column: 1 / -1; grid-row: 2; }
+  .site-header-title p { display: none; }
+  .co2-icon { width: 40px; height: 40px; }
+  .site-header .seal { width: 44px; }
+  .site-header .iit-logo { width: 150px; }
+  .site-header .slcr-logo { width: 100px; }
+  .carbon-hero-body { padding: 18px; }
+  .gas-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); max-width: none; }
   .grid-2, .grid-3, .grid-4, .grid-5 { grid-template-columns: minmax(0, 1fr); }
+  /* KPI cards pair up instead of stacking one per row; an odd last card spans the full width. */
+  .grid:has(> .metric-card), .grid:has(> .stat) { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .grid > .metric-card:last-child:nth-child(odd), .grid > .stat:last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .metric-card { padding: 10px 12px; }
+  .metric-val { font-size: 18px; overflow-wrap: anywhere; }
+  .stat { padding: 10px 12px; }
+  .stat-val { font-size: 19px; }
+  .card { padding: 12px; }
+  .controls { gap: 10px; }
+  .controls .field, .controls .field.grow { flex: 1 1 100%; min-width: 0; }
+  .controls .btn { flex: 1 1 0; justify-content: center; }
+  .data-table { font-size: 12px; }
+  .data-table th, .data-table td { padding: 6px 9px; }
   .banner-meta { display: block; margin: 4px 0 0; }
-  .map { height: 460px; }
+  .page-title { font-size: 17px; }
+  .map { height: 400px; }
 }
+@media (max-width: 480px) {
+  .navbar nav { grid-template-columns: minmax(0, 1fr); }
+  .gas-cards { grid-template-columns: minmax(0, 1fr); }
+  .gas-card { display: grid; grid-template-columns: auto 1fr auto; align-items: center; column-gap: 10px; }
+  .gas-formula { grid-row: span 2; }
+  .gas-sources { grid-column: 2 / -1; }
+}
+@keyframes nav-drop { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+@keyframes fade-in { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .navbar.open nav, .backdrop { animation: none; }
+  .nav-link, .nav-link svg { transition: none; }
+}
+.nowrap { white-space: nowrap; }

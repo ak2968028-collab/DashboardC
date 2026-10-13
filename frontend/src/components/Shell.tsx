@@ -2,55 +2,82 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, type ReactNode } from "react";
-import { ArrowRight, ChevronRight, Download, Home, LayoutDashboard, Menu, PanelLeft, Scale, X } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Download, Home, Leaf, Menu, Scale, X } from "lucide-react";
 import { useBlocks, reportPdfUrl } from "@/lib/api";
 import { fmt } from "@/lib/format";
 import { ALL_BLOCKS, useDashboard, villageLabel } from "./DashboardContext";
+import CarbonHero from "./CarbonHero";
 import { PAGES } from "./nav";
+import SiteHeader from "./SiteHeader";
 
 export default function Shell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [navOpen, setNavOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  const navRef = useRef<HTMLElement>(null);
   const page = PAGES.find((p) => p.href === pathname);
+
+  // Close the mobile menu on route change and keep the active link visible in the scrolling bar.
+  useEffect(() => {
+    setNavOpen(false);
+    navRef.current?.querySelector(".nav-link.active")?.scrollIntoView({ block: "nearest", inline: "center" });
+  }, [pathname]);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 4);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useEffect(() => {
+    if (!navOpen) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setNavOpen(false);
+    document.addEventListener("keydown", onKey);
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = "";
+    };
+  }, [navOpen]);
 
   return (
     <div className="layout">
-      <aside className={`sidebar ${navOpen ? "open" : ""}`}>
-        <div className="sidebar-head">
-          <h2><PanelLeft size={20} /> Carbon Dashboard</h2>
-          <button className="icon-btn mobile-only" onClick={() => setNavOpen(false)} aria-label="Close menu"><X size={20} /></button>
+      <SiteHeader />
+      <header className={`navbar ${navOpen ? "open" : ""} ${scrolled ? "scrolled" : ""}`}>
+        <div className="navbar-head">
+          <Link href="/" className="brand">
+            <span className="brand-badge"><Leaf size={18} /></span>
+            <span className="brand-text">Carbon Dashboard<small>Varanasi District</small></span>
+          </Link>
+          <button className="icon-btn menu-btn mobile-only" onClick={() => setNavOpen(!navOpen)} aria-label={navOpen ? "Close menu" : "Open menu"} aria-expanded={navOpen}>
+            {navOpen ? <X size={22} /> : <Menu size={22} />}
+          </button>
         </div>
-        <nav>
+        <nav ref={navRef}>
           {PAGES.map((p) => {
             const active = p.href === pathname;
             return (
-              <Link key={p.href} href={p.href} className={`nav-link ${active ? "active" : ""}`} onClick={() => setNavOpen(false)}>
+              <Link key={p.href} href={p.href} className={`nav-link ${active ? "active" : ""}`} aria-current={active ? "page" : undefined}>
                 <p.icon size={16} />
                 <span>{p.label}</span>
-                {active ? <ArrowRight size={16} className="nav-arrow" /> : <ChevronRight size={16} className="nav-arrow" />}
               </Link>
             );
           })}
         </nav>
-        <hr />
-        <ActiveVillageInfo />
-        <hr />
-        <p className="caption">Varanasi Village Carbon Dashboard v2.0<br />M.Tech Research Project<br />Survey of India &amp; IPCC Tier-1</p>
-      </aside>
+      </header>
       {navOpen && <div className="backdrop" onClick={() => setNavOpen(false)} />}
 
       <main className="main">
-        <header className="topbar">
-          <button className="icon-btn mobile-only" onClick={() => setNavOpen(true)} aria-label="Open menu"><Menu size={22} /></button>
-          <div>
-            <h1 className="main-title"><LayoutDashboard size={28} strokeWidth={2.2} /> VARANASI DISTRICT — VILLAGE ENVIRONMENT &amp; CARBON DASHBOARD</h1>
-            <p className="sub-title">M.Tech Thesis Project: Village-Level Environmental Resource Assessment and Carbon Emission Modeling</p>
-          </div>
-        </header>
+        {(pathname === "/" || pathname === "/carbon") && <CarbonHero />}
         <GlobalControls />
         {page?.needsVillage && <VillageBanner />}
         <DataGate>{children}</DataGate>
+        <footer className="footer">
+          <ActiveVillageInfo />
+          <p className="caption">Varanasi Village Carbon Dashboard v2.0 · M.Tech Research Project · Survey of India &amp; IPCC Tier-1</p>
+        </footer>
       </main>
     </div>
   );

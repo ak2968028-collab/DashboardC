@@ -53,3 +53,8 @@ frontend/.next/
 Thumbs.db
 [Dd]esktop.ini
 .DS_Store
+
+# Service logs written by log_collector
+logs/*.log
+logs/*.log.*
+logs/.state/

@@ -4,6 +4,17 @@ x-postgres-env: &postgres-env
   POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-varanasi}
 
 services:
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml --url http://fast_backend:8000
+    configs:
+      - source: cloudflared
+        target: /etc/cloudflared/config.yml
+    depends_on:
+      - fast_backend
+      - geoserver
+    restart: unless-stopped
+
   fast_backend:
     build:
       context: ./fast_backend
@@ -69,37 +80,42 @@ services:
   #   restart: unless-stopped
 
   geoserver:
-    image: docker.osgeo.org/geoserver:2.28.5
+    image: kartoza/geoserver:3.0.0
     environment:
       GEOSERVER_ADMIN_USER: ${GEOSERVER_ADMIN_USER:-admin}
       GEOSERVER_ADMIN_PASSWORD: ${GEOSERVER_ADMIN_PASSWORD:-geoserver}
-      SKIP_DEMO_DATA: "true"
-      CORS_ENABLED: "true"
-      # So GetCapabilities and the admin UI generate links on the public domain.
-      PROXY_BASE_URL: https://${PUBLIC_DOMAIN:-localhost}/geoserver
+      # Kartoza ships CORS on and demo data off by default.
+      SAMPLE_DATA: "false"
     ports:
       - "${GEOSERVER_PORT:-8080}:8080"
     volumes:
-      - varanasi_geoserver:/opt/geoserver_data
+      - varanasi_geoserver:/opt/geoserver/data_dir
     depends_on:
       database:
         condition: service_healthy
+    # Kartoza's image has no built-in healthcheck.
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:8080/geoserver/web/ -o /dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
     restart: unless-stopped
 
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    # Opt-in: `docker compose --profile tunnel up`. One free quick tunnel with a
-    # random https://<words>.trycloudflare.com URL (new on every restart; see
-    # `docker compose logs cloudflared`). Routed by path, so the same URL serves
-    # /api/* (FastAPI) and /geoserver/* (GeoServer).
-    profiles: ["tunnel"]
-    command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml --url http://fast_backend:8000
-    configs:
-      - source: cloudflared
-        target: /etc/cloudflared/config.yml
-    depends_on:
-      - fast_backend
-      - geoserver
+  # Writes every service's output to ./logs/<service>.log and ./logs/all.log
+  # (rotated at 10 MB, 5 old copies kept). See logs/collect-logs.sh.
+  log_collector:
+    image: docker:27-cli
+    entrypoint: ["sh", "/logs/collect-logs.sh"]
+    environment:
+      LOG_SERVICES: fast_backend database geoserver cloudflared
+      LOG_MAX_BYTES: 10485760
+      LOG_KEEP: 5
+      # Host user that should own the log files.
+      LOG_OWNER: ${LOG_OWNER:-1000:1000}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./logs:/logs
     restart: unless-stopped
 
 configs:

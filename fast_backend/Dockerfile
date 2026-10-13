@@ -9,7 +9,9 @@ RUN groupadd -g 1000 appuser && useradd -r -g appuser -u 1000 -m -d /home/appuse
 WORKDIR /home/app
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Cache mount keeps downloaded wheels between builds, so changing requirements.txt
+# only fetches the new/changed packages.
+RUN --mount=type=cache,target=/root/.cache/pip pip install -r requirements.txt
 
 COPY --chown=appuser:appuser . .
 
