@@ -1,8 +1,8 @@
 """new update
 
-Revision ID: fbf70f002dee
+Revision ID: ec5de8e84864
 Revises: 
-Create Date: 2026-10-13 07:09:00.731908
+Create Date: 2026-10-16 06:56:16.443161
 
 """
 from typing import Sequence, Union
@@ -13,7 +13,7 @@ import geoalchemy2
 from geoalchemy2 import Geometry
 
 # revision identifiers, used by Alembic.
-revision: str = 'fbf70f002dee'
+revision: str = 'ec5de8e84864'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
