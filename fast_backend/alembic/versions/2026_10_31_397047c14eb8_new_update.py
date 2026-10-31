@@ -1,8 +1,8 @@
 """new update
 
-Revision ID: 7c23e352283a
+Revision ID: 397047c14eb8
 Revises: 
-Create Date: 2026-10-28 05:12:22.979665
+Create Date: 2026-10-31 04:46:15.894497
 
 """
 from typing import Sequence, Union
@@ -11,9 +11,10 @@ from alembic import op
 import sqlalchemy as sa
 import geoalchemy2
 from geoalchemy2 import Geometry
+from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = '7c23e352283a'
+revision: str = '397047c14eb8'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -56,6 +57,15 @@ def upgrade() -> None:
     sa.Column('modified_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_table('states',
+    sa.Column('state_code', sa.Integer(), nullable=False),
+    sa.Column('state_name', sa.String(), nullable=False),
+    sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
+    sa.Column('modified_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('state_code')
+    )
     op.create_geospatial_table('village_boundaries',
     sa.Column('village_code', sa.String(), nullable=False),
     sa.Column('geom', Geometry(geometry_type='MULTIPOLYGON', srid=4326, dimension=2, spatial_index=False, from_text='ST_GeomFromEWKT', name='geometry', nullable=False), nullable=False),
@@ -97,6 +107,18 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('village_id')
     )
+    op.create_table('districts',
+    sa.Column('district_code', sa.Integer(), nullable=False),
+    sa.Column('district_name', sa.String(), nullable=False),
+    sa.Column('state_code', sa.Integer(), nullable=False),
+    sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
+    sa.Column('modified_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
+    sa.ForeignKeyConstraint(['state_code'], ['states.state_code'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('district_code')
+    )
+    op.create_index(op.f('ix_districts_state_code'), 'districts', ['state_code'], unique=False)
     op.create_table('energy_consumption',
     sa.Column('lpg_monthly_kg', sa.Float(), server_default=sa.text('0'), nullable=False),
     sa.Column('firewood_monthly_kg', sa.Float(), server_default=sa.text('0'), nullable=False),
@@ -193,11 +215,98 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('village_id')
     )
+    op.create_table('subdistricts',
+    sa.Column('subdistrict_code', sa.Integer(), nullable=False),
+    sa.Column('subdistrict_name', sa.String(), nullable=False),
+    sa.Column('district_code', sa.Integer(), nullable=False),
+    sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
+    sa.Column('modified_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
+    sa.ForeignKeyConstraint(['district_code'], ['districts.district_code'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('subdistrict_code')
+    )
+    op.create_index(op.f('ix_subdistricts_district_code'), 'subdistricts', ['district_code'], unique=False)
+    op.create_table('census_villages',
+    sa.Column('village_code', sa.String(), nullable=False),
+    sa.Column('village_name', sa.String(), nullable=False),
+    sa.Column('subdistrict_code', sa.Integer(), nullable=False),
+    sa.Column('population_2011', sa.Integer(), nullable=True),
+    sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
+    sa.Column('modified_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
+    sa.ForeignKeyConstraint(['subdistrict_code'], ['subdistricts.subdistrict_code'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('village_code')
+    )
+    op.create_index(op.f('ix_census_villages_subdistrict_code'), 'census_villages', ['subdistrict_code'], unique=False)
+    op.create_index(op.f('ix_census_villages_village_name'), 'census_villages', ['village_name'], unique=False)
+    op.create_table('users',
+    sa.Column('username', sa.String(), nullable=False),
+    sa.Column('password_hash', sa.String(), nullable=False),
+    sa.Column('full_name', sa.String(), nullable=True),
+    sa.Column('role', sa.String(), nullable=False),
+    sa.Column('village_code', sa.String(), nullable=True),
+    sa.Column('is_active', sa.Boolean(), server_default=sa.text('true'), nullable=False),
+    sa.Column('verification_status', sa.String(), nullable=True),
+    sa.Column('verification_comment', sa.Text(), nullable=True),
+    sa.Column('verified_by', sa.Integer(), nullable=True),
+    sa.Column('verified_at', sa.DateTime(), nullable=True),
+    sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
+    sa.Column('modified_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
+    sa.ForeignKeyConstraint(['verified_by'], ['users.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['village_code'], ['census_villages.village_code'], ondelete='SET NULL'),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('username'),
+    sa.UniqueConstraint('village_code')
+    )
+    op.create_table('data_submissions',
+    sa.Column('village_code', sa.String(), nullable=False),
+    sa.Column('submitted_by', sa.Integer(), nullable=True),
+    sa.Column('source', sa.String(), nullable=False),
+    sa.Column('values', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+    sa.Column('status', sa.String(), server_default='pending', nullable=False),
+    sa.Column('review_comment', sa.Text(), nullable=True),
+    sa.Column('reviewed_by', sa.Integer(), nullable=True),
+    sa.Column('reviewed_at', sa.DateTime(), nullable=True),
+    sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
+    sa.Column('modified_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
+    sa.ForeignKeyConstraint(['reviewed_by'], ['users.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['submitted_by'], ['users.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['village_code'], ['census_villages.village_code'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_data_submissions_status'), 'data_submissions', ['status'], unique=False)
+    op.create_index(op.f('ix_data_submissions_village_code'), 'data_submissions', ['village_code'], unique=False)
+    op.create_table('pradhan_certificates',
+    sa.Column('user_id', sa.Integer(), nullable=False),
+    sa.Column('filename', sa.String(), nullable=False),
+    sa.Column('content_type', sa.String(), nullable=False),
+    sa.Column('data', sa.LargeBinary(), nullable=False),
+    sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
+    sa.Column('modified_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('user_id')
+    )
     # ### end Alembic commands ###
 
 
 def downgrade() -> None:
     # ### commands auto generated by Alembic - please adjust! ###
+    op.drop_table('pradhan_certificates')
+    op.drop_index(op.f('ix_data_submissions_village_code'), table_name='data_submissions')
+    op.drop_index(op.f('ix_data_submissions_status'), table_name='data_submissions')
+    op.drop_table('data_submissions')
+    op.drop_table('users')
+    op.drop_index(op.f('ix_census_villages_village_name'), table_name='census_villages')
+    op.drop_index(op.f('ix_census_villages_subdistrict_code'), table_name='census_villages')
+    op.drop_table('census_villages')
+    op.drop_index(op.f('ix_subdistricts_district_code'), table_name='subdistricts')
+    op.drop_table('subdistricts')
     op.drop_table('water_resources')
     op.drop_table('waste_management')
     op.drop_table('village_emissions')
@@ -205,12 +314,15 @@ def downgrade() -> None:
     op.drop_table('livestock_population')
     op.drop_table('land_use')
     op.drop_table('energy_consumption')
+    op.drop_index(op.f('ix_districts_state_code'), table_name='districts')
+    op.drop_table('districts')
     op.drop_table('demographics')
     op.drop_index(op.f('ix_villages_village_name'), table_name='villages')
     op.drop_index(op.f('ix_villages_block_name'), table_name='villages')
     op.drop_table('villages')
     op.drop_geospatial_index('idx_village_boundaries_geom', table_name='village_boundaries', postgresql_using='gist', column_name='geom')
     op.drop_geospatial_table('village_boundaries')
+    op.drop_table('states')
     op.drop_table('emission_factors')
     op.drop_geospatial_index('idx_district_boundary_geom', table_name='district_boundary', postgresql_using='gist', column_name='geom')
     op.drop_geospatial_table('district_boundary')

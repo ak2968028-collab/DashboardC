@@ -58,3 +58,4 @@ Thumbs.db
 logs/*.log
 logs/*.log.*
 logs/.state/
+fast_backend/media

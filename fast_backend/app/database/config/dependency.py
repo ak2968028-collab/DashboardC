@@ -36,6 +36,7 @@ class PostgresDb:
 
 _db = PostgresDb()
 
-db_write = Annotated[AsyncSession, Depends(_db.get_write_session, use_cache=False)]
+# scope="function": commit before the response is sent, so clients re-fetching right after a write see it.
+db_write = Annotated[AsyncSession, Depends(_db.get_write_session, use_cache=False, scope="function")]
 db_read = Annotated[AsyncSession, Depends(_db.get_read_session, use_cache=False)]
 write_session_ctx = _db.write_session_ctx

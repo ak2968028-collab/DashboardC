@@ -2,7 +2,7 @@ import Image from "next/image";
 import seal from "../../public/logo_iitbhu.png";
 import iitLogo from "../../public/left2_IIt_logo.png";
 import slcrLogo from "../../public/right1_slcr.png";
-import co2Icon from "../../public/eco-friendly-co2-gas-emissions-recycle-concept-sign-design_1017-58709.avif";
+import co2Icon from "../../public/co2_icon.webp";
 
 export default function SiteHeader() {
   return (

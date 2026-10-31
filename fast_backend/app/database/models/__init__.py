@@ -18,3 +18,14 @@ from app.database.models.spatial import (
     BlockBoundary,
     VillageBoundary,
 )
+from app.database.models.location import (
+    State,
+    District,
+    Subdistrict,
+    CensusVillage,
+)
+from app.database.models.user import (
+    User,
+    PradhanCertificate,
+    DataSubmission,
+)

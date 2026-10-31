@@ -32,6 +32,13 @@ if __name__ == "__main__":
     scripts_to_run = [
         # Reference data
         "masters/emission_factors.py",
+        # Census 2011 location masters (media/locations)
+        "locations/states.py",
+        "locations/districts.py",
+        "locations/subdistricts.py",
+        "locations/villages.py",
+        # Login accounts (media/user/users.csv)
+        "users/users.py",
         # Survey data (village_data.xlsx)
         "survey/villages.py",
         "survey/demographics.py",

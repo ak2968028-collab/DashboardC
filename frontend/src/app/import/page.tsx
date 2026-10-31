@@ -2,11 +2,16 @@
 
 import { useState, type FormEvent } from "react";
 import { Download, Upload } from "lucide-react";
+import { RequireRole } from "@/components/AuthContext";
 import { Alert, PageTitle } from "@/components/ui";
-import { errorMessage, refreshAll } from "@/lib/api";
+import { downloadFile, errorText, refreshAll, sendApi } from "@/lib/api";
 import type { ImportReport } from "@/lib/types";
 
 export default function ImportPage() {
+  return <RequireRole role="admin">{() => <ImportTools />}</RequireRole>;
+}
+
+function ImportTools() {
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [report, setReport] = useState<ImportReport | null>(null);
@@ -21,12 +26,10 @@ export default function ImportPage() {
     try {
       const body = new FormData();
       body.append("file", file);
-      const res = await fetch("/api/import/excel", { method: "POST", body });
-      if (!res.ok) throw new Error(await errorMessage(res));
-      setReport(await res.json());
+      setReport(await sendApi<ImportReport>("POST", "/api/import/excel", body));
       await refreshAll();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorText(err));
     } finally {
       setBusy(false);
     }
@@ -35,7 +38,8 @@ export default function ImportPage() {
   return (
     <>
       <PageTitle>📥 Survey Excel Import &amp; Database Synchronization</PageTitle>
-      <p>Upload a new survey dataset to update village parameters, or download the active survey database.</p>
+      <p>Upload a new survey dataset to update village parameters, or download the active survey database.
+        This bulk import is admin-only and is applied immediately; supervisor submissions go through <b>Admin › Data approvals</b>.</p>
       <form onSubmit={upload} className="controls">
         <label className="field grow">
           <span>Upload Village Survey Excel File (.xlsx)</span>
@@ -62,9 +66,9 @@ export default function ImportPage() {
 
       <hr />
       <h5 className="card-title">📤 Export Current Survey Database</h5>
-      <a className="btn" href="/api/export/excel" download>
+      <button className="btn" onClick={() => downloadFile("/api/export/excel", "Varanasi_Village_Environmental_Database.xlsx").catch((err) => setError(errorText(err)))}>
         <Download size={16} /> Download Full Database as Excel (.xlsx)
-      </a>
+      </button>
     </>
   );
 }

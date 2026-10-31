@@ -90,3 +90,91 @@ export interface RasterLayer {
   /** GeoServer WMS layer name (workspace:name) */
   layer: string;
 }
+
+// ---------- Census 2011 locations ----------
+
+export interface State { state_code: number; state_name: string }
+export interface District { district_code: number; district_name: string; state_code: number }
+export interface Subdistrict { subdistrict_code: number; subdistrict_name: string; district_code: number }
+
+export interface CensusVillage {
+  village_code: string;
+  village_name: string;
+  subdistrict_code: number;
+  population_2011: number | null;
+  /** Village already has survey data in the dashboard. */
+  on_dashboard: boolean;
+}
+
+export interface CensusVillageDetails extends CensusVillage {
+  subdistrict_name: string;
+  district_code: number;
+  district_name: string;
+  state_code: number;
+  state_name: string;
+}
+
+// ---------- Logins & supervisor submissions ----------
+
+export type Role = "admin" | "supervisor";
+/** Supervisor: unverified = no village chosen; pending = certificate waiting for the admin. */
+export type VerificationStatus = "unverified" | "pending" | "verified" | "rejected";
+
+export interface User {
+  id: number;
+  username: string;
+  full_name: string | null;
+  role: Role;
+  village_code: string | null;
+  village_name: string | null;
+  subdistrict_name: string | null;
+  district_name: string | null;
+  state_name: string | null;
+  is_active: boolean;
+  created_at: string;
+  verification_status: VerificationStatus | null;
+  verification_comment: string | null;
+  verified_by: string | null;
+  verified_at: string | null;
+  certificate_filename: string | null;
+  certificate_uploaded_at: string | null;
+}
+
+export interface SurveyField {
+  key: string;
+  label: string;
+  unit: string;
+  section: string;
+  integer: boolean;
+}
+
+export type SurveyValues = Record<string, number | null>;
+export type SubmissionStatus = "pending" | "approved" | "rejected";
+
+export interface Submission {
+  id: number;
+  village_code: string;
+  village_name: string | null;
+  subdistrict_name: string | null;
+  district_name: string | null;
+  source: "form" | "excel";
+  values: Record<string, number>;
+  status: SubmissionStatus;
+  review_comment: string | null;
+  submitted_by: string | null;
+  reviewed_by: string | null;
+  created_at: string;
+  modified_at: string;
+  reviewed_at: string | null;
+}
+
+export interface SubmissionDetails extends Submission {
+  /** Dashboard values now; null when the village is not on the dashboard yet. */
+  current: SurveyValues | null;
+  warnings: string[];
+}
+
+export interface SupervisorVillage {
+  village: CensusVillageDetails | null;
+  current: SurveyValues | null;
+}

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { AuthProvider } from "@/components/AuthContext";
 import { DashboardProvider } from "@/components/DashboardContext";
 import Shell from "@/components/Shell";
 import "./globals.css";
@@ -13,9 +14,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body>
-        <DashboardProvider>
-          <Shell>{children}</Shell>
-        </DashboardProvider>
+        <AuthProvider>
+          <DashboardProvider>
+            <Shell>{children}</Shell>
+          </DashboardProvider>
+        </AuthProvider>
       </body>
     </html>
   );

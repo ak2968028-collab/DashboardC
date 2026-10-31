@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Download, Home, Leaf, Menu, Scale, X } from "lucide-react";
+import { Download, Home, Leaf, LogIn, LogOut, Menu, Scale, X } from "lucide-react";
 import { useBlocks, reportPdfUrl } from "@/lib/api";
 import { fmt } from "@/lib/format";
+import { useAuth } from "./AuthContext";
 import { ALL_BLOCKS, useDashboard, villageLabel } from "./DashboardContext";
 import CarbonHero from "./CarbonHero";
 import { PAGES } from "./nav";
@@ -16,7 +17,11 @@ export default function Shell({ children }: { children: ReactNode }) {
   const [navOpen, setNavOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const navRef = useRef<HTMLElement>(null);
+  const { user, logout } = useAuth();
   const page = PAGES.find((p) => p.href === pathname);
+  const pages = PAGES.filter((p) => !p.role || p.role === user?.role);
+  // Login and role pages are work areas: no block / village selector.
+  const showControls = pathname !== "/login" && !page?.role;
 
   // Close the mobile menu on route change and keep the active link visible in the scrolling bar.
   useEffect(() => {
@@ -56,7 +61,7 @@ export default function Shell({ children }: { children: ReactNode }) {
           </button>
         </div>
         <nav ref={navRef}>
-          {PAGES.map((p) => {
+          {pages.map((p) => {
             const active = p.href === pathname;
             return (
               <Link key={p.href} href={p.href} className={`nav-link ${active ? "active" : ""}`} aria-current={active ? "page" : undefined}>
@@ -65,13 +70,24 @@ export default function Shell({ children }: { children: ReactNode }) {
               </Link>
             );
           })}
+          {user ? (
+            <button type="button" className="nav-link nav-auth" onClick={logout} title={`Logged in as ${user.username} (${user.role})`}>
+              <LogOut size={16} />
+              <span>Log out <small>{user.username}</small></span>
+            </button>
+          ) : (
+            <Link href="/login" className={`nav-link nav-auth ${pathname === "/login" ? "active" : ""}`}>
+              <LogIn size={16} />
+              <span>Login</span>
+            </Link>
+          )}
         </nav>
       </header>
       {navOpen && <div className="backdrop" onClick={() => setNavOpen(false)} />}
 
       <main className="main">
         {(pathname === "/" || pathname === "/carbon") && <CarbonHero />}
-        <GlobalControls />
+        {showControls && <GlobalControls />}
         {page?.needsVillage && <VillageBanner />}
         <DataGate>{children}</DataGate>
         <footer className="footer">

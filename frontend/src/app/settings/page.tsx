@@ -2,12 +2,14 @@
 
 import { useState } from "react";
 import { RefreshCw } from "lucide-react";
+import { useAuth } from "@/components/AuthContext";
 import { Alert, DataTable, PageTitle } from "@/components/ui";
-import { errorMessage, refreshAll, useEmissionFactors } from "@/lib/api";
+import { errorText, refreshAll, sendApi, useEmissionFactors } from "@/lib/api";
 import type { EmissionFactor } from "@/lib/types";
 
 export default function SettingsPage() {
   const { data: factors = [] } = useEmissionFactors();
+  const { user } = useAuth();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
 
@@ -15,13 +17,11 @@ export default function SettingsPage() {
     setBusy(true);
     setMessage(null);
     try {
-      const res = await fetch("/api/emissions/recompute", { method: "POST" });
-      if (!res.ok) throw new Error(await errorMessage(res));
-      const { villages_recalculated } = await res.json();
+      const { villages_recalculated } = await sendApi<{ villages_recalculated: number }>("POST", "/api/emissions/recompute");
       await refreshAll();
       setMessage({ kind: "success", text: `Recalculated emissions for ${villages_recalculated} villages successfully!` });
     } catch (err) {
-      setMessage({ kind: "error", text: err instanceof Error ? err.message : String(err) });
+      setMessage({ kind: "error", text: errorText(err) });
     } finally {
       setBusy(false);
     }
@@ -42,11 +42,11 @@ export default function SettingsPage() {
           { key: "standard", label: "Standard" },
         ]}
       />
-      <div style={{ margin: "14px 0" }}>
+      {user?.role === "admin" && <div style={{ margin: "14px 0" }}>
         <button className="btn primary" onClick={recalculate} disabled={busy}>
           <RefreshCw size={16} /> {busy ? "Re-calculating emissions across all villages…" : "Recalculate All District Emissions Now"}
         </button>
-      </div>
+      </div>}
       {message && <Alert kind={message.kind}>{message.text}</Alert>}
     </>
   );

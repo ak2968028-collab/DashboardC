@@ -38,6 +38,10 @@ class Settings(BaseSettings):
 
     CORS_ORIGINS: list[str] = ["http://localhost:3000"]
 
+    # auth (set SECRET_KEY in .fastdb.env / the environment for any shared deployment)
+    SECRET_KEY: str = "change-me-varanasi-dashboard-dev-secret"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 12 * 60
+
     # media paths
     MEDIA_DIR: Path = BASE_DIR / "media"
 
