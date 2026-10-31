@@ -9,7 +9,7 @@ from app.database.crud.location.async_crud import Location_crud
 from app.database.crud.user.async_crud import Certificate_crud, User_crud
 from app.database.models import User
 from app.database.models.user import (
-    ROLE_ADMIN, ROLE_SUPERVISOR, VERIFY_DONE, VERIFY_NONE, VERIFY_PENDING, VERIFY_REJECTED,
+    ROLE_SUPERVISOR, VERIFY_DONE, VERIFY_NONE, VERIFY_PENDING, VERIFY_REJECTED,
 )
 
 MAX_CERTIFICATE_BYTES = 5 * 1024 * 1024
@@ -115,13 +115,15 @@ class user_svc:
         await _flush(db)
         return await user_svc.get_user(db, user.id)
 
-    async def delete_user(db: AsyncSession, admin: User, user_id: int):
+    async def delete_user(db: AsyncSession, admin: User, user_id: int) -> str:
+        """Deletes the account; returns its username."""
         user = await db.get(User, user_id)
         if not user:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"User {user_id} not found")
         if user.id == admin.id:
             raise _conflict("You cannot delete your own account")
         await db.delete(user)
+        return user.username
 
     async def select_village(db: AsyncSession, supervisor: User, village_code: str,
                              filename: str, certificate: bytes) -> dict:
@@ -173,13 +175,3 @@ class user_svc:
         if not verify_password(old_password, user.password_hash):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is wrong")
         user.password_hash = hash_password(new_password)
-
-    async def ensure_admin(db: AsyncSession, username: str, password: str, full_name: str | None = None) -> bool:
-        """Creates the admin, or resets an existing user's password and makes them admin; True if created."""
-        user = await User_crud(db).get_by_username(username)
-        if user:
-            user.password_hash, user.role, user.village_code, user.is_active = hash_password(password), ROLE_ADMIN, None, True
-            user.verification_status = None
-            return False
-        db.add(User(username=username, password_hash=hash_password(password), full_name=full_name, role=ROLE_ADMIN))
-        return True

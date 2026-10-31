@@ -1,7 +1,8 @@
-from fastapi import APIRouter, status
+from fastapi import APIRouter, BackgroundTasks, status
 
 from app.api.schema.auth_schema import Login_request, Login_response, Password_change, User_record
 from app.api.service.auth_svc.dependencies import current_user
+from app.api.service.auth_svc.user_csv import export_users_csv
 from app.api.service.auth_svc.user_svc import user_svc
 from app.database.config.dependency import db_read, db_write
 
@@ -20,5 +21,6 @@ async def me(db: db_read, user: current_user):
 
 
 @router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
-async def change_password(db: db_write, user: current_user, body: Password_change):
+async def change_password(db: db_write, user: current_user, body: Password_change, tasks: BackgroundTasks):
+    tasks.add_task(export_users_csv)
     await user_svc.change_password(db, user, body.current_password, body.new_password)

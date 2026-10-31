@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Query, Response, status
+from fastapi import APIRouter, BackgroundTasks, Query, Response, status
 
 from app.api.schema.auth_schema import (
     User_create, User_record, User_update, Verification_reject, Verification_review,
@@ -7,6 +7,7 @@ from app.api.schema.submission_schema import (
     Approve_response, Reject_request, Review_request, Submission_details, Submission_record,
 )
 from app.api.service.auth_svc.dependencies import admin_user
+from app.api.service.auth_svc.user_csv import export_users_csv
 from app.api.service.auth_svc.user_svc import user_svc
 from app.api.service.submission_svc.submission import submission_svc
 from app.api.service.village_svc import safe_filename
@@ -22,18 +23,20 @@ async def get_users(db: db_read, _: admin_user):
 
 
 @router.post("/users", response_model=User_record, status_code=status.HTTP_201_CREATED)
-async def create_user(db: db_write, admin: admin_user, body: User_create):
+async def create_user(db: db_write, admin: admin_user, body: User_create, tasks: BackgroundTasks):
+    tasks.add_task(export_users_csv)
     return await user_svc.create_user(db, admin, body.model_dump())
 
 
 @router.patch("/users/{user_id}", response_model=User_record)
-async def update_user(db: db_write, admin: admin_user, user_id: int, body: User_update):
+async def update_user(db: db_write, admin: admin_user, user_id: int, body: User_update, tasks: BackgroundTasks):
+    tasks.add_task(export_users_csv)
     return await user_svc.update_user(db, admin, user_id, body.model_dump(exclude_unset=True))
 
 
 @router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_user(db: db_write, admin: admin_user, user_id: int):
-    await user_svc.delete_user(db, admin, user_id)
+async def delete_user(db: db_write, admin: admin_user, user_id: int, tasks: BackgroundTasks):
+    tasks.add_task(export_users_csv, {await user_svc.delete_user(db, admin, user_id)})
 
 
 @router.get("/verifications", response_model=list[User_record])
@@ -52,14 +55,18 @@ async def get_certificate(db: db_read, _: admin_user, user_id: int):
 
 
 @router.post("/users/{user_id}/verify", response_model=User_record)
-async def verify_supervisor(db: db_write, admin: admin_user, user_id: int, body: Verification_review):
+async def verify_supervisor(db: db_write, admin: admin_user, user_id: int, body: Verification_review,
+                            tasks: BackgroundTasks):
     """Confirms the supervisor is the Pradhan of the village they chose; unlocks data entry."""
+    tasks.add_task(export_users_csv)
     return await user_svc.verify(db, admin, user_id, body.comment)
 
 
 @router.post("/users/{user_id}/reject-verification", response_model=User_record)
-async def reject_supervisor(db: db_write, admin: admin_user, user_id: int, body: Verification_reject):
+async def reject_supervisor(db: db_write, admin: admin_user, user_id: int, body: Verification_reject,
+                            tasks: BackgroundTasks):
     """Rejects the village claim with a reason; the village is freed and the supervisor can try again."""
+    tasks.add_task(export_users_csv)
     return await user_svc.reject_verification(db, admin, user_id, body.comment.strip())
 
 

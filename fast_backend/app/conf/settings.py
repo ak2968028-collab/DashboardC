@@ -56,6 +56,11 @@ class Settings(BaseSettings):
         return get_db_url("postgresql+psycopg2", self)
 
     @property
+    def USERS_CSV_PATH(self) -> Path:
+        """Login accounts loaded by media/scripts/users/users.py; rewritten on every account change."""
+        return self.MEDIA_DIR / "user" / "users.csv"
+
+    @property
     def EXCEL_PATH(self) -> Path:
         return self.MEDIA_DIR / "data" / "raw" / "village_data.xlsx"
 
