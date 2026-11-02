@@ -12,6 +12,7 @@ import { useGeoJson, useRasterLayers, wmsLegendUrl, wmsUrl } from "@/lib/api";
 import { interpolate } from "@/lib/colors";
 import { fmt, num } from "@/lib/format";
 import type { NumericKey, RasterLayer, Village } from "@/lib/types";
+import { useDashboard } from "./DashboardContext";
 
 export interface ThematicMetric {
   label: string;
@@ -49,6 +50,7 @@ export default function VillageMap({ villages, selectedCode, blockFilter, metric
   const [activeRasters, setActiveRasters] = useState<string[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  const { showCodes } = useDashboard();
   const byCode = useMemo(() => new Map(villages.map((v) => [v.village_code, v])), [villages]);
 
   // Village polygons limited to the block filter.
@@ -78,7 +80,8 @@ export default function VillageMap({ villages, selectedCode, blockFilter, metric
     const v = byCode.get(featureCode(feature));
     if (!v) return;
     layer.bindTooltip(
-      `<b>Village:</b> ${v.village_name}<br><b>Block:</b> ${v.block_name}<br><b>Census Code:</b> ${v.village_code}` +
+      `<b>Village:</b> ${v.village_name}<br><b>Block:</b> ${v.block_name}` +
+        (showCodes ? `<br><b>Census Code:</b> ${v.village_code}` : "") +
         `<br><b>Residents:</b> ${fmt(v.total_residents)}<br><b>Area (ha):</b> ${fmt(v.total_area_ha, 1)}` +
         `<br><b>${metric.caption}:</b> ${fmt(v[metric.col], 1)}`,
       { sticky: true }
@@ -111,7 +114,7 @@ export default function VillageMap({ villages, selectedCode, blockFilter, metric
           {displayGeo && (
             <LayersControl.Overlay checked name="Varanasi Villages">
               {/* Remount when styling inputs change so every polygon is restyled. */}
-              <GeoJSON key={`${metric.col}|${blockFilter}|${selectedCode}|${villages.length}`} data={displayGeo} style={style} onEachFeature={onEachFeature} />
+              <GeoJSON key={`${metric.col}|${blockFilter}|${selectedCode}|${villages.length}|${showCodes}`} data={displayGeo} style={style} onEachFeature={onEachFeature} />
             </LayersControl.Overlay>
           )}
           {rasters.map((r) => (

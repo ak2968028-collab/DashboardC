@@ -22,7 +22,7 @@ const TOP_N = [15, 25, 50, 100];
 type Ranked = Village & { rank: number };
 
 export default function RankingPage() {
-  const { allVillages, selectedBlock } = useDashboard();
+  const { allVillages, selectedBlock, showCodes } = useDashboard();
   const [metricIdx, setMetricIdx] = useState(0);
   const [ascending, setAscending] = useState(false);
   const [topN, setTopN] = useState(15);
@@ -40,7 +40,7 @@ export default function RankingPage() {
     { key: "rank", label: "Rank", numeric: true },
     { key: "village_name", label: "Village" },
     { key: "block_name", label: "Block" },
-    { key: "village_code", label: "Code" },
+    ...(showCodes ? [{ key: "village_code", label: "Code" }] : []),
     { key: metric.col, label: metric.label, numeric: true, render: (v) => fmt(v[metric.col], metric.decimals) },
     { key: "total_residents", label: "Residents", numeric: true, render: (v) => fmt(v.total_residents) },
     { key: "total_area_ha", label: "Area (ha)", numeric: true, render: (v) => fmt(v.total_area_ha, 2) },

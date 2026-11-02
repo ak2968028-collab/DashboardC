@@ -7,6 +7,7 @@ import type { Village, VillageDetails } from "@/lib/types";
 export const ALL_BLOCKS = "All Blocks";
 const DEFAULT_VILLAGE = "208818"; // Ausanpur
 const STORAGE_KEY = "varanasi-dashboard-selection";
+const RECENT_LIMIT = 6;
 
 interface DashboardState {
   allVillages: Village[];
@@ -17,6 +18,11 @@ interface DashboardState {
   selectedCode: string | null;
   setSelectedCode: (code: string) => void;
   activeVillage: VillageDetails | undefined;
+  /** Census codes are hidden on the dashboard until the viewer chooses to show them. */
+  showCodes: boolean;
+  setShowCodes: (show: boolean) => void;
+  /** Recently viewed village codes, newest first. */
+  recentCodes: string[];
   loading: boolean;
   error: Error | undefined;
 }
@@ -27,21 +33,36 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const { data: allVillages = [], isLoading, error } = useVillages();
   const [selectedBlock, setBlock] = useState(ALL_BLOCKS);
   const [selectedCode, setSelectedCode] = useState<string>(DEFAULT_VILLAGE);
+  const [showCodes, setShowCodes] = useState(false);
+  const [recentCodes, setRecentCodes] = useState<string[]>([]);
+  const [restored, setRestored] = useState(false);
 
-  // Restore the last selection for this browser.
+  // Restore the last selection and viewing preferences for this browser.
   useEffect(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
       if (saved?.block) setBlock(saved.block);
       if (saved?.village) setSelectedCode(saved.village);
+      if (typeof saved?.showCodes === "boolean") setShowCodes(saved.showCodes);
+      if (Array.isArray(saved?.recent)) setRecentCodes(saved.recent.filter((c: unknown) => typeof c === "string"));
     } catch {}
+    setRestored(true);
   }, []);
 
   useEffect(() => {
+    if (!restored) return;
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ block: selectedBlock, village: selectedCode }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(
+        { block: selectedBlock, village: selectedCode, showCodes, recent: recentCodes },
+      ));
     } catch {}
-  }, [selectedBlock, selectedCode]);
+  }, [restored, selectedBlock, selectedCode, showCodes, recentCodes]);
+
+  // Remember viewed villages for the quick "recent" list in the village search.
+  useEffect(() => {
+    if (!restored || !selectedCode) return;
+    setRecentCodes((list) => [selectedCode, ...list.filter((c) => c !== selectedCode)].slice(0, RECENT_LIMIT));
+  }, [restored, selectedCode]);
 
   const filteredVillages = useMemo(
     () => (selectedBlock === ALL_BLOCKS ? allVillages : allVillages.filter((v) => v.block_name === selectedBlock)),
@@ -74,6 +95,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         selectedCode: effectiveCode,
         setSelectedCode,
         activeVillage,
+        showCodes,
+        setShowCodes,
+        recentCodes,
         loading: isLoading,
         error,
       }}
@@ -89,4 +113,6 @@ export function useDashboard() {
   return ctx;
 }
 
-export const villageLabel = (v: Village) => `${v.village_name} (${v.block_name} - ${v.village_code})`;
+/** "Name · Block", with the census code only when codes are shown. */
+export const villageLabel = (v: Village, showCode = false) =>
+  `${v.village_name} · ${v.block_name}${showCode ? ` · ${v.village_code}` : ""}`;

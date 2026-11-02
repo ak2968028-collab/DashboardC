@@ -99,6 +99,8 @@ export const wmsLegendUrl = (r: RasterLayer) =>
 export const refreshAll = () => mutate(() => true);
 
 export const reportPdfUrl = (code: string) => `/api/villages/${code}/report.pdf`;
+/** Needs the login token: download with downloadFile(). */
+export const advancedReportUrl = (code: string) => `/api/villages/${code}/report-advanced.pdf`;
 export const villageCsvUrl = (code: string) => `/api/villages/${code}/export.csv`;
 
 // ---------- Census locations (public) ----------

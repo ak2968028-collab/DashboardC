@@ -2,15 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Download, Home, Leaf, LogIn, LogOut, Menu, Scale, X } from "lucide-react";
-import { useBlocks, reportPdfUrl } from "@/lib/api";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { ChevronDown, Home, Leaf, Lock, LogIn, LogOut, Menu, X } from "lucide-react";
 import { fmt } from "@/lib/format";
 import { useAuth } from "./AuthContext";
-import { ALL_BLOCKS, useDashboard, villageLabel } from "./DashboardContext";
+import { useDashboard } from "./DashboardContext";
 import CarbonHero from "./CarbonHero";
-import { PAGES } from "./nav";
+import { GROUP_ICONS, PAGES, type NavPage } from "./nav";
 import SiteHeader from "./SiteHeader";
+import { CensusCode, VillageToolbar } from "./VillageSelector";
 
 export default function Shell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -20,6 +21,13 @@ export default function Shell({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   const page = PAGES.find((p) => p.href === pathname);
   const pages = PAGES.filter((p) => !p.role || p.role === user?.role);
+  // Consecutive pages of one group become a single dropdown entry.
+  const entries = pages.reduce<(NavPage | NavPage[])[]>((list, p) => {
+    const last = list.at(-1);
+    if (p.group && Array.isArray(last) && last[0].group === p.group) last.push(p);
+    else list.push(p.group ? [p] : p);
+    return list;
+  }, []);
   // Login and role pages are work areas: no block / village selector.
   const showControls = pathname !== "/login" && !page?.role;
 
@@ -61,7 +69,11 @@ export default function Shell({ children }: { children: ReactNode }) {
           </button>
         </div>
         <nav ref={navRef}>
-          {pages.map((p) => {
+          {entries.map((entry) => {
+            if (Array.isArray(entry)) {
+              return <NavDropdown key={entry[0].group} items={entry} pathname={pathname} loggedIn={!!user} />;
+            }
+            const p = entry;
             const active = p.href === pathname;
             return (
               <Link key={p.href} href={p.href} className={`nav-link ${active ? "active" : ""}`} aria-current={active ? "page" : undefined}>
@@ -87,7 +99,7 @@ export default function Shell({ children }: { children: ReactNode }) {
 
       <main className="main">
         {(pathname === "/" || pathname === "/carbon") && <CarbonHero />}
-        {showControls && <GlobalControls />}
+        {showControls && <VillageToolbar />}
         {page?.needsVillage && <VillageBanner />}
         <DataGate>{children}</DataGate>
         <footer className="footer">
@@ -99,33 +111,86 @@ export default function Shell({ children }: { children: ReactNode }) {
   );
 }
 
-function GlobalControls() {
-  const { filteredVillages, selectedBlock, setSelectedBlock, selectedCode, setSelectedCode, activeVillage } = useDashboard();
-  const { data: blocks = [] } = useBlocks();
+const MENU_WIDTH = 270;
+
+/** Navbar button with a menu of pages. On wide screens the menu floats, portalled to <body> (the navbar's
+ *  mask and backdrop filter would otherwise clip it); in the mobile menu it opens inline below the button. */
+function NavDropdown({ items, pathname, loggedIn }: { items: NavPage[]; pathname: string; loggedIn: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [inline, setInline] = useState(false);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const label = items[0].group!;
+  const Icon = GROUP_ICONS[label] ?? items[0].icon;
+  const active = items.some((i) => i.href === pathname);
+
+  const place = () => {
+    setInline(window.matchMedia("(max-width: 800px)").matches);
+    const r = buttonRef.current?.getBoundingClientRect();
+    if (r) setPos({ top: r.bottom + 6, left: Math.max(8, Math.min(r.left, window.innerWidth - MENU_WIDTH - 8)) });
+  };
+
+  useEffect(() => setOpen(false), [pathname]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (!buttonRef.current?.contains(target) && !menuRef.current?.contains(target)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setOpen(false);
+        buttonRef.current?.focus();
+      }
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    menuRef.current?.querySelector<HTMLElement>("a")?.focus();
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open]);
 
   return (
-    <div className="controls">
-      <label className="field">
-        <span>📍 Select Block</span>
-        <select value={selectedBlock} onChange={(e) => setSelectedBlock(e.target.value)}>
-          {[ALL_BLOCKS, ...blocks].map((b) => <option key={b}>{b}</option>)}
-        </select>
-      </label>
-      <label className="field grow">
-        <span>Select Village</span>
-        <select value={selectedCode ?? ""} onChange={(e) => setSelectedCode(e.target.value)}>
-          {filteredVillages.map((v) => <option key={v.village_code} value={v.village_code}>{villageLabel(v)}</option>)}
-        </select>
-      </label>
-      <Link href="/comparison" className="btn"><Scale size={16} /> Compare</Link>
-      {activeVillage ? (
-        <a href={reportPdfUrl(activeVillage.village_code)} className="btn primary" download>
-          <Download size={16} /> Report (PDF)
-        </a>
-      ) : (
-        <span className="btn disabled"><Download size={16} /> Report (PDF)</span>
-      )}
-    </div>
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        className={`nav-link ${active ? "active" : ""}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => { place(); setOpen(!open); }}
+      >
+        <Icon size={16} />
+        <span>{label}</span>
+        <ChevronDown size={14} className={`nav-chevron ${open ? "open" : ""}`} />
+      </button>
+      {open && (() => {
+        const menu = (
+          <div ref={menuRef} className={`nav-menu ${inline ? "inline" : ""}`} role="menu" aria-label={label}
+            style={inline ? undefined : ({ top: pos.top, left: pos.left, width: MENU_WIDTH } as CSSProperties)}>
+            {items.map((i) => (
+              <Link key={i.href} href={i.href} role="menuitem" className={`nav-menu-item ${i.href === pathname ? "active" : ""}`}>
+                <i.icon size={18} />
+                <span>
+                  <b>{i.label}</b>
+                  {i.hint && <small>{i.hint}</small>}
+                </span>
+                {i.loginRequired && !loggedIn && <Lock size={14} className="nav-lock" aria-label="Login required" />}
+              </Link>
+            ))}
+          </div>
+        );
+        return inline ? menu : createPortal(menu, document.body);
+      })()}
+    </>
   );
 }
 
@@ -136,7 +201,7 @@ function ActiveVillageInfo() {
     <dl className="info-list">
       <div><dt>Active Village</dt><dd>{v.village_name}</dd></div>
       <div><dt>Block</dt><dd>{v.block_name}</dd></div>
-      <div><dt>Census Code</dt><dd><code>{v.village_code}</code></dd></div>
+      <div><dt>Census Code</dt><dd><CensusCode code={v.village_code} /></dd></div>
       <div><dt>Residents</dt><dd>{fmt(v.total_residents)}</dd></div>
       <div><dt>Total Area</dt><dd>{fmt(v.total_area_ha, 1)} ha</dd></div>
       <div><dt>Total Carbon</dt><dd><b>{fmt(v.total_co2e_t_yr, 1)} t CO₂e/yr</b></dd></div>
@@ -153,7 +218,7 @@ function VillageBanner() {
       <div>
         <span className="banner-name"><Home size={20} /> {v.village_name}</span>
         <span className="banner-meta">
-          Block: <b>{v.block_name}</b> | Tehsil: <b>{v.subdistrict}</b> | Code: <b>{v.village_code}</b>
+          Block: <b>{v.block_name}</b> | Tehsil: <b>{v.subdistrict}</b> | Code: <CensusCode code={v.village_code} tone="dark" />
         </span>
       </div>
       <span className="banner-pill">

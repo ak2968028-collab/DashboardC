@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { QUALITATIVE, SimpleBarChart } from "@/components/charts";
 import { useDashboard, villageLabel } from "@/components/DashboardContext";
+import { VillageCombobox } from "@/components/VillageSelector";
 import { Alert, Card, DataTable, PageTitle, type Column } from "@/components/ui";
 import { fmt } from "@/lib/format";
 import type { Village } from "@/lib/types";
@@ -31,7 +32,7 @@ const MATRIX: { label: string; key: keyof Village; decimals?: number }[] = [
 ];
 
 export default function ComparisonPage() {
-  const { allVillages, filteredVillages, selectedCode } = useDashboard();
+  const { allVillages, filteredVillages, selectedCode, showCodes } = useDashboard();
   const [codes, setCodes] = useState<string[]>([]);
 
   // Default: the active village plus the next village in the list.
@@ -56,21 +57,22 @@ export default function ComparisonPage() {
     <>
       <PageTitle>⚖️ Multi-Village Comparative Analysis</PageTitle>
       <p>Select 2 to 5 villages to evaluate side-by-side across all 12 parameters and total greenhouse gas emissions.</p>
-      <label className="field grow">
-        <span>Choose Villages for Comparison (2 to 5):</span>
-        <select
-          value=""
+      <div className="compare-picker">
+        <VillageCombobox
+          villages={available}
+          value={null}
+          onChange={(code) => setCodes([...codes, code])}
+          label={`Add villages to compare (${codes.length} of ${MAX_VILLAGES})`}
+          placeholder={codes.length >= MAX_VILLAGES ? "Maximum of 5 villages selected" : "Search a village to add…"}
+          showCodes={showCodes}
+          clearOnSelect
           disabled={codes.length >= MAX_VILLAGES}
-          onChange={(e) => e.target.value && setCodes([...codes, e.target.value])}
-        >
-          <option value="">{codes.length >= MAX_VILLAGES ? "Maximum of 5 villages selected" : "+ Add a village…"}</option>
-          {available.map((v) => <option key={v.village_code} value={v.village_code}>{villageLabel(v)}</option>)}
-        </select>
-      </label>
+        />
+      </div>
       <div className="chip-row">
         {chosen.map((v) => (
           <span key={v.village_code} className="chip">
-            {villageLabel(v)}
+            {villageLabel(v, showCodes)}
             <button onClick={() => setCodes(codes.filter((c) => c !== v.village_code))} aria-label={`Remove ${v.village_name}`}><X size={14} /></button>
           </span>
         ))}

@@ -2,6 +2,8 @@ from fastapi import APIRouter, Query
 from fastapi.responses import Response
 
 from app.api.schema.village_schema import Village_details, Village_record
+from app.api.service.auth_svc.dependencies import current_user
+from app.api.service.report_svc.reporting import ADVANCED
 from app.api.service.village_svc import village_svc
 from app.database.config.dependency import db_read
 
@@ -22,7 +24,17 @@ async def get_village(db: db_read, village_code: str):
 
 @router.get("/{village_code}/report.pdf")
 async def get_village_report(db: db_read, village_code: str):
+    """Basic village report (public): purpose, profile, location maps and carbon footprint."""
     pdf, filename = await village_svc.village_pdf(db, village_code)
+    return Response(pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+@router.get("/{village_code}/report-advanced.pdf")
+async def get_village_advanced_report(db: db_read, _: current_user, village_code: str):
+    """Advanced village report for logged-in Pradhans and admins: full inventory, district emission map,
+    benchmarking, reduction opportunities, data provenance and methodology annex."""
+    pdf, filename = await village_svc.village_pdf(db, village_code, ADVANCED)
     return Response(pdf, media_type="application/pdf",
                     headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 

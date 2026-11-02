@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useState } from "react";
 import { ALL_BLOCKS, useDashboard } from "@/components/DashboardContext";
+import { CensusCode } from "@/components/VillageSelector";
 import { Alert, PageTitle } from "@/components/ui";
 import { THEMATIC_METRICS } from "@/components/VillageMap";
 import { fmt } from "@/lib/format";
@@ -43,7 +44,7 @@ export default function MapPage() {
             <dl className="info-list">
               <div><dt>Name</dt><dd>{v.village_name}</dd></div>
               <div><dt>Block</dt><dd>{v.block_name}</dd></div>
-              <div><dt>Code</dt><dd><code>{v.village_code}</code></dd></div>
+              <div><dt>Code</dt><dd><CensusCode code={v.village_code} /></dd></div>
               <div><dt>Residents</dt><dd>{fmt(v.total_residents)}</dd></div>
               <div><dt>Total Area</dt><dd>{fmt(v.total_area_ha, 1)} ha</dd></div>
               <div><dt>Emissions</dt><dd>{fmt(v.total_co2e_t_yr, 1)} t CO₂e/yr</dd></div>

@@ -5,8 +5,14 @@ from fastapi import HTTPException, status
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.service.report_svc.reporting import export_village_csv, generate_village_pdf
+from app.api.service.carbon_svc.carbon import get_emission_factors
+from app.api.service.emission_svc import emission_svc
+from app.api.service.report_svc.reporting import ADVANCED, BASIC, export_village_csv, generate_village_pdf
+from app.api.service.submission_svc.submission import check_warnings
+from app.database.crud.report.async_crud import Report_crud
+from app.database.crud.user.async_crud import Submission_crud
 from app.database.crud.village.async_crud import Village_crud
+from app.database.models.user import STATUS_APPROVED
 
 
 def safe_filename(name) -> str:
@@ -35,10 +41,25 @@ class village_svc:
             'sector_emissions': await crud.get_sector_emissions(),
         }
 
-    async def village_pdf(db: AsyncSession, village_code: str) -> tuple[bytes, str]:
+    async def village_pdf(db: AsyncSession, village_code: str, level: str = BASIC) -> tuple[bytes, str]:
+        """Basic (public) or advanced (logged-in Pradhan / admin) village report."""
         v = await village_svc.get_village(db, village_code)
-        filename = f"Varanasi_Carbon_Report_{safe_filename(v['village_name'])}_{v['village_code']}.pdf"
-        return await run_in_threadpool(generate_village_pdf, v), filename
+        report = Report_crud(db)
+        context = {
+            "layers": await report.get_map_layers(village_code),
+            "bench": await report.get_benchmarks(village_code, v["block_name"]),
+        }
+        if level == ADVANCED:
+            approved = await Submission_crud(db).get_records(status=STATUS_APPROVED, village_code=village_code)
+            context |= {
+                "factors": await get_emission_factors(db),
+                "factor_table": await emission_svc.get_factor_table(db),
+                "provenance": approved[0] if approved else None,
+                "warnings": check_warnings(v),
+            }
+        kind = "Advanced" if level == ADVANCED else "Basic"
+        filename = f"{kind}_Village_Report_{safe_filename(v['village_name'])}_{v['village_code']}.pdf"
+        return await run_in_threadpool(generate_village_pdf, v, context, level), filename
 
     async def village_csv(db: AsyncSession, village_code: str) -> tuple[str, str]:
         v = await village_svc.get_village(db, village_code)
