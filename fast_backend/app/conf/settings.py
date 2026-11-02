@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     GEOSERVER_WORKSPACE: str = "varanasi"
     GEOSERVER_DATASTORE: str = "varanasi_postgis"
     GEOSERVER_RASTER_WORKSPACE: str = "varanasi_raster"
+    # factor rasters uploaded from the dashboard (Carbon Lab), kept apart from the curated layers
+    GEOSERVER_TEMP_WORKSPACE: str = "varanasi_temp"
+    # carbon emission rasters generated from the village inventory + LULC
+    GEOSERVER_EMISSION_WORKSPACE: str = "varanasi_emission"
 
     CORS_ORIGINS: list[str] = ["http://localhost:3000"]
 
@@ -76,6 +80,11 @@ class Settings(BaseSettings):
             "blocks": processed / "varanasi_blocks.geojson",
             "villages": processed / "varanasi_villages_optimized.geojson",
         }
+
+    @property
+    def PARCELS_GPKG_PATH(self) -> Path:
+        """Cadastral khasra parcels (UTM 44N) used to lay out each village in the Carbon Lab 3D view."""
+        return self.MEDIA_DIR / "Smulation data" / "varanasi.gpkg"
 
     @property
     def SLD_DIR(self) -> Path:

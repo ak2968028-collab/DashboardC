@@ -26,13 +26,13 @@ class GeoServerError(RuntimeError):
     pass
 
 
-def _request(method, path, body=None, content_type='application/json', timeout=30):
-    """Calls the GeoServer REST API; returns the HTTP status (404 is returned, not raised)."""
+def _send(method, url, body=None, content_type='application/json', timeout=30):
+    """Authenticated call to GeoServer; returns (status, body). 404 is returned, other errors raised."""
     if isinstance(body, (dict, list)):
         body = json.dumps(body).encode()
     credentials = f"{settings.GEOSERVER_USERNAME}:{settings.GEOSERVER_PASSWORD}".encode()
     req = urllib.request.Request(
-        f"{settings.GEOSERVER_URL}/rest{path}",
+        url,
         method=method,
         data=body,
         headers={
@@ -43,11 +43,29 @@ def _request(method, path, body=None, content_type='application/json', timeout=3
     )
     try:
         with urllib.request.urlopen(req, timeout=timeout) as res:
-            return res.status
+            return res.status, res.read()
     except urllib.error.HTTPError as e:
         if e.code == 404:
-            return 404
-        raise GeoServerError(f"GeoServer {method} {path} failed: {e.code} {e.read().decode(errors='replace')[:300]}")
+            return 404, b""
+        raise GeoServerError(f"GeoServer {method} {url} failed: {e.code} {e.read().decode(errors='replace')[:300]}")
+
+
+def _request(method, path, body=None, content_type='application/json', timeout=30):
+    """Calls the GeoServer REST API; returns the HTTP status (404 is returned, not raised)."""
+    return _send(method, f"{settings.GEOSERVER_URL}/rest{path}", body, content_type, timeout)[0]
+
+
+def rest_get(path, timeout=30):
+    """GET from the REST API: parsed JSON for .json paths, raw bytes otherwise; None when not found."""
+    status, body = _send('GET', f"{settings.GEOSERVER_URL}/rest{path}", timeout=timeout)
+    if status == 404:
+        return None
+    return json.loads(body) if path.split('?')[0].endswith('.json') else body
+
+
+def ows_get(path, timeout=60):
+    """GET an OGC service URL (e.g. /wcs?...) relative to GEOSERVER_URL; returns the raw body."""
+    return _send('GET', f"{settings.GEOSERVER_URL}{path}", timeout=timeout)[1]
 
 
 def _ensure(path, create_path, body):
@@ -60,9 +78,9 @@ def _ensure_workspace(workspace):
     _ensure(f"/workspaces/{workspace}", "/workspaces", {'workspace': {'name': workspace}})
 
 
-def _publish_style(style, sld_path=None, workspace=WORKSPACE):
-    """Uploads an SLD file (default media/geoserver/<style>.sld), creating or updating the workspace style."""
-    sld = (sld_path or settings.SLD_DIR / f"{style}.sld").read_bytes()
+def _publish_style(style, sld_path=None, workspace=WORKSPACE, sld=None):
+    """Uploads an SLD (bytes, or a file defaulting to media/geoserver/<style>.sld), creating or updating the workspace style."""
+    sld = sld or (sld_path or settings.SLD_DIR / f"{style}.sld").read_bytes()
     path = f"/workspaces/{workspace}/styles"
     if _request('GET', f"{path}/{style}") == 404:
         _request('POST', f"{path}?name={style}", sld, content_type='application/vnd.ogc.sld+xml')

@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Query
 from fastapi.responses import Response
 
+from app.api.schema.scene_schema import Village_scene
 from app.api.schema.village_schema import Village_details, Village_record
 from app.api.service.auth_svc.dependencies import current_user
 from app.api.service.report_svc.reporting import ADVANCED
+from app.api.service.scene_svc import scene_svc
 from app.api.service.village_svc import village_svc
 from app.database.config.dependency import db_read
 
@@ -20,6 +22,13 @@ async def get_villages(db: db_read, block: str | None = Query(None, description=
 async def get_village(db: db_read, village_code: str):
     """Complete record of all 12 parameters and emissions for one village."""
     return await village_svc.get_village(db, village_code)
+
+
+@router.get("/{village_code}/scene", response_model=Village_scene)
+async def get_village_scene(db: db_read, village_code: str):
+    """Real cadastral layout of the village (khasra parcels, estimated settlement, house markers) for the
+    Carbon Lab 3D view. 404 when the parcel GeoPackage has no parcels for this village."""
+    return await scene_svc.get_scene(db, village_code)
 
 
 @router.get("/{village_code}/report.pdf")

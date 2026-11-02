@@ -1,5 +1,5 @@
 import {
-  Beef, Bike, ClipboardEdit, Database, FileChartColumn, FileText, Flame, LayoutDashboard, Leaf, Map, Scale,
+  Beef, Bike, ClipboardEdit, Database, FileChartColumn, FileText, Flame, FlaskConical, LayoutDashboard, Leaf, Map, Scale,
   Settings, ShieldCheck, Trash2, Trophy, Users, Wheat,
 } from "lucide-react";
 import type { Role } from "@/lib/types";
@@ -32,6 +32,7 @@ export const PAGES: readonly NavPage[] = [
   { href: "/waste", label: "Waste", icon: Trash2, needsVillage: true },
   { href: "/livestock", label: "Livestock", icon: Beef, needsVillage: true },
   { href: "/carbon", label: "Carbon Emission", icon: Leaf, needsVillage: true },
+  { href: "/visualize", label: "Carbon Lab", icon: FlaskConical, needsVillage: true },
   { href: "/comparison", label: "Village Comparison", icon: Scale, needsVillage: true },
   { href: "/ranking", label: "Village Ranking", icon: Trophy, needsVillage: false },
   { href: "/reports", label: "Basic Report", icon: FileText, needsVillage: true, group: "Reports", hint: "Free summary PDF for everyone" },

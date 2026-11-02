@@ -52,6 +52,32 @@ export interface VillageDetails extends Village {
   other_water_ha: number | null;
 }
 
+type Point = [number, number];
+
+export type ParcelUse = "builtup" | "cropland" | "trees" | "water" | "rangeland" | "bare" | "land";
+
+/** Real village layout for the Carbon Lab 3D view: metres from `origin` (UTM 44N), x east, y north. */
+export interface VillageScene {
+  village_code: string;
+  source: string;
+  origin: Point;
+  extent_m: Point;
+  parcel_count: number;
+  builtup_est_ha: number;
+  households_per_house: number;
+  /** Where parcel land use comes from: the LULC raster, or a density estimate outside its extent. */
+  landcover_source: string;
+  /** LULC area (ha) per use inside the village. */
+  landcover_ha: Record<string, number>;
+  parcels: { khasra: string | null; area_m2: number; use: ParcelUse; ring: Point[] }[];
+  outline: Point[];
+  houses: Point[];
+  route: Point[];
+  pasture: Point[];
+  dump: Point;
+  trees: Point[];
+}
+
 export type NumericKey = {
   [K in keyof Village]: Village[K] extends number | null ? K : never;
 }[keyof Village];
@@ -89,6 +115,42 @@ export interface RasterLayer {
   workspace: string;
   /** GeoServer WMS layer name (workspace:name) */
   layer: string;
+}
+
+/** Raster factor as published on GeoServer, with its legend parsed from the layer's SLD. */
+export interface RasterFactor {
+  name: string;
+  title: string;
+  workspace: string;
+  layer: string;
+  /** emission: generated from the village inventory; condition: curated layers; upload: added from the dashboard. */
+  kind: "emission" | "condition" | "upload";
+  /** Emission source of a kind=emission layer (lpg, firewood, electricity, transport, waste, livestock, total). */
+  source: string | null;
+  group: string;
+  /** Added from the dashboard into GeoServer's temporary workspace. */
+  temporary: boolean;
+  description: string | null;
+  unit: string | null;
+  uploaded_by: string | null;
+  uploaded_at: string | null;
+  bbox: (number | null)[] | null;
+  legend_type: "ramp" | "intervals" | "values" | null;
+  legend: { color: string; quantity: number; label: string; opacity: number }[];
+}
+
+export interface VillageFactorStats {
+  layer: string;
+  village_code: string;
+  covered: boolean;
+  pixels: number;
+  valid_pixels: number;
+  min: number | null;
+  max: number | null;
+  mean: number | null;
+  /** Density rasters (…/ha): value summed over the village area. */
+  total: number | null;
+  classes: { label: string; color: string; share_pct: number }[];
 }
 
 // ---------- Census 2011 locations ----------

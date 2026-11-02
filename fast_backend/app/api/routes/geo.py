@@ -1,8 +1,13 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 
-from app.api.schema.geo_schema import Raster_layer
+from app.api.schema.geo_schema import Emission_raster_report, Raster_factor, Raster_layer, Village_factor_stats
+from app.api.service.auth_svc.dependencies import admin_user, current_user
+from app.api.service.geoserver_svc import emission_rasters, factors
+from app.database.config.dependency import db_read
 from app.api.service.geoserver_svc.geoserver import RASTER_WORKSPACE, find_rasters, raster_title
+from app.database.models.user import ROLE_ADMIN
 from app.conf.settings import settings
 
 router = APIRouter()
@@ -21,6 +26,50 @@ async def get_raster_layers():
         }
         for tif, _ in find_rasters()
     ]
+
+
+@router.post("/emission-rasters", response_model=Emission_raster_report)
+async def generate_emission_rasters(db: db_read, _: admin_user):
+    """Rebuilds the carbon emission rasters from the current village inventory (spread by LULC) and publishes
+    them to GeoServer. Also runs after every emissions recompute."""
+    return await emission_rasters.regenerate(db)
+
+
+@router.get("/factors", response_model=list[Raster_factor])
+async def get_raster_factors():
+    """Raster factors listed from GeoServer: curated layers plus factors added from the dashboard (temporary workspace)."""
+    return await run_in_threadpool(factors.list_factors)
+
+
+@router.post("/factors", response_model=Raster_factor, status_code=status.HTTP_201_CREATED)
+async def add_raster_factor(
+    user: current_user,
+    title: str = Form(..., min_length=2, max_length=80),
+    unit: str | None = Form(None, max_length=30),
+    description: str | None = Form(None, max_length=500),
+    ramp: str = Form("viridis"),
+    tif: UploadFile = File(..., description="Single-band GeoTIFF"),
+    sld: UploadFile | None = File(None, description="Optional SLD style; an automatic colour map is made otherwise"),
+):
+    """Pushes a new factor raster to GeoServer's temporary workspace (logged-in users)."""
+    tif_bytes = await tif.read()
+    sld_bytes = await sld.read() if sld and sld.filename else None
+    return await run_in_threadpool(
+        factors.upload_factor, title.strip(), (unit or "").strip() or None, (description or "").strip() or None,
+        ramp, tif_bytes, sld_bytes, user.username,
+    )
+
+
+@router.delete("/factors/{name}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_raster_factor(user: current_user, name: str):
+    """Removes a factor added from the dashboard (its uploader or an admin)."""
+    await run_in_threadpool(factors.delete_factor, name, user.username, user.role == ROLE_ADMIN)
+
+
+@router.get("/factors/stats", response_model=Village_factor_stats)
+async def get_village_factor_stats(layer: str = Query(..., description="workspace:name"), village: str = Query(...)):
+    """Raster values inside one village boundary: min / max / mean and the share of each legend class."""
+    return await run_in_threadpool(factors.village_stats, layer, village)
 
 
 @router.get("/{layer}")

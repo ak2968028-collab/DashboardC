@@ -1,8 +1,8 @@
 import useSWR, { mutate } from "swr";
 import type { FeatureCollection } from "geojson";
 import type {
-  CensusVillage, District, EmissionFactor, RasterLayer, State, Submission, SubmissionDetails, Subdistrict, Summary,
-  SupervisorVillage, SurveyField, User, Village, VillageDetails,
+  CensusVillage, District, EmissionFactor, RasterFactor, RasterLayer, State, Submission, SubmissionDetails, Subdistrict, Summary,
+  SupervisorVillage, SurveyField, User, Village, VillageDetails, VillageFactorStats, VillageScene,
 } from "./types";
 
 export class ApiError extends Error {
@@ -61,7 +61,7 @@ export const errorText = (err: unknown) => (err instanceof Error ? err.message :
 
 export async function fetcher<T>(url: string): Promise<T> {
   const res = await fetch(url);
-  if (!res.ok) throw new ApiError(await errorMessage(res));
+  if (!res.ok) throw new ApiError(await errorMessage(res), res.status);
   return res.json();
 }
 
@@ -84,11 +84,21 @@ export const useSummary = () => useSWR<Summary>("/api/summary", fetcher);
 export const useEmissionFactors = () => useSWR<EmissionFactor[]>("/api/emission-factors", fetcher);
 export const useVillage = (code: string | null) =>
   useSWR<VillageDetails>(code ? `/api/villages/${code}` : null, fetcher);
+/** Cadastral layout for the Carbon Lab 3D view (404 when the village has no parcel data). */
+export const useVillageScene = (code: string | null) =>
+  useSWR<VillageScene>(code ? `/api/villages/${code}/scene` : null, fetcher, { revalidateOnFocus: false, shouldRetryOnError: false });
 export const useGeoJson = (layer: "district" | "blocks" | "villages") =>
   useSWR<FeatureCollection>(`/api/geo/${layer}`, fetcher, { revalidateOnFocus: false });
 
 export const useRasterLayers = () =>
   useSWR<RasterLayer[]>("/api/geo/rasters", fetcher, { revalidateOnFocus: false });
+
+/** Raster factors listed from GeoServer (curated + added from the dashboard). */
+export const useRasterFactors = () => useSWR<RasterFactor[]>("/api/geo/factors", fetcher, { revalidateOnFocus: false });
+export const useFactorStats = (layer: string | null, village: string | null) =>
+  useSWR<VillageFactorStats>(layer && village ? `/api/geo/factors/stats?layer=${encodeURIComponent(layer)}&village=${village}` : null, fetcher, {
+    revalidateOnFocus: false,
+  });
 
 /** GeoServer WMS endpoint & legend image, proxied through the Next.js server. */
 export const wmsUrl = (workspace: string) => `/geoserver/${workspace}/wms`;
