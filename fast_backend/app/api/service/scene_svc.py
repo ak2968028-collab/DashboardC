@@ -5,6 +5,7 @@ classed by the dominant cover. Houses are placed on the built-up pixels themselv
 really are; pasture goes to rangeland (else nearby cropland), the dump to bare ground and trees to tree pixels.
 Villages outside the LULC extent fall back to an estimate: the parcels closest to the densest cluster of small
 parcels are taken as built-up until they cover the village's surveyed built-up area."""
+import json
 from functools import lru_cache
 
 import numpy as np
@@ -15,7 +16,7 @@ from fastapi.concurrency import run_in_threadpool
 from pyproj import Transformer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.service.geoserver_svc import emission_rasters
+from app.api.service.geoserver_svc import emission_rasters, factors
 from app.api.service.village_svc import village_svc
 from app.conf.settings import settings
 
@@ -245,6 +246,26 @@ def build_scene(village_code: str, households: int, builtup_ha: float) -> dict |
     }
 
 
+def cadastral_geojson(scene: dict, village_code: str) -> dict:
+    """The scene's khasra parcels (with LULC use) and the dissolved village boundary as WGS84 GeoJSON."""
+    ox, oy = scene["origin"]
+
+    def lonlat(ring):
+        lon, lat = _TO_LONLAT.transform([x + ox for x, _ in ring], [y + oy for _, y in ring])
+        pts = [[round(a, 6), round(b, 6)] for a, b in zip(lon, lat)]
+        return pts + pts[:1]
+
+    features = [
+        {"type": "Feature", "properties": {"kind": "parcel", "khasra": p["khasra"], "area_m2": p["area_m2"], "use": p["use"]},
+         "geometry": {"type": "Polygon", "coordinates": [lonlat(p["ring"])]}}
+        for p in scene["parcels"]
+    ]
+    boundary = factors._village_shapes().get(village_code)
+    if boundary is not None and factors.boundary_source(village_code) == "cadastral":
+        features.insert(0, {"type": "Feature", "properties": {"kind": "boundary"}, "geometry": json.loads(shapely.to_geojson(boundary))})
+    return {"type": "FeatureCollection", "features": features}
+
+
 class scene_svc:
 
     async def get_scene(db: AsyncSession, village_code: str):
@@ -257,3 +278,7 @@ class scene_svc:
         if not scene:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No cadastral parcels for village {village_code}")
         return scene
+
+    async def get_cadastral(db: AsyncSession, village_code: str) -> dict:
+        scene = await scene_svc.get_scene(db, village_code)
+        return await run_in_threadpool(cadastral_geojson, scene, village_code)

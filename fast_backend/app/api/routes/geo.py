@@ -35,6 +35,12 @@ async def generate_emission_rasters(db: db_read, _: admin_user):
     return await emission_rasters.regenerate(db)
 
 
+@router.get("/emission-grid")
+async def get_emission_grid(village: str = Query(...)):
+    """The village's cells of each source emission raster (t CO2e/ha/yr, from GeoServer) for scenario rescaling."""
+    return await run_in_threadpool(emission_rasters.village_grid, village)
+
+
 @router.get("/factors", response_model=list[Raster_factor])
 async def get_raster_factors():
     """Raster factors listed from GeoServer: curated layers plus factors added from the dashboard (temporary workspace)."""

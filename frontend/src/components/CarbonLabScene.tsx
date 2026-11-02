@@ -26,6 +26,23 @@ interface SceneProps {
 type Vec3 = [number, number, number];
 type Rgb = [number, number, number];
 interface Face { pts: Vec3[]; rgb: Rgb; n: Vec3; alpha?: number }
+/** Upright picture standing at `at` (world), `height` world units tall, facing left or right on screen. */
+interface Sprite { at: Vec3; img: string; height: number; flip?: boolean }
+
+// Icons in public/icon; `faces` is the direction the drawing looks (1 = right, -1 = left).
+const ICONS: Record<string, { src: string; faces: 1 | -1 }> = {
+  cow: { src: "/icon/cow.png", faces: 1 },
+  cow2: { src: "/icon/cow (1).png", faces: -1 },
+  goat: { src: "/icon/goat.png", faces: 1 },
+  goat2: { src: "/icon/animal.png", faces: -1 },
+  sheep: { src: "/icon/sheep.png", faces: -1 },
+  tree: { src: "/icon/tree.png", faces: 1 },
+  tree2: { src: "/icon/tree (1).png", faces: 1 },
+  bike: { src: "/icon/motorbike.png", faces: 1 },
+  car: { src: "/icon/744465.png", faces: 1 },
+  tower: { src: "/icon/electric-tower.png", faces: 1 },
+};
+const SMOG_VIDEO = "/vedio/smog_loop.mp4";
 interface Particle { p: Vec3; v: Vec3; age: number; life: number; size: number; rgb: Rgb; glow?: boolean }
 
 type P2 = [number, number];
@@ -211,24 +228,6 @@ function house(out: Face[], x: number, y: number, wall: string, roof: string, s 
   if (s > 0.3) box(out, x - 0.25 * s, y + 0.81 * s, 0, 0.45 * s, 0.02 * s, 0.8 * s, "#5d4037");
 }
 
-function tree(out: Face[], x: number, y: number, s = 1) {
-  box(out, x, y, 0, 0.25 * s, 0.25 * s, 0.9 * s, "#6d4c41");
-  prism(out, x, y, 0.7 * s, 0.9 * s, 0, 2.2 * s, 7, "#388e3c");
-}
-
-function animal(out: Face[], x: number, y: number, heading: number, kind: "cow" | "goat" | "sheep", u = 1) {
-  const s = (kind === "cow" ? 1 : 0.6) * u;
-  const body = kind === "cow" ? "#efebe9" : kind === "goat" ? "#a1887f" : "#fafafa";
-  const hx = Math.cos(heading) * 0.75 * s;
-  const hy = Math.sin(heading) * 0.75 * s;
-  const along = Math.abs(Math.cos(heading)) > 0.7;
-  box(out, x, y, 0.45 * s, (along ? 1.2 : 0.6) * s, (along ? 0.6 : 1.2) * s, 0.55 * s, body);
-  box(out, x + hx, y + hy, 0.75 * s, 0.4 * s, 0.4 * s, 0.4 * s, kind === "cow" ? "#5d4037" : body);
-  for (const [dx, dy] of [[-0.35, -0.2], [0.35, 0.2], [-0.35, 0.2], [0.35, -0.2]]) {
-    box(out, x + (along ? dx : dy) * s, y + (along ? dy : dx) * s, 0, 0.12 * s, 0.12 * s, 0.45 * s, "#4e342e");
-  }
-}
-
 /** Stable per-source spawn rate: grows with the source's emission relative to the village baseline total. */
 function rates(e: Emissions, baseTotal: number): Emissions {
   const ref = Math.max(baseTotal, 1e-6);
@@ -240,6 +239,7 @@ function rates(e: Emissions, baseTotal: number): Emissions {
 /** Rotatable 3D village where each emission source visibly pours gas into a shared atmosphere layer. */
 export default function CarbonLabScene({ emissions, baseline, focus, onPick, village }: SceneProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const smogRef = useRef<HTMLVideoElement>(null);
   const layout = useMemo(() => (village ? villageLayout(village) : demoLayout()), [village]);
   const props = useRef({ emissions, baseline, focus, layout });
   props.current = { emissions, baseline, focus, layout };
@@ -259,6 +259,14 @@ export default function CarbonLabScene({ emissions, baseline, focus, onPick, vil
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) setPlaying(false);
   }, []);
+
+  // The smog footage plays with the animation.
+  useEffect(() => {
+    const v = smogRef.current;
+    if (!v) return;
+    if (playing) v.play().catch(() => {});
+    else v.pause();
+  }, [playing]);
 
   // New layout: back to the home view.
   const lastFocus = useRef(focus);
@@ -284,6 +292,14 @@ export default function CarbonLabScene({ emissions, baseline, focus, onPick, vil
     const spawnAcc: Record<string, number> = {};
     let load = 1; // smoothed atmosphere load (current / baseline total)
     let placedLabels: { key: SourceKey; x0: number; x1: number; y: number }[] = [];
+    const images: Record<string, HTMLImageElement> = {};
+    for (const [key, { src }] of Object.entries(ICONS)) {
+      const img = new Image();
+      img.src = encodeURI(src);
+      images[key] = img;
+    }
+    const smog = document.createElement("canvas");
+    const sctx = smog.getContext("2d")!;
 
     const resize = () => {
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -291,6 +307,8 @@ export default function CarbonLabScene({ emissions, baseline, focus, onPick, vil
       h = canvas.clientHeight;
       canvas.width = w * dpr;
       canvas.height = h * dpr;
+      smog.width = w;
+      smog.height = h;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
     resize();
@@ -394,7 +412,7 @@ export default function CarbonLabScene({ emissions, baseline, focus, onPick, vil
       ctx.fillRect(0, 0, w, h);
       ctx.fillStyle = rgba([255, 236, 150], 0.9 - haze * 0.6);
       ctx.beginPath();
-      ctx.arc(w * 0.84, h * 0.13, Math.min(w, h) * 0.05, 0, Math.PI * 2);
+      ctx.arc(w * 0.84, h * 0.16, Math.min(w, h) * 0.05, 0, Math.PI * 2);
       ctx.fill();
 
       // Ground slab and flat decals.
@@ -439,9 +457,12 @@ export default function CarbonLabScene({ emissions, baseline, focus, onPick, vil
 
       // Solids.
       const faces: Face[] = [];
+      const sprites: Sprite[] = [];
+      // Which way something moving from a to b goes on screen (sprites face that way).
+      const goesLeft = (a: Vec3, b: Vec3) => project(b).x < project(a).x;
       L.houses.forEach(([x, y], i) => house(faces, x, y, WALLS[i % WALLS.length], i % 2 ? "#c62828" : "#8d6e63", u));
       const treeS = Math.max(0.45, u * 1.4);
-      L.trees.forEach(([x, y], i) => tree(faces, x, y, treeS * (0.8 + (i % 3) * 0.15)));
+      L.trees.forEach(([x, y], i) => sprites.push({ at: [x, y, 0], img: i % 2 ? "tree2" : "tree", height: 2 * treeS * (0.8 + (i % 3) * 0.15) }));
       const [px, py] = L.plant;
       box(faces, px, py, 0, 3, 2.2, 2, "#90a4ae");
       prism(faces, px + 1, py - 0.6, 2, 0.4, 0.3, 5, 8, "#b0bec5");
@@ -452,7 +473,7 @@ export default function CarbonLabScene({ emissions, baseline, focus, onPick, vil
       box(faces, dx + 0.6 * ds, dy - 0.4 * ds, 0.8 * ds, 0.5 * ds, 0.4 * ds, 0.3 * ds, "#7b1fa2");
       box(faces, dx - 0.5 * ds, dy + 0.5 * ds, 0.75 * ds, 0.4 * ds, 0.5 * ds, 0.25 * ds, "#1565c0");
       // Power poles from the plant to the settlement.
-      L.poles.forEach(([x, y]) => box(faces, x, y, 0, 0.15, 0.15, 3, "#5d4037"));
+      L.poles.forEach(([x, y]) => sprites.push({ at: [x, y, 0], img: "tower", height: 2.8 }));
       L.fences.forEach(([x, y]) => box(faces, x, y, 0, 0.12, 0.12, 0.6, "#8d6e63"));
 
       // Bikes: count follows petrol use relative to the survey.
@@ -460,13 +481,15 @@ export default function CarbonLabScene({ emissions, baseline, focus, onPick, vil
       const nBikes = Math.min(9, Math.round(3 * petrolRatio));
       const bikes: Vec3[] = [];
       const loop = L.roadLen[L.roadLen.length - 1];
-      const bu = Math.max(0.35, u);
+      // Icons stay readable even in big villages where houses are tiny.
+      const bu = Math.max(0.6, u);
       for (let i = 0; L.road.length > 1 && i < nBikes; i++) {
         const d = (time * 2 + (i / Math.max(nBikes, 1)) * loop) * (i % 2 ? -1 : 1);
         const [x, y] = along(L.road, L.roadLen, d);
+        const [nx, ny] = along(L.road, L.roadLen, d + (i % 2 ? -0.2 : 0.2));
         bikes.push([x, y, 0]);
-        box(faces, x, y, 0.12 * bu, 0.45 * bu, 0.45 * bu, 0.35 * bu, ["#e53935", "#1e88e5", "#fdd835"][i % 3]);
-        box(faces, x, y, 0.47 * bu, 0.2 * bu, 0.2 * bu, 0.4 * bu, "#37474f");
+        const car = i % 4 === 3;
+        sprites.push({ at: [x, y, 0], img: car ? "car" : "bike", height: (car ? 0.75 : 0.9) * bu, flip: goesLeft([x, y, 0], [nx, ny, 0]) });
       }
 
       // Herds sized by head count relative to the survey.
@@ -474,23 +497,25 @@ export default function CarbonLabScene({ emissions, baseline, focus, onPick, vil
       (["cow", "goat", "sheep"] as const).forEach((kind, ki) => {
         const ratio = base[kind] > 0 ? e[kind] / base[kind] : e[kind] > 0 ? 1 : 0;
         const n = Math.min(kind === "cow" ? 10 : 8, Math.round((kind === "cow" ? 4 : 3) * ratio));
-        const au = Math.max(0.3, u);
+        const au = Math.max(0.6, u);
         for (let i = 0; i < n; i++) {
           const seed = ki * 13 + i * 7.3;
           const [sx, sy] = L.pasture[(ki * 10 + i) % L.pasture.length];
           const px = sx + Math.sin(time * 0.2 + seed) * 0.4 * au;
           const py = sy + Math.cos(time * 0.15 + seed) * 0.4 * au;
-          const heading = Math.round((seed % 4)) * (Math.PI / 2);
-          animal(faces, px, py, heading, kind, au);
-          animals.push({ p: [px + Math.cos(heading) * 0.8 * au, py + Math.sin(heading) * 0.8 * au, (kind === "cow" ? 1 : 0.6) * au], kind });
+          const height = (kind === "cow" ? 1.15 : kind === "goat" ? 0.9 : 0.8) * au;
+          const img = kind === "sheep" ? "sheep" : `${kind}${i % 2 ? "2" : ""}`;
+          const next: Vec3 = [px + Math.cos(time * 0.2 + seed) * 0.08, py - Math.sin(time * 0.15 + seed) * 0.06, 0];
+          sprites.push({ at: [px, py, 0], img, height, flip: goesLeft([px, py, 0], next) });
+          animals.push({ p: [px, py, height * 0.7], kind });
         }
       });
 
-      drawFaces(faces);
+      drawFaces(faces, sprites);
 
       // Wires with power pulses (speed and density follow electricity use).
       const wireEnd = L.houses.length ? centroid(L.houses) : L.poles[L.poles.length - 1];
-      const wire: Vec3[] = [[px - 1.3, py, 1.9], ...L.poles.map(([x, y]) => [x, y, 3] as Vec3), [wireEnd[0], wireEnd[1], 1.4 * Math.max(u, 0.4)]];
+      const wire: Vec3[] = [[px - 1.3, py, 1.9], ...L.poles.map(([x, y]) => [x, y, 2.6] as Vec3), [wireEnd[0], wireEnd[1], 1.4 * Math.max(u, 0.4)]];
       ctx.strokeStyle = "rgba(55,71,79,0.8)";
       ctx.lineWidth = 1.2;
       ctx.beginPath();
@@ -552,16 +577,54 @@ export default function CarbonLabScene({ emissions, baseline, focus, onPick, vil
         ctx.fill();
       }
 
-      // Greenhouse blanket: thicker and darker with the total load.
+      // Greenhouse blanket: the CO2 plume footage, denser, deeper and faster-swirling as emissions rise.
       const top = Math.max(h * 0.14, project([0, 0, ATMOS_Z]).y);
-      const band = ctx.createLinearGradient(0, top - h * 0.18, 0, top + h * 0.12);
-      const bandRgb = mix([160, 160, 165], [110, 80, 60], haze);
-      const a = Math.min(0.75, 0.12 + load * 0.22);
-      band.addColorStop(0, rgba(bandRgb, 0));
-      band.addColorStop(0.5, rgba(bandRgb, a));
-      band.addColorStop(1, rgba(bandRgb, 0));
-      ctx.fillStyle = band;
-      ctx.fillRect(0, top - h * 0.18, w, h * 0.3);
+      const smogLevel = total > 0 ? Math.min(1, Math.max(0, (load - 0.15) / 1.6)) : 0;
+      const video = smogRef.current;
+      if (video && video.readyState >= 2 && smogLevel > 0.01) {
+        video.playbackRate = 0.4 + smogLevel * 1.2;
+        const bandH = h * (0.22 + 0.42 * smogLevel);
+        const y0 = Math.max(0, top - bandH * 0.6);
+        const k = Math.max(w / video.videoWidth, bandH / video.videoHeight);
+        const dw = video.videoWidth * k, dh = video.videoHeight * k;
+        sctx.globalCompositeOperation = "source-over";
+        sctx.clearRect(0, 0, w, h);
+        sctx.drawImage(video, (w - dw) / 2, y0 + (bandH - dh) / 2, dw, dh);
+        const fade = sctx.createLinearGradient(0, y0, 0, y0 + bandH);
+        fade.addColorStop(0, "rgba(0,0,0,0.35)");
+        fade.addColorStop(0.25, "rgba(0,0,0,1)");
+        fade.addColorStop(0.6, "rgba(0,0,0,0.8)");
+        fade.addColorStop(1, "rgba(0,0,0,0)");
+        sctx.globalCompositeOperation = "destination-in";
+        sctx.fillStyle = fade;
+        sctx.fillRect(0, 0, w, h);
+        ctx.globalAlpha = 0.12 + 0.7 * smogLevel;
+        ctx.drawImage(smog, 0, 0, w, h);
+        ctx.globalAlpha = 1;
+      } else if (smogLevel > 0.01) {
+        const band = ctx.createLinearGradient(0, top - h * 0.18, 0, top + h * 0.12);
+        const bandRgb = mix([160, 160, 165], [110, 80, 60], haze);
+        band.addColorStop(0, rgba(bandRgb, 0));
+        band.addColorStop(0.5, rgba(bandRgb, Math.min(0.75, 0.12 + load * 0.22)));
+        band.addColorStop(1, rgba(bandRgb, 0));
+        ctx.fillStyle = band;
+        ctx.fillRect(0, top - h * 0.18, w, h * 0.3);
+      }
+      // Smog level badge (top right).
+      const smogText = `Smog: ${smogLevel < 0.05 ? "clear" : smogLevel < 0.35 ? "light" : smogLevel < 0.7 ? "moderate" : "heavy"}`;
+      ctx.font = "700 11px system-ui, sans-serif";
+      const sw = ctx.measureText(smogText).width + 34;
+      ctx.fillStyle = "rgba(255,255,255,0.88)";
+      ctx.beginPath();
+      ctx.roundRect(w - sw - 12, 12, sw, 22, 11);
+      ctx.fill();
+      ctx.fillStyle = rgba(mix([129, 199, 132], [121, 85, 72], smogLevel));
+      ctx.beginPath();
+      ctx.arc(w - sw + 1, 23, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#263238";
+      ctx.textAlign = "left";
+      ctx.fillText(smogText, w - sw + 12, 27);
       // Heat trapped: sun rays bounce back down off the blanket.
       ctx.strokeStyle = `rgba(255,112,67,${Math.min(0.9, 0.15 + haze)})`;
       ctx.lineWidth = 1.5;
@@ -650,15 +713,41 @@ export default function CarbonLabScene({ emissions, baseline, focus, onPick, vil
       raf = requestAnimationFrame(frame);
     };
 
-    function drawFaces(faces: Face[]) {
-      const visible = faces
+    function drawSprite(sp: Sprite) {
+      const img = images[sp.img];
+      if (!img?.complete || !img.naturalWidth) return;
+      const s = project(sp.at);
+      const hpx = sp.height * s.scale;
+      const wpx = hpx * (img.naturalWidth / img.naturalHeight);
+      ctx.fillStyle = "rgba(0,0,0,0.18)";
+      ctx.beginPath();
+      ctx.ellipse(s.x, s.y, wpx * 0.38, Math.max(1, wpx * 0.1), 0, 0, Math.PI * 2);
+      ctx.fill();
+      const flip = (sp.flip ? -1 : 1) * ICONS[sp.img].faces === -1;
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      if (flip) ctx.scale(-1, 1);
+      ctx.drawImage(img, -wpx / 2, -hpx, wpx, hpx);
+      ctx.restore();
+    }
+
+    /** Polygons and sprites painted back to front together, so icons hide behind houses correctly. */
+    function drawFaces(faces: Face[], sprites: Sprite[] = []) {
+      type Item = { f?: Face; sp?: Sprite; pts?: ReturnType<typeof project>[]; depth: number };
+      const items: Item[] = faces
         .filter((f) => facing(f.n) > 0)
         .map((f) => {
           const pts = f.pts.map(project);
           return { f, pts, depth: pts.reduce((s, p) => s + p.depth, 0) / pts.length };
-        })
-        .sort((a, b) => a.depth - b.depth);
-      for (const { f, pts } of visible) {
+        });
+      for (const sp of sprites) items.push({ sp, depth: project(sp.at).depth + 0.05 });
+      items.sort((a, b) => a.depth - b.depth);
+      for (const { f, sp, pts } of items) {
+        if (sp) {
+          drawSprite(sp);
+          continue;
+        }
+        if (!f || !pts) continue;
         const light = 0.55 + 0.45 * Math.max(0, f.n[0] * LIGHT[0] + f.n[1] * LIGHT[1] + f.n[2] * LIGHT[2]);
         ctx.fillStyle = rgba([f.rgb[0] * light, f.rgb[1] * light, f.rgb[2] * light], f.alpha ?? 1);
         ctx.beginPath();
@@ -730,6 +819,8 @@ export default function CarbonLabScene({ emissions, baseline, focus, onPick, vil
   return (
     <div className="lab-scene">
       <canvas ref={canvasRef} aria-label="Animated 3D village showing gas rising from each emission source into the atmosphere" role="img" />
+      {/* Smog footage drawn into the canvas; kept out of sight here. */}
+      <video ref={smogRef} className="lab-smog-src" src={SMOG_VIDEO} muted loop playsInline autoPlay preload="auto" aria-hidden />
       <div className="lab-scene-controls">
         <button type="button" className="icon-btn" onClick={() => setPlaying(!playing)} aria-label={playing ? "Pause animation" : "Play animation"}>
           {playing ? <Pause size={16} /> : <Play size={16} />}
@@ -741,7 +832,7 @@ export default function CarbonLabScene({ emissions, baseline, focus, onPick, vil
           <RotateCcw size={16} />
         </button>
       </div>
-      <p className="lab-scene-hint">Drag to rotate · scroll to zoom · click a label to inspect</p>
+      <p className="lab-scene-hint">Drag to rotate · scroll to zoom · click a label to inspect · smog footage: NASA GEOS-5 CO₂ model (via TIME)</p>
     </div>
   );
 }

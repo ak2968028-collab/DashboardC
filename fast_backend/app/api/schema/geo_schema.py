@@ -58,6 +58,7 @@ class Emission_raster_report(BaseModel):
     layers: list[str]
     grid: dict
     villages_placed: int
+    villages_cadastral: int  # placed with their cadastral (khasra) boundary; the rest use the census boundary
     villages_without_boundary: int
     villages_without_lulc: int
     inventory_t: float

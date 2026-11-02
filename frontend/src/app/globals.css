@@ -714,3 +714,18 @@ button.nav-link { background: none; border: none; font: inherit; cursor: pointer
 .factor-rebuild:disabled { opacity: 0.6; }
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+.factor-toggles { display: inline-flex; gap: 10px; }
+.factor-boundary { margin: 0; font-size: 11px; color: var(--muted); }
+.probe-parcel { color: #4a148c; font-weight: 600; }
+.lab-smog-src { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.lab-icon { object-fit: contain; flex-shrink: 0; }
+.emission-overlay { image-rendering: pixelated; }
+.factor-scope { display: inline-flex; border: 1px solid #cfd8dc; border-radius: 999px; overflow: hidden; }
+.factor-scope button { white-space: nowrap; font: inherit; font-size: 11px; font-weight: 600; border: none; background: var(--card); color: var(--muted); padding: 3px 10px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+.factor-scope button.active { background: var(--green-700); color: #fff; }
+.factor-scenario { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 999px; background: #eceff1; color: var(--muted); }
+.factor-scenario.up { background: #ffebee; color: #c62828; }
+.factor-scenario.down { background: var(--green-50); color: var(--green-900); }
+.factor-extra { border-top: 1px solid var(--border); padding-top: 6px; font-size: 13px; }
+.factor-extra summary { cursor: pointer; font-weight: 600; color: var(--muted); font-size: 12px; }
+.factor-extra[open] summary { margin-bottom: 6px; }

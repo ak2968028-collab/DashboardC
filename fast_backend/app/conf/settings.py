@@ -87,6 +87,11 @@ class Settings(BaseSettings):
         return self.MEDIA_DIR / "Smulation data" / "varanasi.gpkg"
 
     @property
+    def CADASTRAL_BOUNDARIES_PATH(self) -> Path:
+        """Village boundaries dissolved from the khasra parcels (script/cadastral_boundaries.py), WGS84."""
+        return self.MEDIA_DIR / "data" / "processed" / "varanasi_villages_cadastral.geojson"
+
+    @property
     def SLD_DIR(self) -> Path:
         return self.MEDIA_DIR / "geoserver"
 

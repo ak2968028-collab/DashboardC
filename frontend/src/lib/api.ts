@@ -2,7 +2,7 @@ import useSWR, { mutate } from "swr";
 import type { FeatureCollection } from "geojson";
 import type {
   CensusVillage, District, EmissionFactor, RasterFactor, RasterLayer, State, Submission, SubmissionDetails, Subdistrict, Summary,
-  SupervisorVillage, SurveyField, User, Village, VillageDetails, VillageFactorStats, VillageScene,
+  SupervisorVillage, SurveyField, User, Village, VillageDetails, VillageFactorStats, VillageScene, EmissionGrid,
 } from "./types";
 
 export class ApiError extends Error {
@@ -92,6 +92,14 @@ export const useGeoJson = (layer: "district" | "blocks" | "villages") =>
 
 export const useRasterLayers = () =>
   useSWR<RasterLayer[]>("/api/geo/rasters", fetcher, { revalidateOnFocus: false });
+
+/** Khasra parcels (with LULC use) and the boundary dissolved from them, WGS84 (404 without parcel data). */
+export const useVillageCadastral = (code: string | null) =>
+  useSWR<FeatureCollection>(code ? `/api/villages/${code}/cadastral` : null, fetcher, { revalidateOnFocus: false, shouldRetryOnError: false });
+
+/** The village's cells of each source emission raster, for rescaling to the Carbon Lab scenario. */
+export const useEmissionGrid = (village: string | null) =>
+  useSWR<EmissionGrid>(village ? `/api/geo/emission-grid?village=${village}` : null, fetcher, { revalidateOnFocus: false, shouldRetryOnError: false });
 
 /** Raster factors listed from GeoServer (curated + added from the dashboard). */
 export const useRasterFactors = () => useSWR<RasterFactor[]>("/api/geo/factors", fetcher, { revalidateOnFocus: false });

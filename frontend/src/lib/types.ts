@@ -139,6 +139,25 @@ export interface RasterFactor {
   legend: { color: string; quantity: number; label: string; opacity: number }[];
 }
 
+/** One village's cells of each source emission raster (t CO2e/ha/yr), row-major from the north-west corner. */
+export interface EmissionGrid {
+  village_code: string;
+  boundary: "cadastral" | "census";
+  unit: string;
+  /** west, south, east, north (degrees) */
+  bounds: [number, number, number, number];
+  width: number;
+  height: number;
+  /** Cell area per row (ha). */
+  cell_ha: number[];
+  /** 1 where the cell centre lies inside the village. */
+  inside: number[];
+  sources: Record<string, number[]>;
+  legends: Record<string, { color: string; quantity: number; label: string; opacity: number }[]>;
+  titles: Record<string, string>;
+  generated_at: string | null;
+}
+
 export interface VillageFactorStats {
   layer: string;
   village_code: string;

@@ -283,13 +283,32 @@ def delete_factor(name: str, username: str, is_admin: bool):
 
 # ---------- per-village statistics ----------
 
-@lru_cache(maxsize=1)
-def _village_shapes() -> dict[str, object]:
-    geo = json.loads(settings.GEOJSON_LAYERS['villages'].read_text())
+def _read_boundaries(path) -> dict[str, object]:
+    if not path.exists():
+        return {}
+    geo = json.loads(path.read_text())
     return {
         str(f['properties'].get('village_code', '')).strip(): shapely.from_geojson(json.dumps(f['geometry']))
         for f in geo['features'] if f.get('geometry')
     }
+
+
+@lru_cache(maxsize=1)
+def _village_shapes() -> dict[str, object]:
+    """Village boundaries: dissolved from the khasra parcels where available, else the census boundary.
+    Census-only villages come first so that, where the two overlap, later (cadastral) shapes win."""
+    cadastral = _read_boundaries(settings.CADASTRAL_BOUNDARIES_PATH)
+    census = _read_boundaries(settings.GEOJSON_LAYERS['villages'])
+    return {**{c: g for c, g in census.items() if c not in cadastral}, **cadastral}
+
+
+def boundary_source(village_code: str) -> str:
+    return 'cadastral' if village_code in _read_cadastral_codes() else 'census'
+
+
+@lru_cache(maxsize=1)
+def _read_cadastral_codes() -> frozenset[str]:
+    return frozenset(_read_boundaries(settings.CADASTRAL_BOUNDARIES_PATH))
 
 
 @lru_cache(maxsize=512)

@@ -24,6 +24,8 @@ interface Source {
   key: SourceKey;
   label: string;
   icon: LucideIcon;
+  /** Picture from public/icon, shown instead of `icon` when present. */
+  img?: string;
   field: NumericKey;
   unit: string;
   /** Activity is reported per month and multiplied by 12. */
@@ -46,12 +48,12 @@ const SOURCES: Source[] = [
     effect: "Incomplete burning in open chulhas sends thick smoke out of homes. It adds CO₂, methane and soot and harms indoor air for women and children.",
   },
   {
-    key: "electricity", label: "Grid Electricity", icon: Zap, field: "electricity_monthly_kwh", unit: "kWh/month", monthly: true,
+    key: "electricity", label: "Grid Electricity", icon: Zap, img: "/icon/electric-tower.png", field: "electricity_monthly_kwh", unit: "kWh/month", monthly: true,
     factorUnit: "kg CO₂/kWh", minMax: 8000, gases: "CO₂ (off-site, coal power)",
     effect: "Each unit used in the village is generated far away at a mostly coal-fired plant. The emissions come out of the plant's stack and travel down the power line.",
   },
   {
-    key: "petrol", label: "Motorbike Petrol", icon: Bike, field: "petrol_monthly_litres", unit: "litres/month", monthly: true,
+    key: "petrol", label: "Motorbike Petrol", icon: Bike, img: "/icon/motorbike.png", field: "petrol_monthly_litres", unit: "litres/month", monthly: true,
     factorUnit: "kg CO₂e/litre", minMax: 800, gases: "CO₂ · NOₓ",
     effect: "Two-wheelers on village roads burn petrol. More litres means more bikes on the road and more exhaust at ground level.",
   },
@@ -61,17 +63,17 @@ const SOURCES: Source[] = [
     effect: "Mixed waste rotting in open dumps decomposes without oxygen and bubbles out methane, a gas about 28× stronger than CO₂.",
   },
   {
-    key: "cow", label: "Cattle", icon: Beef, field: "cows_count", unit: "head", monthly: false,
+    key: "cow", label: "Cattle", icon: Beef, img: "/icon/cow.png", field: "cows_count", unit: "head", monthly: false,
     factorUnit: "kg CO₂e/head/yr", minMax: 60, gases: "CH₄ · N₂O",
     effect: "Cattle digestion (enteric fermentation) and manure release methane and nitrous oxide. Each animal emits about a tonne of CO₂e every year.",
   },
   {
-    key: "goat", label: "Goats", icon: Beef, field: "goats_count", unit: "head", monthly: false,
+    key: "goat", label: "Goats", icon: Beef, img: "/icon/goat.png", field: "goats_count", unit: "head", monthly: false,
     factorUnit: "kg CO₂e/head/yr", minMax: 60, gases: "CH₄",
     effect: "Small ruminants also produce methane while digesting, but much less per head than cattle.",
   },
   {
-    key: "sheep", label: "Sheep", icon: Beef, field: "sheep_count", unit: "head", monthly: false,
+    key: "sheep", label: "Sheep", icon: Beef, img: "/icon/sheep.png", field: "sheep_count", unit: "head", monthly: false,
     factorUnit: "kg CO₂e/head/yr", minMax: 60, gases: "CH₄",
     effect: "Like goats, sheep emit enteric methane at roughly one-seventh of a cow's rate.",
   },
@@ -87,6 +89,11 @@ const SCENARIOS: { name: string; hint: string; apply: (a: Activity) => Activity 
   { name: "Composting", hint: "−60% dumped waste", apply: (a) => ({ ...a, waste: a.waste * 0.4 }) },
   { name: "Unchecked growth", hint: "+50% everything", apply: (a) => Object.fromEntries(Object.entries(a).map(([k, v]) => [k, v * 1.5])) as Activity },
 ];
+
+function SourceIcon({ source, size }: { source: Source; size: number }) {
+  if (!source.img) return <source.icon size={size * 0.85} />;
+  return <img className="lab-icon" src={encodeURI(source.img)} alt="" width={size} height={size} />;
+}
 
 const tonnes = (s: Source, value: number, factor: number) => (value * (s.monthly ? 12 : 1) * factor) / 1000;
 const roundTo = (v: number, step: number) => Math.round(v / step) * step;
@@ -168,7 +175,7 @@ function CarbonLab({ village }: { village: VillageDetails }) {
               <div key={s.key} className={`lab-param ${focus === s.key ? "active" : ""}`} style={{ "--src": SOURCE_COLORS[s.key] } as CSSProperties}
                 onClick={() => setFocus(s.key)}>
                 <div className="lab-param-top">
-                  <span className="lab-param-name"><s.icon size={15} /> {s.label}</span>
+                  <span className="lab-param-name"><SourceIcon source={s} size={18} /> {s.label}</span>
                   <span className="lab-param-t">{fmt(e, 1)} t</span>
                 </div>
                 <input type="range" min={0} max={max} step={step} value={value} aria-label={`${s.label} (${s.unit})`}
@@ -226,7 +233,7 @@ function CarbonLab({ village }: { village: VillageDetails }) {
           {focused && (
             <div className="lab-effect" style={{ "--src": SOURCE_COLORS[focused.key] } as CSSProperties}>
               <div className="lab-effect-head">
-                <h4><focused.icon size={18} /> {focused.label}: what happens</h4>
+                <h4><SourceIcon source={focused} size={24} /> {focused.label}: what happens</h4>
                 <span className="lab-gas">{focused.gases}</span>
               </div>
               <p>{focused.effect}</p>
@@ -243,7 +250,8 @@ function CarbonLab({ village }: { village: VillageDetails }) {
           )}
         </section>
 
-        <FactorPanel villageCode={village.village_code} villageName={village.village_name} focus={focus} />
+        <FactorPanel villageCode={village.village_code} villageName={village.village_name} focus={focus}
+          emissions={emissions} baseline={baseline} />
       </div>
     </>
   );

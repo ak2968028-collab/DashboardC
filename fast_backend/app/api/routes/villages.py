@@ -31,6 +31,13 @@ async def get_village_scene(db: db_read, village_code: str):
     return await scene_svc.get_scene(db, village_code)
 
 
+@router.get("/{village_code}/cadastral")
+async def get_village_cadastral(db: db_read, village_code: str):
+    """Khasra parcels (with LULC land use) and the village boundary dissolved from them, as WGS84 GeoJSON.
+    404 when the parcel GeoPackage has no parcels for this village."""
+    return await scene_svc.get_cadastral(db, village_code)
+
+
 @router.get("/{village_code}/report.pdf")
 async def get_village_report(db: db_read, village_code: str):
     """Basic village report (public): purpose, profile, location maps and carbon footprint."""

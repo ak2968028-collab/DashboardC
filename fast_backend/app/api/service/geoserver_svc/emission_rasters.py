@@ -8,13 +8,15 @@ t CO2e/ha/yr, so a village's cells sum back to its inventory total."""
 import io
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
+from functools import lru_cache
 
 import numpy as np
 import shapely
+from fastapi import HTTPException, status
 from PIL import Image, TiffImagePlugin
 
 from app.api.service.geoserver_svc import factors
-from app.api.service.geoserver_svc.geoserver import _ensure_workspace, _publish_style, _request, rest_get
+from app.api.service.geoserver_svc.geoserver import _ensure_workspace, _publish_style, _request, ows_get, rest_get
 from app.conf.settings import settings
 
 EMISSION_WORKSPACE = settings.GEOSERVER_EMISSION_WORKSPACE
@@ -150,9 +152,21 @@ def generate(villages: list[dict]) -> dict:
     has_lulc = (blocks != lulc_nodata).any(axis=(1, 3))
 
     vid = _village_cells(shapes, gx0, gy0, res, (h, w))
+    n = len(shapes)
+    # Villages that own no cell (smaller than a cell, or covered by a neighbour) keep their emissions in the cell
+    # under their own centre, so nothing is dropped.
+    orphan_cells = {}
+    owned = np.bincount(vid[vid >= 0], minlength=n)
+    for i, geom in enumerate(shapes.values()):
+        if owned[i] == 0:
+            cx, cy = shapely.get_coordinates(shapely.point_on_surface(geom))[0]
+            r, c = min(h - 1, int((gy0 - cy) / res)), min(w - 1, int((cx - gx0) / res))
+            if vid[r, c] < 0:
+                vid[r, c] = i
+            else:
+                orphan_cells[i] = r * w + c
     flat = vid.ravel()
     inside = flat >= 0
-    n = len(shapes)
     cells_per_village = np.bincount(flat[inside], minlength=n)
     lulc_per_village = np.bincount(flat[inside], weights=has_lulc.ravel()[inside], minlength=n)
     lat = gy0 - (np.arange(h) + 0.5) * res
@@ -174,6 +188,8 @@ def generate(villages: list[dict]) -> dict:
         share[inside] = share_in
         tonnes = np.zeros(h * w)
         tonnes[inside] = totals[idx] * share[inside]
+        for i, cell in orphan_cells.items():
+            tonnes[cell] += totals[i]
         densities[key] = (tonnes.reshape(h, w) / cell_ha)
     densities["total"] = sum(densities.values())
 
@@ -191,11 +207,13 @@ def generate(villages: list[dict]) -> dict:
 
     factors.list_factors(refresh=True)
     factors.village_stats.cache_clear()
+    village_grid.cache_clear()
     no_boundary = [v["village_code"] for v in villages if v["village_code"] not in shapes]
     return {
         "layers": published,
         "grid": {"width": w, "height": h, "cell_m": round(res * 111_000), "origin": [float(gx0), float(gy0)]},
         "villages_placed": n,
+        "villages_cadastral": sum(1 for c in shapes if factors.boundary_source(c) == "cadastral"),
         "villages_without_boundary": len(no_boundary),
         "villages_without_lulc": int((lulc_per_village == 0).sum()),
         "inventory_t": round(sum(float(v.get("total_co2e_t_yr") or 0) for v in villages), 1),
@@ -211,6 +229,54 @@ async def regenerate(db) -> dict:
     from app.database.crud.village.async_crud import Village_crud
     villages = await Village_crud(db).get_records()
     return await run_in_threadpool(generate, villages)
+
+
+@lru_cache(maxsize=128)
+def village_grid(village_code: str) -> dict:
+    """The village's cells of every source raster, read back from GeoServer (WCS), so the dashboard can rescale them
+    for a scenario: inside a village each source raster is linear in that village's emission for the source."""
+    factors._require_geoserver()
+    geom = factors._village_shapes().get(village_code)
+    if geom is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No boundary for village {village_code}")
+    sources = [k for k in ALLOCATION if k != "total"]
+    layers = {f"{EMISSION_WORKSPACE}:emission_{k}" for k in ALLOCATION}
+    known = {f["layer"]: f for f in factors.list_factors() if f["layer"] in layers}
+    if len(known) < len(layers):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Emission rasters have not been generated yet")
+
+    minx, miny, maxx, maxy = geom.bounds
+    grids, transform = {}, None
+    for key in sources:
+        tif = ows_get(f"/wcs?service=WCS&version=2.0.1&request=GetCoverage&coverageId={EMISSION_WORKSPACE}__emission_{key}"
+                      f"&subset=Long({minx},{maxx})&subset=Lat({miny},{maxy})&format=image/tiff")
+        values, nodata, transform = factors._read_geotiff(tif)
+        grids[key] = np.where(factors._valid(values, nodata), values, 0.0)
+    x0, dx, y0, dy = transform
+    h, w = grids[sources[0]].shape
+    rows, cols = np.indices((h, w))
+    lat = y0 + (rows + 0.5) * dy
+    inside = shapely.contains_xy(geom, x0 + (cols + 0.5) * dx, lat)
+    row_lat = y0 + (np.arange(h) + 0.5) * dy
+    cell_ha = (abs(dx) * 111_320 * np.cos(np.radians(row_lat))) * (abs(dy) * 110_574) / 1e4
+    return {
+        "village_code": village_code,
+        "boundary": factors.boundary_source(village_code),
+        "unit": UNIT,
+        "bounds": [float(x0), float(y0 + h * dy), float(x0 + w * dx), float(y0)],  # west, south, east, north
+        "width": int(w),
+        "height": int(h),
+        "cell_ha": [round(float(a), 4) for a in cell_ha],
+        "inside": inside.ravel().astype(int).tolist(),
+        "sources": {k: [round(float(v), 5) for v in np.where(inside, g, 0).ravel()] for k, g in grids.items()},
+        "legends": {
+            k: [{"color": e["color"], "quantity": e["quantity"], "label": e["label"], "opacity": e["opacity"]}
+                for e in known[f"{EMISSION_WORKSPACE}:emission_{k}"]["legend"]]
+            for k in ALLOCATION
+        },
+        "titles": {k: title for k, (title, _, _) in ALLOCATION.items()},
+        "generated_at": known[f"{EMISSION_WORKSPACE}:emission_total"]["uploaded_at"],
+    }
 
 
 def status() -> dict | None:

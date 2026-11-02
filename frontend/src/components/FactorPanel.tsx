@@ -2,16 +2,17 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { Layers, Plus, RefreshCw, Trash2, Upload } from "lucide-react";
 import { mutate } from "swr";
-import { errorText, refreshAll, sendApi, useFactorStats, useRasterFactors, wmsUrl } from "@/lib/api";
+import { errorText, refreshAll, sendApi, useEmissionGrid, useFactorStats, useRasterFactors, useVillageCadastral, wmsUrl } from "@/lib/api";
 import { fmt } from "@/lib/format";
-import type { RasterFactor, VillageFactorStats } from "@/lib/types";
+import type { EmissionGrid, RasterFactor, VillageFactorStats } from "@/lib/types";
 import { useAuth } from "./AuthContext";
 
 // Leaflet needs the browser window, so the map is client-only.
 const FactorMap = dynamic(() => import("./FactorMap"), { ssr: false, loading: () => <div className="factor-map loading">Loading map…</div> });
+type GridOverlay = import("./FactorMap").GridOverlay;
 
 const RAMPS: Record<string, string[]> = {
   viridis: ["#440154", "#3b528b", "#21918c", "#5ec962", "#fde725"],
@@ -24,38 +25,122 @@ const RAMPS: Record<string, string[]> = {
 const num = (v: number | null | undefined, unit?: string | null) =>
   v == null ? "–" : `${fmt(v, Math.abs(v) < 100 ? 2 : 0)}${unit ? ` ${unit}` : ""}`;
 
-/** Carbon Lab source (left panel) -> emission raster source. */
-const RASTER_SOURCE: Record<string, string> = {
-  lpg: "lpg", firewood: "firewood", electricity: "electricity", petrol: "transport", waste: "waste",
-  cow: "livestock", goat: "livestock", sheep: "livestock",
+/** Emission raster source -> the Carbon Lab sources (left panel) it is built from. */
+const RASTER_GROUPS: Record<string, string[]> = {
+  lpg: ["lpg"], firewood: ["firewood"], electricity: ["electricity"], transport: ["petrol"], waste: ["waste"],
+  livestock: ["cow", "goat", "sheep"],
 };
+const RASTER_OF: Record<string, string> = Object.fromEntries(
+  Object.entries(RASTER_GROUPS).flatMap(([raster, keys]) => keys.map((k) => [k, raster])),
+);
 
 /** Legend entries that are drawn (transparent "no emission" classes are hidden). */
 export const shownLegend = (f: RasterFactor) => f.legend.filter((l) => l.opacity > 0);
 
-/** Right-hand Carbon Lab panel: carbon emission rasters (built from the village inventory and LULC) and added factors,
- *  served by GeoServer for the active village, with legend, village statistics and uploads. */
-export default function FactorPanel({ villageCode, villageName, focus }: { villageCode: string; villageName: string; focus?: string | null }) {
-  const { data: allFactors = [], error } = useRasterFactors();
-  const factors = useMemo(() => allFactors.filter((f) => f.kind !== "condition"), [allFactors]);
+type Entry = EmissionGrid["legends"][string][number];
+const classOf = (legend: Entry[], v: number) => legend.findIndex((l) => v < l.quantity);
+
+/** Scenario raster for the village: each source's survey cells scaled by (scenario ÷ survey) emissions for that source. */
+function scenarioRaster(grid: EmissionGrid, raster: string, ratio: Record<string, number>) {
+  const keys = raster === "total" ? Object.keys(RASTER_GROUPS) : [raster];
+  const n = grid.width * grid.height;
+  const values = new Float64Array(n);
+  for (const k of keys) {
+    const cells = grid.sources[k];
+    const r = ratio[k] ?? 1;
+    if (cells && r) for (let i = 0; i < n; i++) values[i] += cells[i] * r;
+  }
+  return values;
+}
+
+function paint(grid: EmissionGrid, values: Float64Array, legend: Entry[]): string {
+  const canvas = document.createElement("canvas");
+  canvas.width = grid.width;
+  canvas.height = grid.height;
+  const ctx = canvas.getContext("2d")!;
+  const img = ctx.createImageData(grid.width, grid.height);
+  values.forEach((v, i) => {
+    if (!grid.inside[i] || v <= 0) return;
+    const entry = legend[classOf(legend, v)] ?? legend.at(-1)!;
+    if (!entry || entry.opacity === 0) return;
+    const c = parseInt(entry.color.slice(1), 16);
+    img.data.set([(c >> 16) & 255, (c >> 8) & 255, c & 255, 255], i * 4);
+  });
+  ctx.putImageData(img, 0, 0);
+  return canvas.toDataURL();
+}
+
+interface PanelProps {
+  villageCode: string;
+  villageName: string;
+  /** Source picked in the parameter panel; the map follows it. */
+  focus?: string | null;
+  /** Scenario and survey emissions per Carbon Lab source (t CO2e/yr). */
+  emissions: Record<string, number>;
+  baseline: Record<string, number>;
+}
+
+/** Right-hand Carbon Lab panel: the emission raster of the source selected on the left, recomputed for the slider
+ *  scenario from the GeoServer cells of this village; uploaded GeoServer layers can be shown instead. */
+export default function FactorPanel({ villageCode, villageName, focus, emissions, baseline }: PanelProps) {
+  const { data: grid, error: gridError, isLoading } = useEmissionGrid(villageCode);
+  const { data: allFactors = [] } = useRasterFactors();
+  const uploads = useMemo(() => allFactors.filter((f) => f.kind === "upload"), [allFactors]);
   const { user } = useAuth();
-  const [layer, setLayer] = useState<string | null>(null);
+  const [scope, setScope] = useState<"source" | "total">("source");
+  const [extra, setExtra] = useState<string | null>(null);
   const [opacity, setOpacity] = useState(0.8);
-  const [clip, setClip] = useState(true);
+  const [showParcels, setShowParcels] = useState(true);
   const [rebuilding, setRebuilding] = useState(false);
-  const factor = factors.find((f) => f.layer === layer) ?? null;
-  const { data: stats, isLoading: statsLoading } = useFactorStats(factor?.layer ?? null, villageCode);
-  const emissionLayer = (source: string) => factors.find((f) => f.kind === "emission" && f.source === source)?.layer;
+  const { data: cadastral } = useVillageCadastral(villageCode);
+  const cadastralBoundary = !!cadastral?.features.some((f) => f.properties?.kind === "boundary");
+  const extraFactor = uploads.find((f) => f.layer === extra) ?? null;
+  const { data: extraStats, isLoading: extraLoading } = useFactorStats(extraFactor?.layer ?? null, villageCode);
 
-  useEffect(() => {
-    if (!factor && factors.length) setLayer(emissionLayer("total") ?? factors[0].layer);
-  }, [factor, factors]);
+  const raster = scope === "total" ? "total" : (focus && RASTER_OF[focus]) || "total";
+  // Scenario ÷ survey per raster source.
+  const ratio = useMemo(() => Object.fromEntries(Object.entries(RASTER_GROUPS).map(([r, keys]) => {
+    const base = keys.reduce((s, k) => s + (baseline[k] ?? 0), 0);
+    const now = keys.reduce((s, k) => s + (emissions[k] ?? 0), 0);
+    return [r, base > 0 ? now / base : 0];
+  })), [emissions, baseline]);
+  const values = useMemo(() => (grid ? scenarioRaster(grid, raster, ratio) : null), [grid, raster, ratio]);
+  const legend = grid?.legends[raster] ?? [];
+  const url = useMemo(() => (grid && values ? paint(grid, values, legend) : null), [grid, values, legend]);
 
-  // Follow the source picked in the parameter panel / 3D scene.
-  useEffect(() => {
-    const target = focus ? emissionLayer(RASTER_SOURCE[focus]) : undefined;
-    if (target) setLayer(target);
-  }, [focus, factors]);
+  const title = grid?.titles[raster] ?? "Emissions";
+  const summary = useMemo(() => {
+    if (!grid || !values) return null;
+    let total = 0, peak = 0, cells = 0, emitting = 0;
+    const counts = new Array(legend.length).fill(0);
+    values.forEach((v, i) => {
+      if (!grid.inside[i]) return;
+      cells++;
+      total += v * grid.cell_ha[Math.floor(i / grid.width)];
+      peak = Math.max(peak, v);
+      if (v > 0) {
+        emitting++;
+        const k = classOf(legend, v);
+        counts[k < 0 ? legend.length - 1 : k]++;
+      }
+    });
+    return { total, peak, cells, emitting, shares: counts.map((c) => (cells ? (100 * c) / cells : 0)) };
+  }, [grid, values, legend]);
+  const surveyTotal = raster === "total"
+    ? Object.values(baseline).reduce((a, b) => a + b, 0)
+    : RASTER_GROUPS[raster].reduce((s, k) => s + (baseline[k] ?? 0), 0);
+  const change = summary && surveyTotal > 0 ? (summary.total / surveyTotal - 1) * 100 : 0;
+
+  const overlay = useMemo<GridOverlay | null>(() => grid && url && values ? {
+    url, bounds: grid.bounds, title: `${title} (scenario)`,
+    read: (lat, lng) => {
+      const [w, s, e, n] = grid.bounds;
+      const c = Math.floor(((lng - w) / (e - w)) * grid.width), r = Math.floor(((n - lat) / (n - s)) * grid.height);
+      if (c < 0 || r < 0 || c >= grid.width || r >= grid.height || !grid.inside[r * grid.width + c]) return null;
+      const v = values[r * grid.width + c];
+      return v > 0 ? `${num(v)} t CO₂e/ha/yr` : "No emission from this source here";
+    },
+  } : null, [grid, url, values, title]);
 
   const rebuild = async () => {
     setRebuilding(true);
@@ -68,19 +153,12 @@ export default function FactorPanel({ villageCode, villageName, focus }: { villa
       setRebuilding(false);
     }
   };
-  const generatedAt = factors.find((f) => f.kind === "emission")?.uploaded_at;
-
-  const groups = useMemo(() => {
-    const out = new Map<string, RasterFactor[]>();
-    for (const f of factors) out.set(f.group, [...(out.get(f.group) ?? []), f]);
-    return [...out];
-  }, [factors]);
 
   const remove = async (f: RasterFactor) => {
     if (!confirm(`Remove "${f.title}" from GeoServer?`)) return;
     try {
       await sendApi("DELETE", `/api/geo/factors/${f.name}`);
-      if (layer === f.layer) setLayer(null);
+      if (extra === f.layer) setExtra(null);
       await mutate("/api/geo/factors");
     } catch (err) {
       alert(errorText(err));
@@ -90,63 +168,105 @@ export default function FactorPanel({ villageCode, villageName, focus }: { villa
   return (
     <aside className="lab-panel factor-panel">
       <div className="lab-panel-head">
-        <h4><Layers size={16} /> Emission rasters</h4>
-        <label className="factor-clip"><input type="checkbox" checked={clip} onChange={(e) => setClip(e.target.checked)} /> Clip to village</label>
+        <h4><Layers size={16} /> Emission map</h4>
+        <span className="factor-toggles">
+          <span className="factor-scope" role="group" aria-label="Raster">
+            <button type="button" className={scope === "source" && !extraFactor ? "active" : ""} onClick={() => { setScope("source"); setExtra(null); }}>
+              Selected
+            </button>
+            <button type="button" className={scope === "total" && !extraFactor ? "active" : ""} onClick={() => { setScope("total"); setExtra(null); }}>
+              All sources
+            </button>
+          </span>
+          {cadastralBoundary && (
+            <label className="factor-clip"><input type="checkbox" checked={showParcels} onChange={(e) => setShowParcels(e.target.checked)} /> Khasra</label>
+          )}
+        </span>
       </div>
 
-      <FactorMap villageCode={villageCode} factor={factor} opacity={opacity} clip={clip} />
-      <p className="caption">
-        Village emissions spread over land cover (LULC), served live from GeoServer. Click the map to read a cell.
-        {generatedAt && <> Built {new Date(generatedAt).toLocaleDateString()}.</>}
-        {user?.role === "admin" && (
-          <button type="button" className="btn-ghost factor-rebuild" onClick={rebuild} disabled={rebuilding}>
-            <RefreshCw size={12} className={rebuilding ? "spin" : ""} /> {rebuilding ? "Rebuilding…" : "Rebuild from latest data"}
-          </button>
-        )}
+      <FactorMap villageCode={villageCode} overlay={overlay} factor={extraFactor} opacity={opacity} parcels={showParcels} />
+      <p className="factor-boundary">
+        Boundary: {cadastralBoundary ? <><b>cadastral</b> (dissolved from {fmt(cadastral!.features.length - 1)} khasra parcels)</> : <><b>census</b> (no khasra parcels for this village)</>}
       </p>
 
-      {error && <div className="alert error">Could not load rasters from GeoServer: {errorText(error)}</div>}
-
-      <div className="factor-list" role="radiogroup" aria-label="Raster factor">
-        {groups.map(([group, items]) => (
-          <div key={group}>
-            <div className="factor-group">{group}</div>
-            {items.map((f) => (
-              <label key={f.layer} className={`factor-item ${f.layer === layer ? "active" : ""}`}>
-                <input type="radio" name="factor" checked={f.layer === layer} onChange={() => setLayer(f.layer)} />
-                <span className="factor-swatch" style={{ background: swatch(f) }} />
-                <span className="factor-name">{f.title}</span>
-                {f.temporary && <span className="factor-temp" title={`Added by ${f.uploaded_by ?? "?"}`}>temp</span>}
-                {f.temporary && user && (user.role === "admin" || user.username === f.uploaded_by) && (
-                  <button type="button" className="icon-btn" aria-label={`Remove ${f.title}`} onClick={(e) => { e.preventDefault(); remove(f); }}>
-                    <Trash2 size={14} />
-                  </button>
-                )}
-              </label>
-            ))}
-          </div>
-        ))}
-        {!factors.length && !error && (
-          <p className="caption">No emission rasters on GeoServer yet. An admin can build them with “Rebuild from latest data”.</p>
-        )}
-      </div>
-
-      {factor && (
+      {extraFactor ? (
         <div className="factor-legend">
           <div className="factor-legend-head">
-            <b>{factor.title}</b>
+            <b>{extraFactor.title}</b>
+            <button type="button" className="btn-ghost" onClick={() => setExtra(null)}>Back to emissions</button>
+          </div>
+          {extraFactor.description && <p className="caption">{extraFactor.description}</p>}
+          <Legend factor={extraFactor} stats={extraStats} />
+          <VillageStats factor={extraFactor} stats={extraStats} loading={extraLoading} villageName={villageName} />
+        </div>
+      ) : (
+        <div className="factor-legend">
+          <div className="factor-legend-head">
+            <b>{title}</b>
             <label className="factor-opacity">
               Opacity
               <input type="range" min={0.1} max={1} step={0.05} value={opacity} onChange={(e) => setOpacity(Number(e.target.value))} />
             </label>
           </div>
-          {factor.description && <p className="caption">{factor.description}</p>}
-          <Legend factor={factor} stats={stats} />
-          <VillageStats factor={factor} stats={stats} loading={statsLoading} villageName={villageName} />
+          {isLoading && <p className="caption">Reading the emission rasters from GeoServer…</p>}
+          {gridError && (
+            <p className="factor-nodata">
+              {errorText(gridError)}.{user?.role === "admin" ? " Use “Rebuild from latest data” below." : ""}
+            </p>
+          )}
+          {summary && (
+            <>
+              <p className="caption">
+                Follows the <b>{scope === "total" ? "sum of all sources" : "source selected on the left"}</b> and your sliders.{" "}
+                <span className={`factor-scenario ${change > 0.5 ? "up" : change < -0.5 ? "down" : ""}`}>
+                  {Math.abs(change) < 0.5 ? "= survey" : `${change > 0 ? "+" : ""}${fmt(change, 0)}% vs survey`}
+                </span>
+              </p>
+              <ul className="factor-classes">
+                {legend.map((l, i) => l.opacity > 0 && (
+                  <li key={i}>
+                    <span className="factor-dot" style={{ background: l.color }} />
+                    <span className="factor-class-label">{l.label}</span>
+                    <span className="factor-bar"><span style={{ width: `${summary.shares[i]}%`, background: l.color }} /></span>
+                    <span className="factor-pct">{fmt(summary.shares[i], 1)}%</span>
+                  </li>
+                ))}
+              </ul>
+              <dl className="factor-stats">
+                <div><dt>{villageName} total</dt><dd>{num(summary.total, "t/yr")}</dd></div>
+                <div><dt>Peak cell</dt><dd>{num(summary.peak, "t/ha")}</dd></div>
+                <div><dt>Area emitting</dt><dd>{fmt(summary.cells ? (100 * summary.emitting) / summary.cells : 0, 0)}%</dd></div>
+              </dl>
+              <p className="caption">
+                {grid?.unit} on ~98 m cells, spread over land cover (LULC). Survey rasters from GeoServer
+                {grid?.generated_at && <> (built {new Date(grid.generated_at).toLocaleDateString()})</>}, rescaled in the browser for the scenario.
+              </p>
+            </>
+          )}
+          {user?.role === "admin" && (
+            <button type="button" className="btn-ghost factor-rebuild" onClick={rebuild} disabled={rebuilding}>
+              <RefreshCw size={12} className={rebuilding ? "spin" : ""} /> {rebuilding ? "Rebuilding…" : "Rebuild from latest data"}
+            </button>
+          )}
         </div>
       )}
 
-      <AddFactor loggedIn={!!user} onAdded={(f) => setLayer(f.layer)} />
+      <details className="factor-extra">
+        <summary>Uploaded layers ({uploads.length})</summary>
+        {uploads.map((f) => (
+          <label key={f.layer} className={`factor-item ${f.layer === extra ? "active" : ""}`}>
+            <input type="radio" name="extra-layer" checked={f.layer === extra} onChange={() => setExtra(f.layer)} />
+            <span className="factor-swatch" style={{ background: swatch(f) }} />
+            <span className="factor-name">{f.title}</span>
+            {user && (user.role === "admin" || user.username === f.uploaded_by) && (
+              <button type="button" className="icon-btn" aria-label={`Remove ${f.title}`} onClick={(e) => { e.preventDefault(); remove(f); }}>
+                <Trash2 size={14} />
+              </button>
+            )}
+          </label>
+        ))}
+        <AddFactor loggedIn={!!user} onAdded={(f) => setExtra(f.layer)} />
+      </details>
     </aside>
   );
 }

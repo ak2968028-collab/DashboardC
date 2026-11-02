@@ -35,6 +35,7 @@ $BACKEND python media/run_all.py
 echo "==> Publishing layers to GeoServer"
 $BACKEND python -m script.geoserver_publish
 $BACKEND python -m script.geoserver_raster
+$BACKEND python -m script.cadastral_boundaries
 $BACKEND python -m script.emission_rasters
 
 echo "All tasks completed successfully."
