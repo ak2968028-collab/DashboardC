@@ -7,7 +7,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Varanasi Village Environment & Carbon Dashboard",
-  description: "M.Tech Thesis Project: Village-Level Environmental Resource Assessment and Carbon Emission Modeling",
+  description: "Village-Level Environmental Resource Assessment and Carbon Emission Modeling",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

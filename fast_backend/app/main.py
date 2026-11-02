@@ -24,7 +24,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Varanasi Village Environment & Carbon API",
-    description="M.Tech Thesis Project: Village-Level Environmental Resource Assessment and Carbon Emission Modeling",
+    description="Village-Level Environmental Resource Assessment and Carbon Emission Modeling",
     version="2.0.0",
     lifespan=lifespan,
 )

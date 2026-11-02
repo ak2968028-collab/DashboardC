@@ -15,7 +15,7 @@ export default function SiteHeader() {
         <span className="co2-icon"><Image src={co2Icon} alt="CO₂ emission reduction" priority /></span>
         <div>
           <h1>Village Environment &amp; Carbon Dashboard</h1>
-          <p>Village-Level Environmental Resource Assessment and Carbon Emission Modeling · M.Tech Thesis Project</p>
+          <p>Village-Level Environmental Resource Assessment and Carbon Emission Modeling</p>
         </div>
       </div>
       <Image src={slcrLogo} alt="Smart Lab on Clean Rivers" className="slcr-logo" priority />

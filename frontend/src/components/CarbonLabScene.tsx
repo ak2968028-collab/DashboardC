@@ -125,6 +125,35 @@ export const USE_FILLS: Record<Exclude<ParcelUse, "cropland" | "land">, string> 
 };
 const centroid = (pts: P2[]): P2 => pts.reduce<P2>((s, p) => [s[0] + p[0] / pts.length, s[1] + p[1] / pts.length], [0, 0]);
 
+/** Compute 2D convex hull of screen points using Monotone Chain algorithm. */
+function convexHull(points: { x: number; y: number }[]): { x: number; y: number }[] {
+  if (points.length <= 3) return points;
+  const pts = [...points].sort((a, b) => (a.x === b.x ? a.y - b.y : a.x - b.x));
+  const cross = (o: { x: number; y: number }, a: { x: number; y: number }, b: { x: number; y: number }) =>
+    (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+
+  const lower: { x: number; y: number }[] = [];
+  for (const p of pts) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) {
+      lower.pop();
+    }
+    lower.push(p);
+  }
+
+  const upper: { x: number; y: number }[] = [];
+  for (let i = pts.length - 1; i >= 0; i--) {
+    const p = pts[i];
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) {
+      upper.pop();
+    }
+    upper.push(p);
+  }
+
+  lower.pop();
+  upper.pop();
+  return lower.concat(upper);
+}
+
 /** Real village: metres (x east, y north) scaled to fit the ground; y is flipped so north points away from the camera. */
 function villageLayout(v: VillageScene): Layout {
   const k = 22 / Math.max(v.extent_m[0], v.extent_m[1], 1);
@@ -403,14 +432,14 @@ export default function CarbonLabScene({ emissions, baseline, focus, onPick, vil
         if (c.idle > 3 && !L.parcelLines.length) c.yaw += dt * 0.08;
       }
 
-      // Sky darkens and browns as the atmosphere load rises.
+      // Clear, natural sky background (smog is rendered strictly over the village polygon).
       const sky = ctx.createLinearGradient(0, 0, 0, h);
-      sky.addColorStop(0, rgba(mix([96, 165, 230], [120, 105, 95], haze)));
-      sky.addColorStop(0.55, rgba(mix([200, 228, 245], [190, 165, 140], haze)));
-      sky.addColorStop(1, rgba(mix([225, 240, 225], [200, 185, 160], haze)));
+      sky.addColorStop(0, "#6ba4e8");
+      sky.addColorStop(0.55, "#cde3f7");
+      sky.addColorStop(1, "#e6f2e6");
       ctx.fillStyle = sky;
       ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = rgba([255, 236, 150], 0.9 - haze * 0.6);
+      ctx.fillStyle = "rgba(255, 236, 150, 0.95)";
       ctx.beginPath();
       ctx.arc(w * 0.84, h * 0.16, Math.min(w, h) * 0.05, 0, Math.PI * 2);
       ctx.fill();
@@ -577,39 +606,85 @@ export default function CarbonLabScene({ emissions, baseline, focus, onPick, vil
         ctx.fill();
       }
 
-      // Greenhouse blanket: the CO2 plume footage, denser, deeper and faster-swirling as emissions rise.
+      // Greenhouse blanket: localized STRICTLY upon the village polygon
       const top = Math.max(h * 0.14, project([0, 0, ATMOS_Z]).y);
       const smogLevel = total > 0 ? Math.min(1, Math.max(0, (load - 0.15) / 1.6)) : 0;
-      const video = smogRef.current;
-      if (video && video.readyState >= 2 && smogLevel > 0.01) {
-        video.playbackRate = 0.4 + smogLevel * 1.2;
-        const bandH = h * (0.22 + 0.42 * smogLevel);
-        const y0 = Math.max(0, top - bandH * 0.6);
-        const k = Math.max(w / video.videoWidth, bandH / video.videoHeight);
-        const dw = video.videoWidth * k, dh = video.videoHeight * k;
-        sctx.globalCompositeOperation = "source-over";
-        sctx.clearRect(0, 0, w, h);
-        sctx.drawImage(video, (w - dw) / 2, y0 + (bandH - dh) / 2, dw, dh);
-        const fade = sctx.createLinearGradient(0, y0, 0, y0 + bandH);
-        fade.addColorStop(0, "rgba(0,0,0,0.35)");
-        fade.addColorStop(0.25, "rgba(0,0,0,1)");
-        fade.addColorStop(0.6, "rgba(0,0,0,0.8)");
-        fade.addColorStop(1, "rgba(0,0,0,0)");
-        sctx.globalCompositeOperation = "destination-in";
-        sctx.fillStyle = fade;
-        sctx.fillRect(0, 0, w, h);
-        ctx.globalAlpha = 0.12 + 0.7 * smogLevel;
-        ctx.drawImage(smog, 0, 0, w, h);
-        ctx.globalAlpha = 1;
-      } else if (smogLevel > 0.01) {
-        const band = ctx.createLinearGradient(0, top - h * 0.18, 0, top + h * 0.12);
-        const bandRgb = mix([160, 160, 165], [110, 80, 60], haze);
-        band.addColorStop(0, rgba(bandRgb, 0));
-        band.addColorStop(0.5, rgba(bandRgb, Math.min(0.75, 0.12 + load * 0.22)));
-        band.addColorStop(1, rgba(bandRgb, 0));
-        ctx.fillStyle = band;
-        ctx.fillRect(0, top - h * 0.18, w, h * 0.3);
+
+      // Project the village polygon at the ground and atmosphere levels
+      const groundPts = L.ground.map(([x, y]) => project([x, y, 0]));
+      const atmosPts = L.ground.map(([x, y]) => project([x, y, ATMOS_Z]));
+      const villageHull = convexHull([...groundPts, ...atmosPts]);
+
+      if (villageHull.length >= 3 && smogLevel > 0.01) {
+        ctx.save();
+        // Hardware clip on main canvas ensures ZERO smog can ever escape the village column
+        ctx.beginPath();
+        villageHull.forEach((p, idx) => {
+          if (idx === 0) ctx.moveTo(p.x, p.y);
+          else ctx.lineTo(p.x, p.y);
+        });
+        ctx.closePath();
+        ctx.clip();
+
+        const video = smogRef.current;
+        if (video && video.readyState >= 2) {
+          video.playbackRate = 0.4 + smogLevel * 1.2;
+          const bandH = h * (0.24 + 0.42 * smogLevel);
+          const y0 = Math.max(0, top - bandH * 0.55);
+          const k = Math.max(w / video.videoWidth, bandH / video.videoHeight);
+          const dw = video.videoWidth * k, dh = video.videoHeight * k;
+
+          sctx.globalCompositeOperation = "source-over";
+          sctx.clearRect(0, 0, w, h);
+          sctx.drawImage(video, (w - dw) / 2, y0 + (bandH - dh) / 2, dw, dh);
+
+          // Soft vertical fade: transparent near ground, denser in upper layer
+          const fade = sctx.createLinearGradient(0, y0, 0, y0 + bandH);
+          fade.addColorStop(0, "rgba(0,0,0,0.35)");
+          fade.addColorStop(0.25, "rgba(0,0,0,1)");
+          fade.addColorStop(0.65, "rgba(0,0,0,0.85)");
+          fade.addColorStop(1, "rgba(0,0,0,0)");
+          sctx.globalCompositeOperation = "destination-in";
+          sctx.fillStyle = fade;
+          sctx.fillRect(0, 0, w, h);
+
+          // Soft radial falloff from the village center towards the hull boundary
+          const cVillage = centroid(L.ground);
+          const centerScreen = project([cVillage[0], cVillage[1], ATMOS_Z * 0.65]);
+          const rMax = Math.max(
+            ...villageHull.map((p) => Math.hypot(p.x - centerScreen.x, p.y - centerScreen.y)),
+            40
+          );
+          const radFade = sctx.createRadialGradient(
+            centerScreen.x,
+            centerScreen.y,
+            rMax * 0.4,
+            centerScreen.x,
+            centerScreen.y,
+            rMax
+          );
+          radFade.addColorStop(0, "rgba(0,0,0,1)");
+          radFade.addColorStop(0.7, "rgba(0,0,0,0.85)");
+          radFade.addColorStop(1, "rgba(0,0,0,0)");
+          sctx.fillStyle = radFade;
+          sctx.fillRect(0, 0, w, h);
+          sctx.globalCompositeOperation = "source-over";
+
+          ctx.globalAlpha = 0.18 + 0.75 * smogLevel;
+          ctx.drawImage(smog, 0, 0, w, h);
+        } else {
+          // Fallback gradient if video is still buffering
+          const band = ctx.createLinearGradient(0, top - h * 0.18, 0, top + h * 0.12);
+          const bandRgb = mix([160, 160, 165], [110, 80, 60], haze);
+          band.addColorStop(0, rgba(bandRgb, 0));
+          band.addColorStop(0.5, rgba(bandRgb, Math.min(0.75, 0.15 + load * 0.25)));
+          band.addColorStop(1, rgba(bandRgb, 0));
+          ctx.fillStyle = band;
+          ctx.fillRect(0, 0, w, h);
+        }
+        ctx.restore();
       }
+
       // Smog level badge (top right).
       const smogText = `Smog: ${smogLevel < 0.05 ? "clear" : smogLevel < 0.35 ? "light" : smogLevel < 0.7 ? "moderate" : "heavy"}`;
       ctx.font = "700 11px system-ui, sans-serif";
@@ -625,19 +700,27 @@ export default function CarbonLabScene({ emissions, baseline, focus, onPick, vil
       ctx.fillStyle = "#263238";
       ctx.textAlign = "left";
       ctx.fillText(smogText, w - sw + 12, 27);
-      // Heat trapped: sun rays bounce back down off the blanket.
-      ctx.strokeStyle = `rgba(255,112,67,${Math.min(0.9, 0.15 + haze)})`;
-      ctx.lineWidth = 1.5;
-      const rays = 3 + Math.round(load * 3);
-      for (let i = 0; i < rays; i++) {
-        const x = w * (0.15 + (i / rays) * 0.7);
-        const ph = (time * 0.6 + i * 0.37) % 1;
-        const y0 = top + 10, y1 = top + 10 + h * 0.18;
-        const y = y0 + (y1 - y0) * ph;
-        ctx.beginPath();
-        ctx.moveTo(x, y);
-        ctx.lineTo(x + 6, y + 12);
-        ctx.stroke();
+
+      // Heat trapped: sun rays bounce back down off the blanket only over the village polygon
+      if (villageHull.length >= 3) {
+        const topXs = villageHull.map((p) => p.x);
+        const minVx = Math.min(...topXs);
+        const maxVx = Math.max(...topXs);
+        const spanVx = Math.max(20, maxVx - minVx);
+
+        ctx.strokeStyle = `rgba(255,112,67,${Math.min(0.9, 0.15 + haze)})`;
+        ctx.lineWidth = 1.5;
+        const rays = 3 + Math.round(load * 3);
+        for (let i = 0; i < rays; i++) {
+          const x = minVx + spanVx * (0.15 + (i / rays) * 0.7);
+          const ph = (time * 0.6 + i * 0.37) % 1;
+          const y0 = top + 10, y1 = top + 10 + h * 0.18;
+          const y = y0 + (y1 - y0) * ph;
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          ctx.lineTo(x + 6, y + 12);
+          ctx.stroke();
+        }
       }
 
       // Focus ring and floating labels (nudged upwards so they never overlap).
