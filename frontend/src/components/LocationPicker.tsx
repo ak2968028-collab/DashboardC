@@ -26,7 +26,8 @@ export default function LocationPicker({ value, onChange, takenCodes = [] }: {
 
   const shown = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return q ? villages.filter((v) => v.village_name.toLowerCase().includes(q) || v.village_code.includes(q)) : villages;
+    const list = q ? villages.filter((v) => v.village_name.toLowerCase().includes(q) || v.village_code.includes(q)) : villages;
+    return [...list].sort((a, b) => a.village_name.localeCompare(b.village_name));
   }, [villages, search]);
 
   const toNum = (s: string) => (s ? Number(s) : null);

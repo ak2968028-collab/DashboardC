@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import {
-  ChevronDown, ChevronLeft, ChevronRight, Clock, Download, Eye, EyeOff, Layers, MapPin, Scale, Search, X,
+  ChevronDown, ChevronLeft, ChevronRight, Download, Eye, EyeOff, Layers, MapPin, Scale, Search, X,
 } from "lucide-react";
 import { reportPdfUrl, useBlocks } from "@/lib/api";
 import { interpolate, SCALES } from "@/lib/colors";
@@ -100,13 +100,9 @@ export function VillageCombobox({
   const rows = useMemo<Row[]>(() => {
     const q = query.trim().toLowerCase();
     if (!q) {
-      const byCode = new Map(villages.map((v) => [v.village_code, v]));
-      const recent = recentCodes.map((c) => byCode.get(c)).filter((v): v is Village => !!v && v.village_code !== value);
-      const rest = villages.filter((v) => !recent.includes(v));
-      return [
-        ...recent.slice(0, 5).map((village, i) => ({ village, section: i === 0 ? "Recently viewed" : undefined })),
-        ...rest.map((village, i) => ({ village, section: i === 0 && recent.length ? "All villages" : undefined })),
-      ];
+      return [...villages]
+        .sort((a, b) => a.village_name.localeCompare(b.village_name))
+        .map((village) => ({ village }));
     }
     const numeric = /^\d+$/.test(q);
     const scored = villages.flatMap((v) => {
@@ -119,7 +115,7 @@ export function VillageCombobox({
     });
     scored.sort((a, b) => a.score - b.score || a.v.village_name.localeCompare(b.v.village_name));
     return scored.map(({ v }) => ({ village: v }));
-  }, [villages, query, recentCodes, value, showCodes]);
+  }, [villages, query, showCodes]);
 
   const shown = rows.slice(0, MAX_ROWS);
   const close = () => { setOpen(false); setQuery(""); };
@@ -199,13 +195,8 @@ export function VillageCombobox({
             <span className="combo-legend"><span className="legend-swatch" /> kg CO₂e per person</span>
           </div>
           <ul className="combo-list" role="listbox" id={`${id}-list`} ref={listRef} aria-label={label}>
-            {shown.map(({ village: v, section }, i) => (
-              <li key={`${section ?? ""}${v.village_code}`} role="presentation">
-                {section && (
-                  <div className="combo-section" role="presentation">
-                    {section === "Recently viewed" && <Clock size={12} />} {section}
-                  </div>
-                )}
+            {shown.map(({ village: v }, i) => (
+              <li key={v.village_code} role="presentation">
                 <div
                   id={`${id}-opt-${i}`}
                   data-index={i}

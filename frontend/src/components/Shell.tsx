@@ -83,7 +83,7 @@ export default function Shell({ children }: { children: ReactNode }) {
       <header className={`navbar ${navOpen ? "open" : ""} ${scrolled ? "scrolled" : ""}`}>
         <div className="navbar-head">
           <Link href="/" className="brand" onClick={() => setNavOpen(false)}>
-            <span className="brand-badge"><Leaf size={18} /></span>
+            <span className="brand-badge"><Leaf size={16} /></span>
             <span className="brand-text">
               Carbon Dashboard
               <small>Varanasi District</small>
@@ -142,7 +142,7 @@ export default function Shell({ children }: { children: ReactNode }) {
                   className="nav-link-icon-wrap"
                   style={p.accentColor ? { color: p.accentColor } : undefined}
                 >
-                  <p.icon size={16} />
+                  <p.icon size={15} />
                 </span>
                 <span>{p.label}</span>
                 {p.badge && (
@@ -154,51 +154,52 @@ export default function Shell({ children }: { children: ReactNode }) {
             );
           })}
 
-          {/* Active Village Context Pill (Desktop only) */}
-          {activeVillage && (
-            <Link
-              href="/map"
-              className="nav-village-pill desktop-only"
-              title={`Active Village: ${activeVillage.village_name} (${activeVillage.block_name}) - Click to view on GIS Map`}
-            >
-              <MapPin size={13} className="nav-village-icon" />
-              <span className="nav-village-name">{activeVillage.village_name}</span>
-              <span className="nav-village-co2">
-                {fmt(activeVillage.total_co2e_t_yr, 0)} t
-              </span>
-            </Link>
-          )}
-
-          {/* User Auth Profile Chip / Sign In Link */}
-          {user ? (
-            <div className="nav-user-chip">
-              <span className="nav-user-avatar" title={`Logged in as ${user.username}`}>
-                <User size={13} />
-              </span>
-              <div className="nav-user-info">
-                <span className="nav-user-name">{user.username}</span>
-                <span className="nav-user-role">{user.role}</span>
-              </div>
-              <button
-                type="button"
-                className="nav-logout-btn"
-                onClick={logout}
-                title="Log out"
-                aria-label="Log out"
+          {/* Active Village Context Pill & User Auth Profile (Right Cluster) */}
+          <div className="nav-actions">
+            {activeVillage && (
+              <Link
+                href="/map"
+                className="nav-village-pill desktop-only"
+                title={`Active Village: ${activeVillage.village_name} (${activeVillage.block_name}) - Click to view on GIS Map`}
               >
-                <LogOut size={14} />
-              </button>
-            </div>
-          ) : (
-            <Link
-              href="/login"
-              className={`nav-link nav-auth ${pathname === "/login" ? "active" : ""}`}
-              onClick={() => setNavOpen(false)}
-            >
-              <LogIn size={15} />
-              <span>Sign In</span>
-            </Link>
-          )}
+                <MapPin size={13} className="nav-village-icon" />
+                <span className="nav-village-name">{activeVillage.village_name}</span>
+                <span className="nav-village-co2">
+                  {fmt(activeVillage.total_co2e_t_yr, 0)} t
+                </span>
+              </Link>
+            )}
+
+            {user ? (
+              <div className="nav-user-chip">
+                <span className="nav-user-avatar" title={`Logged in as ${user.username}`}>
+                  <User size={13} />
+                </span>
+                <div className="nav-user-info">
+                  <span className="nav-user-name">{user.username}</span>
+                  <span className="nav-user-role">{user.role}</span>
+                </div>
+                <button
+                  type="button"
+                  className="nav-logout-btn"
+                  onClick={logout}
+                  title="Log out"
+                  aria-label="Log out"
+                >
+                  <LogOut size={14} />
+                </button>
+              </div>
+            ) : (
+              <Link
+                href="/login"
+                className={`nav-link nav-auth ${pathname === "/login" ? "active" : ""}`}
+                onClick={() => setNavOpen(false)}
+              >
+                <LogIn size={14} />
+                <span>Sign In</span>
+              </Link>
+            )}
+          </div>
         </nav>
       </header>
 
@@ -296,12 +297,9 @@ function NavDropdown({
           setOpen(!open);
         }}
       >
-        <Icon size={16} />
+        <Icon size={15} />
         <span>{label}</span>
-        {groupMeta?.badge && !active && (
-          <span className="nav-group-dot-badge">{items.length}</span>
-        )}
-        <ChevronDown size={14} className={`nav-chevron ${open ? "open" : ""}`} />
+        <ChevronDown size={13} className={`nav-chevron ${open ? "open" : ""}`} />
       </button>
 
       {open &&

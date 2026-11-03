@@ -30,7 +30,11 @@ interface DashboardState {
 const DashboardContext = createContext<DashboardState | null>(null);
 
 export function DashboardProvider({ children }: { children: ReactNode }) {
-  const { data: allVillages = [], isLoading, error } = useVillages();
+  const { data: rawVillages = [], isLoading, error } = useVillages();
+  const allVillages = useMemo(
+    () => [...rawVillages].sort((a, b) => a.village_name.localeCompare(b.village_name)),
+    [rawVillages]
+  );
   const [selectedBlock, setBlock] = useState(ALL_BLOCKS);
   const [selectedCode, setSelectedCode] = useState<string>(DEFAULT_VILLAGE);
   const [showCodes, setShowCodes] = useState(false);
