@@ -36,6 +36,49 @@ USE_BY_LABEL = {
 }
 _TO_UTM = Transformer.from_crs(4326, 32644, always_xy=True)
 _TO_LONLAT = Transformer.from_crs(32644, 4326, always_xy=True)
+_TO_DEM = Transformer.from_crs(32644, 3395, always_xy=True)
+
+
+@lru_cache(maxsize=1)
+def _dem_data():
+    """Loads and caches UP_DEM.tif raster (Pillow/numpy) and transform parameters."""
+    path = settings.DEM_TIF_PATH
+    if not path.exists():
+        return None
+    try:
+        from PIL import Image
+        im = Image.open(path)
+        grid = np.array(im)
+        x0 = 8580661.667853888
+        y0 = 3535154.69304102
+        px_size = 1000.0
+        return grid, x0, y0, px_size
+    except Exception:
+        return None
+
+
+def sample_elevation(ux: float, uy: float) -> float:
+    """Samples elevation in metres above sea level for a UTM 44N coordinate with bilinear interpolation."""
+    data = _dem_data()
+    if not data:
+        return 80.0
+    grid, x0, y0, px_size = data
+    dx, dy = _TO_DEM.transform(ux, uy)
+    c_f = (dx - (x0 + 500.0)) / px_size
+    r_f = ((y0 - 500.0) - dy) / px_size
+    h, w = grid.shape
+    c0 = max(0, min(w - 1, int(np.floor(c_f))))
+    r0 = max(0, min(h - 1, int(np.floor(r_f))))
+    c1 = max(0, min(w - 1, c0 + 1))
+    r1 = max(0, min(h - 1, r0 + 1))
+    fc = float(c_f - c0)
+    fr = float(r_f - r0)
+    v00, v01 = float(grid[r0, c0]), float(grid[r0, c1])
+    v10, v11 = float(grid[r1, c0]), float(grid[r1, c1])
+    top = v00 * (1.0 - fc) + v01 * fc
+    bot = v10 * (1.0 - fc) + v11 * fc
+    val = top * (1.0 - fr) + bot * fr
+    return 80.0 if val < 0 else val
 
 
 @lru_cache(maxsize=32)
@@ -222,6 +265,41 @@ def build_scene(village_code: str, households: int, builtup_ha: float) -> dict |
     outline = shapely.union_all(shapely.buffer(polys, 3.0)).buffer(-3.0)
     outline = shapely.simplify(_largest_part(outline), 4.0)
 
+    # Sample DEM elevation grid over the village bounding box
+    GRID_N = 15
+    xs = np.linspace(minx, maxx, GRID_N)
+    ys = np.linspace(miny, maxy, GRID_N)
+    elev_grid = np.zeros((GRID_N, GRID_N))
+    for r, y in enumerate(ys):
+        for c, x in enumerate(xs):
+            elev_grid[r, c] = sample_elevation(x, y)
+
+    base_elev = float(np.mean(elev_grid))
+    min_elev = float(np.min(elev_grid))
+    max_elev = float(np.max(elev_grid))
+    relief = float(max_elev - min_elev)
+    rel_grid = np.round(elev_grid - base_elev, 2).tolist()
+
+    hph = round(households / len(houses), 2) if households > 0 and len(houses) else 0.0
+
+    # Enhanced 3D houses with elevation and architectural variations
+    houses_3d = []
+    for i, (hx, hy) in enumerate(houses):
+        elev_m = sample_elevation(hx, hy)
+        z_rel = round(elev_m - base_elev, 2)
+        style = "tiled" if (i % 3 == 0) else "pucca" if (i % 3 == 1) else "homestead"
+        stories = 2 if (i % 7 == 0 and hph >= 1.5) else 1
+        roof = "gable" if style == "tiled" else "flat"
+        rot = round(float(rng.uniform(-0.35, 0.35)), 2)
+        houses_3d.append({
+            "pos": (round(hx - ox, 1), round(hy - oy, 1), z_rel),
+            "elevation_m": round(elev_m, 1),
+            "stories": stories,
+            "style": style,
+            "roof": roof,
+            "rot": rot,
+        })
+
     local = lambda pts: [(round(x - ox, 1), round(y - oy, 1)) for x, y in pts]  # noqa: E731
     return {
         "village_code": village_code,
@@ -232,7 +310,7 @@ def build_scene(village_code: str, households: int, builtup_ha: float) -> dict |
         "extent_m": (round(maxx - minx, 1), round(maxy - miny, 1)),
         "parcel_count": int(len(polys)),
         "builtup_est_ha": round(builtup_m2 / 1e4, 2),
-        "households_per_house": round(households / len(houses), 2) if households > 0 and len(houses) else 0.0,
+        "households_per_house": hph,
         "parcels": [
             {"khasra": k, "area_m2": round(float(a), 1), "use": str(u), "ring": _ring(p, ox, oy)}
             for p, k, a, u in zip(polys, khasra, areas, uses)
@@ -243,6 +321,13 @@ def build_scene(village_code: str, households: int, builtup_ha: float) -> dict |
         "pasture": local(pasture),
         "dump": (round(dump[0] - ox, 1), round(dump[1] - oy, 1)),
         "trees": local(trees),
+        "elevation_source": "UP_DEM (1000m GeoTIFF, EPSG:3395)",
+        "elevation_base_m": round(base_elev, 1),
+        "elevation_min_m": round(min_elev, 1),
+        "elevation_max_m": round(max_elev, 1),
+        "elevation_relief_m": round(relief, 2),
+        "elevation_grid": rel_grid,
+        "houses_3d": houses_3d,
     }
 
 
@@ -282,3 +367,21 @@ class scene_svc:
     async def get_cadastral(db: AsyncSession, village_code: str) -> dict:
         scene = await scene_svc.get_scene(db, village_code)
         return await run_in_threadpool(cadastral_geojson, scene, village_code)
+
+    async def get_elevation(db: AsyncSession, village_code: str) -> dict:
+        scene = await scene_svc.get_scene(db, village_code)
+        ox, oy = scene["origin"]
+        ex, ey = scene["extent_m"]
+        grid = scene.get("elevation_grid", [])
+        return {
+            "village_code": village_code,
+            "source": scene.get("elevation_source", "UP_DEM (1000m GeoTIFF)"),
+            "base_elevation_m": scene.get("elevation_base_m", 80.0),
+            "min_elevation_m": scene.get("elevation_min_m", 80.0),
+            "max_elevation_m": scene.get("elevation_max_m", 80.0),
+            "relief_m": scene.get("elevation_relief_m", 0.0),
+            "grid_dim": (len(grid), len(grid[0]) if grid else 0),
+            "elevation_grid": grid,
+            "bounds_m": (-round(ex / 2, 1), -round(ey / 2, 1), round(ex / 2, 1), round(ey / 2, 1)),
+            "houses": scene.get("houses_3d", []),
+        }

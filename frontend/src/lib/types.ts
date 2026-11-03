@@ -56,6 +56,28 @@ type Point = [number, number];
 
 export type ParcelUse = "builtup" | "cropland" | "trees" | "water" | "rangeland" | "bare" | "land";
 
+export interface House3D {
+  pos: [number, number, number]; // [x, y, z_rel_m] relative to origin and base elevation
+  elevation_m: number; // absolute elevation in metres MSL
+  stories: number;
+  style: "tiled" | "pucca" | "homestead";
+  roof: "gable" | "flat" | "hipped";
+  rot: number;
+}
+
+export interface VillageElevation {
+  village_code: string;
+  source: string;
+  base_elevation_m: number;
+  min_elevation_m: number;
+  max_elevation_m: number;
+  relief_m: number;
+  grid_dim: [number, number];
+  elevation_grid: number[][];
+  bounds_m: [number, number, number, number];
+  houses: House3D[];
+}
+
 /** Real village layout for the Carbon Lab 3D view: metres from `origin` (UTM 44N), x east, y north. */
 export interface VillageScene {
   village_code: string;
@@ -76,6 +98,14 @@ export interface VillageScene {
   pasture: Point[];
   dump: Point;
   trees: Point[];
+  // DEM elevation
+  elevation_source?: string;
+  elevation_base_m?: number;
+  elevation_min_m?: number;
+  elevation_max_m?: number;
+  elevation_relief_m?: number;
+  elevation_grid?: number[][];
+  houses_3d?: House3D[];
 }
 
 export type NumericKey = {

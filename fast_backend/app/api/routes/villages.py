@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Query
 from fastapi.responses import Response
 
-from app.api.schema.scene_schema import Village_scene
+from app.api.schema.scene_schema import Village_elevation, Village_scene
 from app.api.schema.village_schema import Village_details, Village_record
 from app.api.service.auth_svc.dependencies import current_user
 from app.api.service.report_svc.reporting import ADVANCED
@@ -29,6 +29,12 @@ async def get_village_scene(db: db_read, village_code: str):
     """Real cadastral layout of the village (khasra parcels, estimated settlement, house markers) for the
     Carbon Lab 3D view. 404 when the parcel GeoPackage has no parcels for this village."""
     return await scene_svc.get_scene(db, village_code)
+
+
+@router.get("/{village_code}/elevation", response_model=Village_elevation)
+async def get_village_elevation(db: db_read, village_code: str):
+    """Digital Elevation Model (DEM) profile, 3D relief grid and house elevations for one village."""
+    return await scene_svc.get_elevation(db, village_code)
 
 
 @router.get("/{village_code}/cadastral")

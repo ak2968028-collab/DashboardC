@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo, useState, type CSSProperties } from "react";
-import { Beef, Bike, Flame, Fuel, Map as MapIcon, RotateCcw, Sprout, Trash2, TreePine, Zap, type LucideIcon } from "lucide-react";
+import { Beef, Bike, Flame, Fuel, Layers, Map as MapIcon, RotateCcw, Sprout, Trash2, TreePine, Zap, type LucideIcon } from "lucide-react";
 import CarbonLabScene, { SOURCE_COLORS, type Emissions, type SourceKey } from "@/components/CarbonLabScene";
 import FactorPanel from "@/components/FactorPanel";
+import MitigationPanel, { DEFAULT_MITIGATION, type MitigationState } from "@/components/MitigationPanel";
 import { Badge, MetricCard, PageTitle, WithVillage } from "@/components/ui";
 import { useEmissionFactors, useVillageScene } from "@/lib/api";
 import { fmt, num } from "@/lib/format";
@@ -123,6 +124,8 @@ function CarbonLab({ village }: { village: VillageDetails }) {
   const [activity, setActivity] = useState<Activity>(baseActivity);
   const [focus, setFocus] = useState<SourceKey | null>("firewood");
   const [scenario, setScenario] = useState<string | null>(null);
+  const [mitigation, setMitigation] = useState<MitigationState>(DEFAULT_MITIGATION);
+  const [rightTab, setRightTab] = useState<"mitigation" | "raster">("mitigation");
 
   const toEmissions = (a: Activity) => Object.fromEntries(SOURCES.map((s) => [s.key, tonnes(s, a[s.key], factors[s.key])])) as Emissions;
   const baseline = useMemo(() => toEmissions(baseActivity), [baseActivity, factors]);
@@ -132,6 +135,17 @@ function CarbonLab({ village }: { village: VillageDetails }) {
   const change = baseTotal > 0 ? ((total - baseTotal) / baseTotal) * 100 : 0;
   const residents = num(village.total_residents);
   const focused = SOURCES.find((s) => s.key === focus);
+
+  // Carbon sequestration from trees and clean intervention factors
+  const treeSequestered = (mitigation.trees * TREE_KG_YR) / 1000;
+  const solarSavings = ((emissions.electricity || 0) * mitigation.solarPct) / 100;
+  const biogasSavings = ((emissions.firewood || 0) * mitigation.biogasPct) / 100;
+  const compostSavings = ((emissions.waste || 0) * mitigation.compostPct) / 100;
+  const evSavings = ((emissions.petrol || 0) * mitigation.evPct) / 100;
+  const agriSavings = (((emissions.cow || 0) + (emissions.goat || 0) + (emissions.sheep || 0)) * 0.25 * mitigation.agriPct) / 100;
+  const totalAvoided = solarSavings + biogasSavings + compostSavings + evSavings + agriSavings;
+  const totalPositiveOffset = totalAvoided + treeSequestered;
+  const netEmissions = Math.max(0, total - totalPositiveOffset);
 
   const set = (key: SourceKey, value: number) => {
     setActivity((a) => ({ ...a, [key]: value }));
@@ -202,6 +216,7 @@ function CarbonLab({ village }: { village: VillageDetails }) {
                     · built-up {fmt(scene.builtup_est_ha, 1)} ha
                     {scene.landcover_source.startsWith("LULC") ? " (LULC)" : " (estimated, no LULC here)"}
                     {scene.households_per_house > 1 && <> · 1 house = {fmt(scene.households_per_house, 1)} households</>}
+                    {scene.elevation_base_m ? <> · ⛰️ {Math.round(scene.elevation_base_m)} m MSL (DEM)</> : null}
                   </>
                 : <>Showing the <b>illustrative village</b>.</>}
             </span>
@@ -212,7 +227,16 @@ function CarbonLab({ village }: { village: VillageDetails }) {
               </span>
             )}
           </div>
-          <CarbonLabScene emissions={emissions} baseline={baseline} focus={focus} onPick={setFocus} village={realLayout} />
+          <CarbonLabScene
+            emissions={emissions}
+            baseline={baseline}
+            focus={focus}
+            onPick={setFocus}
+            village={realLayout}
+            plantedTrees={mitigation.trees}
+            netEmissions={netEmissions}
+            sequesteredCO2={treeSequestered}
+          />
 
           <div className="lab-share" aria-label="Share of emissions by source">
             {SOURCES.map((s) => total > 0 && emissions[s.key] > 0 && (
@@ -222,12 +246,25 @@ function CarbonLab({ village }: { village: VillageDetails }) {
           </div>
 
           <div className="lab-metrics">
-            <MetricCard label="Total Emissions" color="#d32f2f" value={`${fmt(total, 1)} t`} sub="t CO₂e / year" />
-            <MetricCard label="Change vs Survey" color={change > 0 ? "#d32f2f" : "#2e7d32"}
-              value={<span className={change > 0.05 ? "up" : change < -0.05 ? "down" : ""}>{change > 0 ? "+" : ""}{fmt(change, 1)}%</span>}
-              sub={`${change > 0 ? "+" : ""}${fmt(total - baseTotal, 1)} t CO₂e / year`} />
-            <MetricCard label="Per Capita" color="#f57c00" value={residents > 0 ? `${fmt((total * 1000) / residents, 0)} kg` : "–"} sub="kg CO₂e / person / year" />
-            <MetricCard label="Trees to Absorb It" color="#2e7d32" value={<><TreePine size={18} /> {fmt((total * 1000) / TREE_KG_YR)}</>} sub={`at ~${TREE_KG_YR} kg CO₂ per tree / year`} />
+            <MetricCard label="Gross Emissions" color="#d32f2f" value={`${fmt(total, 1)} t`} sub="t CO₂e / year (baseline)" />
+            <MetricCard
+              label="Mitigated & Absorbed"
+              color="#2e7d32"
+              value={`-${fmt(totalPositiveOffset, 1)} t`}
+              sub={`${fmt(totalAvoided, 1)} t clean tech + ${fmt(treeSequestered, 1)} t trees`}
+            />
+            <MetricCard
+              label="Net Emissions"
+              color={netEmissions <= 0.05 ? "#1b5e20" : netEmissions < total ? "#f57c00" : "#d32f2f"}
+              value={`${fmt(netEmissions, 1)} t`}
+              sub={netEmissions <= 0.05 ? "🎉 100% Net Zero achieved!" : "remaining unmitigated"}
+            />
+            <MetricCard
+              label="Trees to Absorb Remainder"
+              color="#2e7d32"
+              value={<><TreePine size={18} /> {fmt(Math.max(0, Math.ceil((netEmissions * 1000) / TREE_KG_YR)))}</>}
+              sub={`at ~${TREE_KG_YR} kg CO₂ / tree / yr`}
+            />
           </div>
 
           {focused && (
@@ -250,8 +287,45 @@ function CarbonLab({ village }: { village: VillageDetails }) {
           )}
         </section>
 
-        <FactorPanel villageCode={village.village_code} villageName={village.village_name} focus={focus}
-          emissions={emissions} baseline={baseline} />
+        <div className="lab-right-panel">
+          <div className="lab-right-tabs" role="tablist">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={rightTab === "mitigation"}
+              className={`lab-tab-btn ${rightTab === "mitigation" ? "active" : ""}`}
+              onClick={() => setRightTab("mitigation")}
+            >
+              <Sprout size={14} /> Positive Mitigation & Trees
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={rightTab === "raster"}
+              className={`lab-tab-btn ${rightTab === "raster" ? "active" : ""}`}
+              onClick={() => setRightTab("raster")}
+            >
+              <Layers size={14} /> Spatial Raster
+            </button>
+          </div>
+
+          {rightTab === "mitigation" ? (
+            <MitigationPanel
+              village={village}
+              grossEmissions={emissions}
+              mitigation={mitigation}
+              onChange={setMitigation}
+            />
+          ) : (
+            <FactorPanel
+              villageCode={village.village_code}
+              villageName={village.village_name}
+              focus={focus}
+              emissions={emissions}
+              baseline={baseline}
+            />
+          )}
+        </div>
       </div>
     </>
   );

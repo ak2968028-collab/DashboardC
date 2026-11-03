@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Minus, Pause, Play, Plus, RotateCcw } from "lucide-react";
-import type { ParcelUse, VillageScene } from "@/lib/types";
+import type { House3D, ParcelUse, VillageScene } from "@/lib/types";
 
 export type SourceKey = "lpg" | "firewood" | "electricity" | "petrol" | "waste" | "cow" | "goat" | "sheep";
 export type Emissions = Record<SourceKey, number>;
@@ -21,6 +21,12 @@ interface SceneProps {
   onPick: (key: SourceKey) => void;
   /** Real cadastral layout; the illustrative village is drawn when absent. */
   village?: VillageScene | null;
+  /** Planted trees count (0 to 25,000+) */
+  plantedTrees?: number;
+  /** Net emissions after mitigation and sequestration (t CO2e/yr) */
+  netEmissions?: number;
+  /** Carbon sequestered by trees (t CO2/yr) */
+  sequesteredCO2?: number;
 }
 
 type Vec3 = [number, number, number];
@@ -47,6 +53,15 @@ interface Particle { p: Vec3; v: Vec3; age: number; life: number; size: number; 
 
 type P2 = [number, number];
 
+export interface HouseItem {
+  pos: [number, number, number]; // [x, y, z] in world units
+  elevM: number;
+  stories: number;
+  style: "tiled" | "pucca" | "homestead";
+  roof: "gable" | "flat" | "hipped";
+  rot: number;
+}
+
 /** Everything the renderer places, in world units (the ground spans roughly -12..12). */
 interface Layout {
   ground: P2[];
@@ -57,6 +72,7 @@ interface Layout {
   roadLen: number[];
   roadWidth: number;
   houses: P2[];
+  houses3D: HouseItem[];
   /** Size of houses, animals and bikes (1 = illustrative village). */
   u: number;
   pasture: P2[];
@@ -66,6 +82,10 @@ interface Layout {
   poles: P2[];
   trees: P2[];
   anchors: Record<SourceKey, Vec3>;
+  // Elevation & DEM surface functions
+  elevAt: (x: number, y: number) => number;
+  elevationBaseM?: number;
+  elevationReliefM?: number;
 }
 
 const ring = (n: number, f: (t: number) => P2) => Array.from({ length: n }, (_, i) => f((i / n) * Math.PI * 2));
@@ -91,10 +111,21 @@ function along(path: P2[], len: number[], d: number): P2 {
 }
 
 function demoLayout(): Layout {
+  const elevAt = (x: number, y: number) =>
+    0.35 * Math.sin(x * 0.18 + 0.6) * Math.cos(y * 0.22) + 0.15 * Math.sin(x * 0.28 - y * 0.25);
   const road = ring(48, (t) => [0.5 + 5.5 * Math.cos(t), 1 + 2.2 * Math.sin(t)]);
   const pasture: P2[] = Array.from({ length: 30 }, (_, i) => [-9 + ((i * 7.3 * 3.1) % 6), 6 + ((i * 7.3 * 1.7) % 3.5)]);
   const fences: P2[] = [];
   for (let x = -10; x <= -2; x += 1.6) fences.push([x, 5], [x, 10.5]);
+  const housePts: P2[] = [[-8, -8], [-5, -8.5], [-2.5, -7], [-7.5, -5], [-4.5, -4.5]];
+  const houses3D: HouseItem[] = housePts.map(([x, y], i) => ({
+    pos: [x, y, elevAt(x, y)],
+    elevM: 81.2 + elevAt(x, y) * 2.5,
+    stories: i % 4 === 1 ? 2 : 1,
+    style: i % 3 === 0 ? "tiled" : i % 3 === 1 ? "pucca" : "homestead",
+    roof: i % 3 === 0 ? "gable" : "flat",
+    rot: ((i * 1.618) % 1) * 0.5 - 0.25,
+  }));
   return {
     ground: [[-12, -12], [12, -12], [12, 12], [-12, 12]],
     decals: [
@@ -107,14 +138,20 @@ function demoLayout(): Layout {
     ],
     parcelLines: [],
     road, roadLen: cumulative(road), roadWidth: 1.2,
-    houses: [[-8, -8], [-5, -8.5], [-2.5, -7], [-7.5, -5], [-4.5, -4.5]],
+    houses: housePts,
+    houses3D,
     u: 1, pasture, fences,
     dump: [8, 1], plant: [8, -8], poles: [[5.5, -7.5], [2.5, -7], [0, -6.5]],
     trees: [[-11, -2], [-10, 1], [-11, 3.5], [1, -10.5], [3.5, -9.5], [-0.5, -4], [11, 5], [10.5, 9], [0, 11], [3, -4.5], [11, -3], [-11.5, -10.5], [5.5, 4.2]],
     anchors: {
-      lpg: [-5, -8.5, 3.2], firewood: [-6, -5, 3.2], electricity: [8, -8, 7.5], petrol: [0.5, 3.2, 1.4],
-      waste: [8, 1, 2.2], cow: [-7.5, 7, 1.8], goat: [-4, 9, 1.4], sheep: [-3.5, 6.2, 1.4],
+      lpg: [-5, -8.5, 3.2 + elevAt(-5, -8.5)], firewood: [-6, -5, 3.2 + elevAt(-6, -5)],
+      electricity: [8, -8, 7.5 + elevAt(8, -8)], petrol: [0.5, 3.2, 1.4 + elevAt(0.5, 3.2)],
+      waste: [8, 1, 2.2 + elevAt(8, 1)], cow: [-7.5, 7, 1.8 + elevAt(-7.5, 7)],
+      goat: [-4, 9, 1.4 + elevAt(-4, 9)], sheep: [-3.5, 6.2, 1.4 + elevAt(-3.5, 6.2)],
     },
+    elevAt,
+    elevationBaseM: 81.2,
+    elevationReliefM: 1.2,
   };
 }
 
@@ -172,7 +209,73 @@ function villageLayout(v: VillageScene): Layout {
   const reach = Math.min(12.5, Math.max(...v.outline.map(w).map(([x, y]) => x * Math.cos(away) + y * Math.sin(away))) + 2);
   const plant: P2 = [Math.cos(away) * reach, Math.sin(away) * reach];
   const poles: P2[] = [0.25, 0.5, 0.75].map((f) => [plant[0] + (hc[0] - plant[0]) * f, plant[1] + (hc[1] - plant[1]) * f]);
-  const top = 2.6 * u + 0.8;
+
+  // Elevation sampling from DEM grid:
+  const grid = v.elevation_grid;
+  const rows = grid?.length ?? 0;
+  const cols = grid && grid.length > 0 ? grid[0].length : 0;
+  // Natural vertical exaggeration: scale elevation meters to world units z
+  const zScale = Math.min(0.25, Math.max(0.04, k * 14));
+
+  const elevAt = (wx: number, wy: number): number => {
+    if (!grid || !rows || !cols) return 0;
+    // Map world coords back to local extent in meters
+    const lx = wx / k;
+    const ly = -wy / k;
+    const minx = -v.extent_m[0] / 2;
+    const miny = -v.extent_m[1] / 2;
+    const u_norm = Math.max(0, Math.min(1, (lx - minx) / Math.max(v.extent_m[0], 1)));
+    const v_norm = Math.max(0, Math.min(1, (ly - miny) / Math.max(v.extent_m[1], 1)));
+    const c_f = u_norm * (cols - 1);
+    const r_f = v_norm * (rows - 1);
+    const c0 = Math.floor(c_f);
+    const r0 = Math.floor(r_f);
+    const c1 = Math.min(cols - 1, c0 + 1);
+    const r1 = Math.min(rows - 1, r0 + 1);
+    const fc = c_f - c0;
+    const fr = r_f - r0;
+    const v00 = grid[r0]?.[c0] ?? 0;
+    const v01 = grid[r0]?.[c1] ?? 0;
+    const v10 = grid[r1]?.[c0] ?? 0;
+    const v11 = grid[r1]?.[c1] ?? 0;
+    const top = v00 * (1 - fc) + v01 * fc;
+    const bot = v10 * (1 - fc) + v11 * fc;
+    const elev_rel_m = top * (1 - fr) + bot * fr;
+    return elev_rel_m * zScale;
+  };
+
+  // Build 3D houses list:
+  const houses3D: HouseItem[] = v.houses_3d && v.houses_3d.length > 0
+    ? v.houses_3d.map((h) => {
+        const [wx, wy] = w([h.pos[0], h.pos[1]]);
+        const gz = elevAt(wx, wy);
+        return {
+          pos: [wx, wy, gz],
+          elevM: h.elevation_m,
+          stories: h.stories,
+          style: h.style,
+          roof: h.roof,
+          rot: h.rot,
+        };
+      })
+    : houses.map(([hx, hy], i) => {
+        const gz = elevAt(hx, hy);
+        const stories = i % 7 === 0 ? 2 : 1;
+        const style = i % 3 === 0 ? "tiled" : i % 3 === 1 ? "pucca" : "homestead";
+        const roof = style === "tiled" ? "gable" : "flat";
+        return {
+          pos: [hx, hy, gz],
+          elevM: (v.elevation_base_m ?? 80) + gz / zScale,
+          stories,
+          style,
+          roof,
+          rot: ((i * 1.618) % 1) * 0.6 - 0.3,
+        };
+      });
+
+  const baseM = v.elevation_base_m;
+  const reliefM = v.elevation_relief_m;
+  const top = 2.6 * u + 0.8 + elevAt(hc[0], hc[1]);
   return {
     ground: v.outline.map(w),
     decals: v.parcels.map((p, i) => ({
@@ -181,13 +284,20 @@ function villageLayout(v: VillageScene): Layout {
     })),
     parcelLines: v.parcels.map((p) => p.ring.map(w)),
     road, roadLen: cumulative(road), roadWidth: Math.max(0.15, u * 0.8),
-    houses, u, pasture, fences: [], dump, plant, poles,
+    houses, houses3D, u, pasture, fences: [], dump, plant, poles,
     trees: v.trees.map(w),
     anchors: {
       lpg: [hc[0] - 1.2, hc[1] - 0.8, top], firewood: [hc[0] + 1.2, hc[1] + 0.8, top],
-      electricity: [plant[0], plant[1], 7.5], petrol: [road[0]?.[0] ?? 0, road[0]?.[1] ?? 0, 1.2],
-      waste: [dump[0], dump[1], 1.6], cow: [pc[0], pc[1], 1.4], goat: [pc[0] + 1.2, pc[1] - 0.8, 1.1], sheep: [pc[0] - 1.2, pc[1] + 0.8, 1.1],
+      electricity: [plant[0], plant[1], 7.5 + elevAt(plant[0], plant[1])],
+      petrol: [road[0]?.[0] ?? 0, road[0]?.[1] ?? 0, 1.2 + elevAt(road[0]?.[0] ?? 0, road[0]?.[1] ?? 0)],
+      waste: [dump[0], dump[1], 1.6 + elevAt(dump[0], dump[1])],
+      cow: [pc[0], pc[1], 1.4 + elevAt(pc[0], pc[1])],
+      goat: [pc[0] + 1.2, pc[1] - 0.8, 1.1 + elevAt(pc[0] + 1.2, pc[1] - 0.8)],
+      sheep: [pc[0] - 1.2, pc[1] + 0.8, 1.1 + elevAt(pc[0] - 1.2, pc[1] + 0.8)],
     },
+    elevAt,
+    elevationBaseM: baseM,
+    elevationReliefM: reliefM,
   };
 }
 
@@ -244,17 +354,71 @@ function prism(out: Face[], x: number, y: number, z: number, r0: number, r1: num
   if (r1 > 0.05) poly(out, top, rgb, [x, y, z]);
 }
 
-function house(out: Face[], x: number, y: number, wall: string, roof: string, s = 1) {
-  box(out, x, y, 0, 2 * s, 1.6 * s, 1.3 * s, wall);
-  const rgb = hex(roof);
-  const [x0, x1, y0, y1, z0, z1] = [x - 1.15 * s, x + 1.15 * s, y - 0.95 * s, y + 0.95 * s, 1.3 * s, 2.2 * s];
-  const c: Vec3 = [x, y, 1.5 * s];
-  poly(out, [[x0, y0, z0], [x1, y0, z0], [x1, y, z1], [x0, y, z1]], rgb, c);
-  poly(out, [[x0, y1, z0], [x1, y1, z0], [x1, y, z1], [x0, y, z1]], rgb, c);
-  poly(out, [[x0, y0, z0], [x0, y1, z0], [x0, y, z1]], hex(wall), c);
-  poly(out, [[x1, y0, z0], [x1, y1, z0], [x1, y, z1]], hex(wall), c);
-  box(out, x + 0.55 * s, y - 0.35 * s, 1.6 * s, 0.28 * s, 0.28 * s, 1.0 * s, "#6d4c41");
-  if (s > 0.3) box(out, x - 0.25 * s, y + 0.81 * s, 0, 0.45 * s, 0.02 * s, 0.8 * s, "#5d4037");
+function render3DHouse(out: Face[], x: number, y: number, z: number, s: number, item: HouseItem, wall: string, roof: string) {
+  // Foundation plinth set into the terrain
+  const plinthH = 0.12 * s;
+  box(out, x, y, z, 2.1 * s, 1.7 * s, plinthH, "#4e342e");
+
+  // Wall height varies with stories
+  const wallH = (item.stories === 2 ? 2.1 : 1.25) * s;
+  box(out, x, y, z + plinthH, 2.0 * s, 1.6 * s, wallH, wall);
+
+  // Door
+  box(out, x - 0.25 * s, y + 0.81 * s, z + plinthH, 0.42 * s, 0.02 * s, 0.8 * s, "#3e2723");
+  // Window
+  box(out, x + 0.5 * s, y + 0.81 * s, z + plinthH + 0.35 * s, 0.38 * s, 0.02 * s, 0.45 * s, "#90a4ae");
+
+  if (item.stories === 2) {
+    // Cornice / lintel divider
+    box(out, x, y, z + plinthH + 1.25 * s, 2.06 * s, 1.66 * s, 0.08 * s, "#8d6e63");
+    // 2nd floor window
+    box(out, x, y + 0.81 * s, z + plinthH + 1.45 * s, 0.42 * s, 0.02 * s, 0.45 * s, "#b0bec5");
+  }
+
+  const wallTop = z + plinthH + wallH;
+  const c: Vec3 = [x, y, wallTop + 0.5 * s];
+
+  if (item.style === "tiled") {
+    // Terracotta sloping gable roof with eaves overhang
+    const roofH = 0.85 * s;
+    const [x0, x1, y0, y1, z0, z1] = [x - 1.15 * s, x + 1.15 * s, y - 0.95 * s, y + 0.95 * s, wallTop, wallTop + roofH];
+    const rgb = hex(roof);
+    poly(out, [[x0, y0, z0], [x1, y0, z0], [x1, y, z1], [x0, y, z1]], rgb, c);
+    poly(out, [[x0, y1, z0], [x1, y1, z0], [x1, y, z1], [x0, y, z1]], rgb, c);
+    poly(out, [[x0, y0, z0], [x0, y1, z0], [x0, y, z1]], hex(wall), c);
+    poly(out, [[x1, y0, z0], [x1, y1, z0], [x1, y, z1]], hex(wall), c);
+    // Brick chimney & flue cap
+    box(out, x + 0.55 * s, y - 0.35 * s, wallTop + 0.3 * s, 0.28 * s, 0.28 * s, 0.85 * s, "#6d4c41");
+    box(out, x + 0.55 * s, y - 0.35 * s, wallTop + 1.15 * s, 0.34 * s, 0.34 * s, 0.06 * s, "#3e2723");
+  } else if (item.style === "pucca") {
+    // Pucca flat roof terrace with perimeter parapet and rooftop water tank
+    box(out, x, y, wallTop, 2.06 * s, 1.66 * s, 0.1 * s, "#b0bec5");
+    const pH = 0.22 * s;
+    box(out, x, y - 0.79 * s, wallTop + 0.1 * s, 2.06 * s, 0.08 * s, pH, wall);
+    box(out, x, y + 0.79 * s, wallTop + 0.1 * s, 2.06 * s, 0.08 * s, pH, wall);
+    box(out, x - 0.99 * s, y, wallTop + 0.1 * s, 0.08 * s, 1.5 * s, pH, wall);
+    box(out, x + 0.99 * s, y, wallTop + 0.1 * s, 0.08 * s, 1.5 * s, pH, wall);
+    // Rooftop room / staircase penthouse
+    box(out, x - 0.45 * s, y - 0.25 * s, wallTop + 0.1 * s, 0.65 * s, 0.65 * s, 0.55 * s, "#78909c");
+    // Water tank drum
+    prism(out, x + 0.45 * s, y + 0.2 * s, wallTop + 0.1 * s, 0.2 * s, 0.2 * s, 0.35 * s, 8, "#1565c0");
+    // Vent pipe / chimney
+    box(out, x + 0.55 * s, y - 0.35 * s, wallTop + 0.1 * s, 0.18 * s, 0.18 * s, 0.75 * s, "#5d4037");
+  } else {
+    // Homestead with porch / shaded veranda
+    const roofH = 0.8 * s;
+    const [x0, x1, y0, y1, z0, z1] = [x - 1.1 * s, x + 0.8 * s, y - 0.95 * s, y + 0.95 * s, wallTop, wallTop + roofH];
+    const rgb = hex(roof);
+    poly(out, [[x0, y0, z0], [x1, y0, z0], [x1, y, z1], [x0, y, z1]], rgb, c);
+    poly(out, [[x0, y1, z0], [x1, y1, z0], [x1, y, z1], [x0, y, z1]], rgb, c);
+    poly(out, [[x0, y0, z0], [x0, y1, z0], [x0, y, z1]], hex(wall), c);
+    poly(out, [[x1, y0, z0], [x1, y1, z0], [x1, y, z1]], hex(wall), c);
+    // Veranda porch posts
+    box(out, x + 1.15 * s, y - 0.55 * s, z + plinthH, 0.08 * s, 0.08 * s, 1.1 * s, "#5d4037");
+    box(out, x + 1.15 * s, y + 0.55 * s, z + plinthH, 0.08 * s, 0.08 * s, 1.1 * s, "#5d4037");
+    poly(out, [[x + 0.8 * s, y - 0.75 * s, wallTop - 0.1 * s], [x + 1.35 * s, y - 0.75 * s, z + 1.1 * s], [x + 1.35 * s, y + 0.75 * s, z + 1.1 * s], [x + 0.8 * s, y + 0.75 * s, wallTop - 0.1 * s]], hex("#b71c1c"), c);
+    box(out, x - 0.5 * s, y - 0.3 * s, wallTop + 0.2 * s, 0.24 * s, 0.24 * s, 0.8 * s, "#6d4c41");
+  }
 }
 
 /** Stable per-source spawn rate: grows with the source's emission relative to the village baseline total. */
@@ -266,12 +430,21 @@ function rates(e: Emissions, baseTotal: number): Emissions {
 }
 
 /** Rotatable 3D village where each emission source visibly pours gas into a shared atmosphere layer. */
-export default function CarbonLabScene({ emissions, baseline, focus, onPick, village }: SceneProps) {
+export default function CarbonLabScene({
+  emissions,
+  baseline,
+  focus,
+  onPick,
+  village,
+  plantedTrees,
+  netEmissions,
+  sequesteredCO2,
+}: SceneProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const smogRef = useRef<HTMLVideoElement>(null);
   const layout = useMemo(() => (village ? villageLayout(village) : demoLayout()), [village]);
-  const props = useRef({ emissions, baseline, focus, layout });
-  props.current = { emissions, baseline, focus, layout };
+  const props = useRef({ emissions, baseline, focus, layout, plantedTrees, netEmissions, sequesteredCO2 });
+  props.current = { emissions, baseline, focus, layout, plantedTrees, netEmissions, sequesteredCO2 };
   const pickRef = useRef(onPick);
   pickRef.current = onPick;
   const [playing, setPlaying] = useState(true);
@@ -375,8 +548,11 @@ export default function CarbonLabScene({ emissions, baseline, focus, onPick, vil
       const u = L.u;
       const puff = Math.min(1, Math.max(0.5, u * 1.5));
       const chimney = (): Vec3 => {
-        const [x, y] = L.houses[(Math.random() * L.houses.length) | 0];
-        return [x + 0.55 * u, y - 0.35 * u, 2.7 * u];
+        if (!L.houses3D.length) return [0, 0, 2];
+        const h = L.houses3D[(Math.random() * L.houses3D.length) | 0];
+        const [x, y, z] = h.pos;
+        const topH = (h.stories === 2 ? 2.1 : 1.25) * u;
+        return [x + 0.55 * u, y - 0.35 * u, z + topH + 0.9 * u];
       };
       const r = rates(e, baseTotal);
       const tick = (key: SourceKey, fn: () => void) => {
@@ -411,11 +587,12 @@ export default function CarbonLabScene({ emissions, baseline, focus, onPick, vil
       last = now;
       const run = playingRef.current;
       if (run) time += dt;
-      const { emissions: e, baseline: base, focus: foc, layout: L } = props.current;
+      const { emissions: e, baseline: base, focus: foc, layout: L, plantedTrees: pTrees, netEmissions: netE, sequesteredCO2: seqCO2 } = props.current;
       const u = L.u;
       const baseTotal = Object.values(base).reduce((a, b) => a + b, 0);
       const total = Object.values(e).reduce((a, b) => a + b, 0);
-      load += ((baseTotal > 0 ? total / baseTotal : 1) - load) * Math.min(1, dt * 2);
+      const effectiveEmissions = netE !== undefined ? netE : total;
+      load += ((baseTotal > 0 ? effectiveEmissions / baseTotal : 1) - load) * Math.min(1, dt * 2);
       const haze = Math.min(1, Math.max(0, (load - 0.4) / 2));
 
       // Camera: ease to the focus target, otherwise slowly orbit when idle.
@@ -456,18 +633,25 @@ export default function CarbonLabScene({ emissions, baseline, focus, onPick, vil
         ctx.fillStyle = fill;
         ctx.fill();
       };
-      // Ground slab: the outline drawn twice gives it a visible edge.
+      // Ground slab: 3D geological skirt extruded downwards, with elevated terrain surface.
       const groundRgb = mix([124, 179, 66], [150, 140, 90], haze * 0.7);
-      flat(L.ground.map(([x, y]) => [x, y, -0.7] as Vec3), rgba(mix(groundRgb, [40, 50, 30], 0.45)));
-      flat(L.ground.map(([x, y]) => [x, y, 0] as Vec3), rgba(groundRgb));
-      for (const d of L.decals) flat(d.ring.map(([x, y]) => [x, y, 0] as Vec3), d.fill);
+      const skirtRgb = rgba(mix(groundRgb, [40, 50, 30], 0.45));
+      for (let i = 0; i < L.ground.length; i++) {
+        const [x0, y0] = L.ground[i];
+        const [x1, y1] = L.ground[(i + 1) % L.ground.length];
+        const z0 = L.elevAt(x0, y0);
+        const z1 = L.elevAt(x1, y1);
+        flat([[x0, y0, -0.75], [x1, y1, -0.75], [x1, y1, z1], [x0, y0, z0]], skirtRgb);
+      }
+      flat(L.ground.map(([x, y]) => [x, y, L.elevAt(x, y)] as Vec3), rgba(groundRgb));
+      for (const d of L.decals) flat(d.ring.map(([x, y]) => [x, y, L.elevAt(x, y)] as Vec3), d.fill);
       if (L.parcelLines.length) {
         ctx.strokeStyle = "rgba(62,39,35,0.35)";
         ctx.lineWidth = 0.7;
         ctx.beginPath();
         for (const r of L.parcelLines) {
           r.forEach(([x, y], i) => {
-            const s = project([x, y, 0]);
+            const s = project([x, y, L.elevAt(x, y)]);
             if (i) ctx.lineTo(s.x, s.y);
             else ctx.moveTo(s.x, s.y);
           });
@@ -475,7 +659,7 @@ export default function CarbonLabScene({ emissions, baseline, focus, onPick, vil
         }
         ctx.stroke();
       }
-      const roadScreen = L.road.map(([x, y]) => project([x, y, 0]));
+      const roadScreen = L.road.map(([x, y]) => project([x, y, L.elevAt(x, y)]));
       ctx.strokeStyle = "#78909c";
       ctx.lineJoin = "round";
       ctx.lineWidth = L.roadWidth * project([0, 0, 0]).scale;
@@ -484,26 +668,66 @@ export default function CarbonLabScene({ emissions, baseline, focus, onPick, vil
       ctx.closePath();
       ctx.stroke();
 
-      // Solids.
+      // Solids & elevated 3D structures.
       const faces: Face[] = [];
       const sprites: Sprite[] = [];
       // Which way something moving from a to b goes on screen (sprites face that way).
       const goesLeft = (a: Vec3, b: Vec3) => project(b).x < project(a).x;
-      L.houses.forEach(([x, y], i) => house(faces, x, y, WALLS[i % WALLS.length], i % 2 ? "#c62828" : "#8d6e63", u));
+      L.houses3D.forEach((item, i) => {
+        render3DHouse(
+          faces,
+          item.pos[0],
+          item.pos[1],
+          item.pos[2],
+          u,
+          item,
+          WALLS[i % WALLS.length],
+          i % 2 ? "#c62828" : "#8d6e63"
+        );
+      });
       const treeS = Math.max(0.45, u * 1.4);
-      L.trees.forEach(([x, y], i) => sprites.push({ at: [x, y, 0], img: i % 2 ? "tree2" : "tree", height: 2 * treeS * (0.8 + (i % 3) * 0.15) }));
+      const isExplicitZeroTrees = pTrees === 0;
+      if (!isExplicitZeroTrees) {
+        // Base trees
+        L.trees.forEach(([x, y], i) => {
+          sprites.push({ at: [x, y, L.elevAt(x, y)], img: i % 2 ? "tree2" : "tree", height: 2 * treeS * (0.8 + (i % 3) * 0.15) });
+        });
+
+        // Additional trees populated as tree count increases (e.g. 500, 1000, 5000, 10000)
+        const treeCount = pTrees ?? L.trees.length * 100;
+        const extraNeeded = Math.min(65, Math.floor(treeCount / 160));
+        if (extraNeeded > 0) {
+          const seeds = L.decals.length > 0 ? L.decals.map((d) => centroid(d.ring)) : L.ground;
+          for (let i = 0; i < extraNeeded; i++) {
+            const h1 = ((i * 12345 + 101) % 997) / 997;
+            const h2 = ((i * 67891 + 203) % 997) / 997;
+            const refPt = seeds[i % seeds.length] || [0, 0];
+            const ox = (h1 * 2 - 1) * (u * 3.4);
+            const oy = (h2 * 2 - 1) * (u * 3.4);
+            const tx = refPt[0] + ox;
+            const ty = refPt[1] + oy;
+            sprites.push({
+              at: [tx, ty, L.elevAt(tx, ty)],
+              img: i % 2 ? "tree2" : "tree",
+              height: 2 * treeS * (0.75 + (i % 4) * 0.12),
+            });
+          }
+        }
+      }
       const [px, py] = L.plant;
-      box(faces, px, py, 0, 3, 2.2, 2, "#90a4ae");
-      prism(faces, px + 1, py - 0.6, 2, 0.4, 0.3, 5, 8, "#b0bec5");
-      prism(faces, px - 1.6, py + 1.4, 0, 1.2, 0.8, 3, 10, "#cfd8dc");
+      const pz = L.elevAt(px, py);
+      box(faces, px, py, pz, 3, 2.2, 2, "#90a4ae");
+      prism(faces, px + 1, py - 0.6, pz + 2, 0.4, 0.3, 5, 8, "#b0bec5");
+      prism(faces, px - 1.6, py + 1.4, pz, 1.2, 0.8, 3, 10, "#cfd8dc");
       const ds = Math.max(0.5, u);
       const [dx, dy] = L.dump;
-      prism(faces, dx, dy, 0, 1.8 * ds, 0.3 * ds, 1 * ds, 9, "#795548");
-      box(faces, dx + 0.6 * ds, dy - 0.4 * ds, 0.8 * ds, 0.5 * ds, 0.4 * ds, 0.3 * ds, "#7b1fa2");
-      box(faces, dx - 0.5 * ds, dy + 0.5 * ds, 0.75 * ds, 0.4 * ds, 0.5 * ds, 0.25 * ds, "#1565c0");
+      const dz = L.elevAt(dx, dy);
+      prism(faces, dx, dy, dz, 1.8 * ds, 0.3 * ds, 1 * ds, 9, "#795548");
+      box(faces, dx + 0.6 * ds, dy - 0.4 * ds, dz + 0.8 * ds, 0.5 * ds, 0.4 * ds, 0.3 * ds, "#7b1fa2");
+      box(faces, dx - 0.5 * ds, dy + 0.5 * ds, dz + 0.75 * ds, 0.4 * ds, 0.5 * ds, 0.25 * ds, "#1565c0");
       // Power poles from the plant to the settlement.
-      L.poles.forEach(([x, y]) => sprites.push({ at: [x, y, 0], img: "tower", height: 2.8 }));
-      L.fences.forEach(([x, y]) => box(faces, x, y, 0, 0.12, 0.12, 0.6, "#8d6e63"));
+      L.poles.forEach(([x, y]) => sprites.push({ at: [x, y, L.elevAt(x, y)], img: "tower", height: 2.8 }));
+      L.fences.forEach(([x, y]) => box(faces, x, y, L.elevAt(x, y), 0.12, 0.12, 0.6, "#8d6e63"));
 
       // Bikes: count follows petrol use relative to the survey.
       const petrolRatio = base.petrol > 0 ? e.petrol / base.petrol : e.petrol > 0 ? 1 : 0;
@@ -516,9 +740,10 @@ export default function CarbonLabScene({ emissions, baseline, focus, onPick, vil
         const d = (time * 2 + (i / Math.max(nBikes, 1)) * loop) * (i % 2 ? -1 : 1);
         const [x, y] = along(L.road, L.roadLen, d);
         const [nx, ny] = along(L.road, L.roadLen, d + (i % 2 ? -0.2 : 0.2));
-        bikes.push([x, y, 0]);
+        const bz = L.elevAt(x, y);
+        bikes.push([x, y, bz]);
         const car = i % 4 === 3;
-        sprites.push({ at: [x, y, 0], img: car ? "car" : "bike", height: (car ? 0.75 : 0.9) * bu, flip: goesLeft([x, y, 0], [nx, ny, 0]) });
+        sprites.push({ at: [x, y, bz], img: car ? "car" : "bike", height: (car ? 0.75 : 0.9) * bu, flip: goesLeft([x, y, bz], [nx, ny, L.elevAt(nx, ny)]) });
       }
 
       // Herds sized by head count relative to the survey.
@@ -534,9 +759,10 @@ export default function CarbonLabScene({ emissions, baseline, focus, onPick, vil
           const py = sy + Math.cos(time * 0.15 + seed) * 0.4 * au;
           const height = (kind === "cow" ? 1.15 : kind === "goat" ? 0.9 : 0.8) * au;
           const img = kind === "sheep" ? "sheep" : `${kind}${i % 2 ? "2" : ""}`;
-          const next: Vec3 = [px + Math.cos(time * 0.2 + seed) * 0.08, py - Math.sin(time * 0.15 + seed) * 0.06, 0];
-          sprites.push({ at: [px, py, 0], img, height, flip: goesLeft([px, py, 0], next) });
-          animals.push({ p: [px, py, height * 0.7], kind });
+          const pz = L.elevAt(px, py);
+          const next: Vec3 = [px + Math.cos(time * 0.2 + seed) * 0.08, py - Math.sin(time * 0.15 + seed) * 0.06, pz];
+          sprites.push({ at: [px, py, pz], img, height, flip: goesLeft([px, py, pz], next) });
+          animals.push({ p: [px, py, pz + height * 0.7], kind });
         }
       });
 
@@ -544,7 +770,12 @@ export default function CarbonLabScene({ emissions, baseline, focus, onPick, vil
 
       // Wires with power pulses (speed and density follow electricity use).
       const wireEnd = L.houses.length ? centroid(L.houses) : L.poles[L.poles.length - 1];
-      const wire: Vec3[] = [[px - 1.3, py, 1.9], ...L.poles.map(([x, y]) => [x, y, 2.6] as Vec3), [wireEnd[0], wireEnd[1], 1.4 * Math.max(u, 0.4)]];
+      const endZ = L.elevAt(wireEnd[0], wireEnd[1]);
+      const wire: Vec3[] = [
+        [px - 1.3, py, pz + 1.9],
+        ...L.poles.map(([x, y]) => [x, y, L.elevAt(x, y) + 2.6] as Vec3),
+        [wireEnd[0], wireEnd[1], endZ + 1.4 * Math.max(u, 0.4)],
+      ];
       ctx.strokeStyle = "rgba(55,71,79,0.8)";
       ctx.lineWidth = 1.2;
       ctx.beginPath();
@@ -608,10 +839,10 @@ export default function CarbonLabScene({ emissions, baseline, focus, onPick, vil
 
       // Greenhouse blanket: localized STRICTLY upon the village polygon
       const top = Math.max(h * 0.14, project([0, 0, ATMOS_Z]).y);
-      const smogLevel = total > 0 ? Math.min(1, Math.max(0, (load - 0.15) / 1.6)) : 0;
+      const smogLevel = effectiveEmissions > 0.05 ? Math.min(1, Math.max(0, (load - 0.15) / 1.6)) : 0;
 
       // Project the village polygon at the ground and atmosphere levels
-      const groundPts = L.ground.map(([x, y]) => project([x, y, 0]));
+      const groundPts = L.ground.map(([x, y]) => project([x, y, L.elevAt(x, y)]));
       const atmosPts = L.ground.map(([x, y]) => project([x, y, ATMOS_Z]));
       const villageHull = convexHull([...groundPts, ...atmosPts]);
 
@@ -685,21 +916,51 @@ export default function CarbonLabScene({ emissions, baseline, focus, onPick, vil
         ctx.restore();
       }
 
-      // Smog level badge (top right).
-      const smogText = `Smog: ${smogLevel < 0.05 ? "clear" : smogLevel < 0.35 ? "light" : smogLevel < 0.7 ? "moderate" : "heavy"}`;
+      // Smog level / Net Zero badge (top right).
+      const isNetZero = effectiveEmissions <= 0.05;
+      const smogText = isNetZero ? "🌱 Net Zero: Clean Air" : `Smog: ${smogLevel < 0.05 ? "clear" : smogLevel < 0.35 ? "light" : smogLevel < 0.7 ? "moderate" : "heavy"}`;
       ctx.font = "700 11px system-ui, sans-serif";
       const sw = ctx.measureText(smogText).width + 34;
-      ctx.fillStyle = "rgba(255,255,255,0.88)";
+      ctx.fillStyle = "rgba(255,255,255,0.92)";
       ctx.beginPath();
       ctx.roundRect(w - sw - 12, 12, sw, 22, 11);
       ctx.fill();
-      ctx.fillStyle = rgba(mix([129, 199, 132], [121, 85, 72], smogLevel));
+      ctx.fillStyle = isNetZero ? "#1b5e20" : rgba(mix([129, 199, 132], [121, 85, 72], smogLevel));
       ctx.beginPath();
       ctx.arc(w - sw + 1, 23, 5, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = "#263238";
+      ctx.fillStyle = isNetZero ? "#1b5e20" : "#263238";
       ctx.textAlign = "left";
       ctx.fillText(smogText, w - sw + 12, 27);
+
+      // Tree Carbon Sink badge (top right, left of smog badge).
+      const treeCountVal = pTrees !== undefined ? pTrees : L.trees.length * 100;
+      const treeCO2Val = seqCO2 !== undefined ? seqCO2 : (treeCountVal * 22) / 1000;
+      const isZeroTrees = treeCountVal === 0;
+      const sinkText = isZeroTrees ? "⚠️ 0 Trees (No Sink)" : `🌳 ${treeCountVal.toLocaleString()} trees (−${treeCO2Val.toFixed(1)}t)`;
+      const tw = ctx.measureText(sinkText).width + 20;
+      const tx = w - sw - 20 - tw;
+      ctx.fillStyle = isZeroTrees ? "rgba(255,235,238,0.95)" : "rgba(241,248,233,0.95)";
+      ctx.beginPath();
+      ctx.roundRect(tx, 12, tw, 22, 11);
+      ctx.fill();
+      ctx.fillStyle = isZeroTrees ? "#c62828" : "#2e7d32";
+      ctx.textAlign = "left";
+      ctx.fillText(sinkText, tx + 10, 27);
+
+      // DEM Elevation badge (top right, left of tree badge).
+      if (L.elevationBaseM) {
+        const elevText = `⛰️ ${Math.round(L.elevationBaseM)}m MSL${L.elevationReliefM ? ` (±${(L.elevationReliefM / 2).toFixed(1)}m)` : ""}`;
+        const ew = ctx.measureText(elevText).width + 20;
+        const ex = tx - 8 - ew;
+        ctx.fillStyle = "rgba(255,255,255,0.92)";
+        ctx.beginPath();
+        ctx.roundRect(ex, 12, ew, 22, 11);
+        ctx.fill();
+        ctx.fillStyle = "#1b5e20";
+        ctx.textAlign = "left";
+        ctx.fillText(elevText, ex + 10, 27);
+      }
 
       // Heat trapped: sun rays bounce back down off the blanket only over the village polygon
       if (villageHull.length >= 3) {
@@ -763,6 +1024,27 @@ export default function CarbonLabScene({ emissions, baseline, focus, onPick, vil
         ctx.fillStyle = isFocus ? "#fff" : "#263238";
         ctx.textAlign = "center";
         ctx.fillText(text, s.x, y + 13);
+      }
+
+      // Floating label for the tree forest sink (or zero-tree warning)
+      if (L.trees.length > 0) {
+        const treePt = L.trees[0];
+        const treeS3D = project([treePt[0], treePt[1], 3.0 + L.elevAt(treePt[0], treePt[1])]);
+        const treeCountVal = pTrees !== undefined ? pTrees : L.trees.length * 100;
+        const treeCO2Val = seqCO2 !== undefined ? seqCO2 : (treeCountVal * 22) / 1000;
+        const isZero = treeCountVal === 0;
+        const treeLabelText = isZero ? "⚠️ 0 Trees · No Sink" : `🌳 Carbon Sink · -${treeCO2Val.toFixed(1)} t`;
+        ctx.font = "700 11px system-ui, sans-serif";
+        const tlw = ctx.measureText(treeLabelText).width;
+        const tlx0 = treeS3D.x - tlw / 2 - 8;
+        const tly = treeS3D.y - 18;
+        ctx.fillStyle = isZero ? "rgba(198,40,40,0.92)" : "rgba(46,125,50,0.92)";
+        ctx.beginPath();
+        ctx.roundRect(tlx0, tly, tlw + 16, 20, 10);
+        ctx.fill();
+        ctx.fillStyle = "#ffffff";
+        ctx.textAlign = "center";
+        ctx.fillText(treeLabelText, treeS3D.x, tly + 14);
       }
 
       // North arrow (real villages: world -y is north).

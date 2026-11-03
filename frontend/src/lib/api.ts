@@ -2,7 +2,7 @@ import useSWR, { mutate } from "swr";
 import type { FeatureCollection } from "geojson";
 import type {
   CensusVillage, District, EmissionFactor, RasterFactor, RasterLayer, State, Submission, SubmissionDetails, Subdistrict, Summary,
-  SupervisorVillage, SurveyField, User, Village, VillageDetails, VillageFactorStats, VillageScene, EmissionGrid,
+  SupervisorVillage, SurveyField, User, Village, VillageDetails, VillageFactorStats, VillageScene, VillageElevation, EmissionGrid,
 } from "./types";
 
 export class ApiError extends Error {
@@ -87,6 +87,10 @@ export const useVillage = (code: string | null) =>
 /** Cadastral layout for the Carbon Lab 3D view (404 when the village has no parcel data). */
 export const useVillageScene = (code: string | null) =>
   useSWR<VillageScene>(code ? `/api/villages/${code}/scene` : null, fetcher, { revalidateOnFocus: false, shouldRetryOnError: false });
+
+/** Digital Elevation Model (DEM) profile and house elevations for one village. */
+export const useVillageElevation = (code: string | null) =>
+  useSWR<VillageElevation>(code ? `/api/villages/${code}/elevation` : null, fetcher, { revalidateOnFocus: false, shouldRetryOnError: false });
 export const useGeoJson = (layer: "district" | "blocks" | "villages") =>
   useSWR<FeatureCollection>(`/api/geo/${layer}`, fetcher, { revalidateOnFocus: false });
 

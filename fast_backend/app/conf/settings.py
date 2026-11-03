@@ -87,6 +87,11 @@ class Settings(BaseSettings):
         return self.MEDIA_DIR / "Smulation data" / "varanasi.gpkg"
 
     @property
+    def DEM_TIF_PATH(self) -> Path:
+        """Digital Elevation Model (DEM) GeoTIFF for Uttar Pradesh / Varanasi."""
+        return self.MEDIA_DIR / "DEM" / "UP_DEM.tif"
+
+    @property
     def CADASTRAL_BOUNDARIES_PATH(self) -> Path:
         """Village boundaries dissolved from the khasra parcels (script/cadastral_boundaries.py), WGS84."""
         return self.MEDIA_DIR / "data" / "processed" / "varanasi_villages_cadastral.geojson"

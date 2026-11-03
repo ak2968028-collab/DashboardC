@@ -7,7 +7,7 @@ import type { Layer, PathOptions } from "leaflet";
 import {
   CircleMarker, GeoJSON, LayersControl, MapContainer, Pane, Popup, ScaleControl, TileLayer, WMSTileLayer, useMap, useMapEvents,
 } from "react-leaflet";
-import { Maximize } from "lucide-react";
+import { Maximize2, Minimize2 } from "lucide-react";
 import { useGeoJson, useRasterLayers, wmsLegendUrl, wmsUrl } from "@/lib/api";
 import { interpolate } from "@/lib/colors";
 import { fmt, num } from "@/lib/format";
@@ -48,7 +48,45 @@ export default function VillageMap({ villages, selectedCode, blockFilter, metric
   const { data: districtGeo } = useGeoJson("district");
   const { data: rasters = [] } = useRasterLayers();
   const [activeRasters, setActiveRasters] = useState<string[]>([]);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleFsChange = () => {
+      const isFs = Boolean(document.fullscreenElement && document.fullscreenElement === containerRef.current);
+      setIsFullscreen(isFs);
+    };
+    document.addEventListener("fullscreenchange", handleFsChange);
+    document.addEventListener("webkitfullscreenchange", handleFsChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFsChange);
+      document.removeEventListener("webkitfullscreenchange", handleFsChange);
+    };
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    } else if (containerRef.current?.requestFullscreen) {
+      containerRef.current.requestFullscreen().catch(() => {
+        setIsFullscreen((prev) => !prev);
+      });
+    } else {
+      setIsFullscreen((prev) => !prev);
+    }
+  };
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.key === "f" || e.key === "F") && !["INPUT", "TEXTAREA", "SELECT"].includes((e.target as HTMLElement)?.tagName)) {
+        toggleFullscreen();
+      } else if (e.key === "Escape" && isFullscreen && !document.fullscreenElement) {
+        setIsFullscreen(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isFullscreen]);
 
   const { showCodes } = useDashboard();
   const byCode = useMemo(() => new Map(villages.map((v) => [v.village_code, v])), [villages]);
@@ -90,13 +128,9 @@ export default function VillageMap({ villages, selectedCode, blockFilter, metric
   };
 
   const selected = selectedCode ? byCode.get(selectedCode) : undefined;
-  const toggleFullscreen = () => {
-    if (document.fullscreenElement) document.exitFullscreen();
-    else containerRef.current?.requestFullscreen();
-  };
 
   return (
-    <div className="map-wrap" ref={containerRef}>
+    <div className={`map-wrap ${isFullscreen ? "is-fullscreen" : ""}`} ref={containerRef}>
       <MapContainer center={DISTRICT_CENTER} zoom={10} preferCanvas className="map">
         <LayersControl position="topright">
           <LayersControl.BaseLayer checked name="OpenStreetMap">
@@ -146,9 +180,17 @@ export default function VillageMap({ villages, selectedCode, blockFilter, metric
         <ScaleControl position="bottomleft" />
         <ActiveOverlayTracker onChange={setActiveRasters} />
         <FlyToSelection village={selected} blockFilter={blockFilter} />
+        <MapResizeOnFullscreen isFullscreen={isFullscreen} />
       </MapContainer>
 
-      <button className="map-fullscreen" onClick={toggleFullscreen} title="Toggle fullscreen"><Maximize size={16} /></button>
+      <button
+        className={`map-fullscreen ${isFullscreen ? "is-active" : ""}`}
+        onClick={toggleFullscreen}
+        title={isFullscreen ? "Exit Full Screen (Esc / F)" : "Full Screen Map (F)"}
+        aria-label={isFullscreen ? "Exit Full Screen" : "Full Screen Map"}
+      >
+        {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+      </button>
       {activeRasters.length > 0 && (
         <div className="map-legend raster-legend">
           {rasters.filter((r) => activeRasters.includes(rasterOverlayName(r))).map((r) => (
@@ -191,5 +233,21 @@ function FlyToSelection({ village, blockFilter }: { village?: Village; blockFilt
       map.setView(DISTRICT_CENTER, blockFilter ? 11 : 10);
     }
   }, [map, village?.village_code, village?.latitude, village?.longitude, blockFilter]);
+  return null;
+}
+
+/** Triggers leaflet resize when entering or exiting fullscreen mode. */
+function MapResizeOnFullscreen({ isFullscreen }: { isFullscreen: boolean }) {
+  const map = useMap();
+  useEffect(() => {
+    const t1 = setTimeout(() => map.invalidateSize(), 60);
+    const t2 = setTimeout(() => map.invalidateSize(), 250);
+    const t3 = setTimeout(() => map.invalidateSize(), 500);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
+  }, [map, isFullscreen]);
   return null;
 }

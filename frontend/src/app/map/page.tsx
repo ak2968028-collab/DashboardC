@@ -52,7 +52,9 @@ export default function MapPage() {
             </dl>
           )}
           <hr />
-          <Alert kind="info">💡 <b>Interactive Tip:</b> Click any village polygon on the map or use the header dropdown to update the active selection.</Alert>
+          <Alert kind="info">
+            💡 <b>Interactive Tips:</b> Click any village polygon to inspect its details. Click the <b>⛶ Fullscreen</b> button on the map (or press <b>F</b>) to expand the map to full screen.
+          </Alert>
         </div>
       </div>
     </>
