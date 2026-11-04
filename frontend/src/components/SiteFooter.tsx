@@ -44,7 +44,10 @@ const RESOURCES = [
   { href: "https://www.openstreetmap.org/copyright", label: "OpenStreetMap", external: true },
 ];
 
+// Bottom bar: quick links and policy pages in one row.
 const LEGAL = [
+  { href: "/settings", label: "Methodology" },
+  { href: "/blog", label: "Updates" },
   { href: "/privacy", label: "Privacy Policy" },
   { href: "/terms", label: "Terms of Use" },
   { href: "/disclaimer", label: "Data & Disclaimer" },
@@ -80,7 +83,6 @@ export default function SiteFooter() {
             Village-level environmental resource assessment and carbon emission modelling for Varanasi district, built
             with IPCC Tier-1 methods on village survey data, cadastral maps and land-cover rasters.
           </p>
-          <p className="footer-muted">Smart Lab on Clean Rivers · IIT (BHU) Varanasi</p>
         </div>
         <nav aria-label="Explore">
           <h3>Explore</h3>

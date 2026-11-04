@@ -7,7 +7,8 @@ import { Layers, Plus, RefreshCw, Trash2, Upload } from "lucide-react";
 import { mutate } from "swr";
 import { errorText, refreshAll, sendApi, useEmissionGrid, useFactorStats, useRasterFactors, useVillageCadastral, wmsUrl } from "@/lib/api";
 import { fmt } from "@/lib/format";
-import type { EmissionGrid, RasterFactor, VillageFactorStats } from "@/lib/types";
+import { RASTER_GROUPS, classOf, paint, scenarioRaster, type GridEntry } from "@/lib/emissionGrid";
+import type { RasterFactor, VillageFactorStats } from "@/lib/types";
 import { useAuth } from "./AuthContext";
 
 // Leaflet needs the browser window, so the map is client-only.
@@ -25,11 +26,6 @@ const RAMPS: Record<string, string[]> = {
 const num = (v: number | null | undefined, unit?: string | null) =>
   v == null ? "–" : `${fmt(v, Math.abs(v) < 100 ? 2 : 0)}${unit ? ` ${unit}` : ""}`;
 
-/** Emission raster source -> the Carbon Lab sources (left panel) it is built from. */
-const RASTER_GROUPS: Record<string, string[]> = {
-  lpg: ["lpg"], firewood: ["firewood"], electricity: ["electricity"], transport: ["petrol"], waste: ["waste"],
-  livestock: ["cow", "goat", "sheep"],
-};
 const RASTER_OF: Record<string, string> = Object.fromEntries(
   Object.entries(RASTER_GROUPS).flatMap(([raster, keys]) => keys.map((k) => [k, raster])),
 );
@@ -37,38 +33,7 @@ const RASTER_OF: Record<string, string> = Object.fromEntries(
 /** Legend entries that are drawn (transparent "no emission" classes are hidden). */
 export const shownLegend = (f: RasterFactor) => f.legend.filter((l) => l.opacity > 0);
 
-type Entry = EmissionGrid["legends"][string][number];
-const classOf = (legend: Entry[], v: number) => legend.findIndex((l) => v < l.quantity);
-
-/** Scenario raster for the village: each source's survey cells scaled by (scenario ÷ survey) emissions for that source. */
-function scenarioRaster(grid: EmissionGrid, raster: string, ratio: Record<string, number>) {
-  const keys = raster === "total" ? Object.keys(RASTER_GROUPS) : [raster];
-  const n = grid.width * grid.height;
-  const values = new Float64Array(n);
-  for (const k of keys) {
-    const cells = grid.sources[k];
-    const r = ratio[k] ?? 1;
-    if (cells && r) for (let i = 0; i < n; i++) values[i] += cells[i] * r;
-  }
-  return values;
-}
-
-function paint(grid: EmissionGrid, values: Float64Array, legend: Entry[]): string {
-  const canvas = document.createElement("canvas");
-  canvas.width = grid.width;
-  canvas.height = grid.height;
-  const ctx = canvas.getContext("2d")!;
-  const img = ctx.createImageData(grid.width, grid.height);
-  values.forEach((v, i) => {
-    if (!grid.inside[i] || v <= 0) return;
-    const entry = legend[classOf(legend, v)] ?? legend.at(-1)!;
-    if (!entry || entry.opacity === 0) return;
-    const c = parseInt(entry.color.slice(1), 16);
-    img.data.set([(c >> 16) & 255, (c >> 8) & 255, c & 255, 255], i * 4);
-  });
-  ctx.putImageData(img, 0, 0);
-  return canvas.toDataURL();
-}
+type Entry = GridEntry;
 
 interface PanelProps {
   villageCode: string;

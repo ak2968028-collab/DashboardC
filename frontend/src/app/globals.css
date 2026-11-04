@@ -72,20 +72,20 @@ hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
 
 .main { flex: 1; min-width: 0; padding: 18px 26px 40px; }
 /* ---------- Institutional header ---------- */
-.site-header {
-  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 24px; padding: 10px 26px;
-  background: #fff; border-top: 4px solid var(--green-900); border-bottom: 1px solid var(--border);
+.site-header { background: #fff; border-bottom: 1px solid #e3e9e5; }
+.site-bar {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 20px;
+  max-width: 1360px; margin: 0 auto; padding: 10px 26px;
 }
 .site-header img { height: auto; display: block; }
-.site-header-logos { display: flex; align-items: center; gap: 14px; }
-.site-header .seal { width: 64px; }
-.site-header .iit-logo { width: 220px; }
-.site-header .slcr-logo { width: 150px; }
-.site-header-title { display: flex; align-items: center; justify-content: center; gap: 14px; text-align: center; min-width: 0; }
-.co2-icon { flex-shrink: 0; width: 56px; height: 56px; border-radius: 50%; overflow: hidden; background: #f4fbf4; box-shadow: 0 0 0 2px var(--green-50); }
-.site-header .co2-icon img { width: 100%; height: 100%; object-fit: cover; transform: scale(1.9) translateY(-2%); }
-.site-header-title h1 { margin: 0; color: var(--green-900); font-size: clamp(16px, 1.6vw, 22px); font-weight: 800; letter-spacing: 0.01em; text-transform: uppercase; }
-.site-header-title p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+.site-header-logos { display: flex; align-items: center; gap: 12px; justify-self: start; text-decoration: none; }
+.site-header .seal { width: 50px; }
+.site-header .iit-logo { width: 175px; }
+.site-header .slcr-logo { width: 140px; justify-self: end; }
+.site-header-title { display: flex; flex-direction: column; align-items: center; text-align: center; min-width: 0; }
+.site-eyebrow { font-size: 10.5px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: #0b4a6f; }
+.site-header-title h1 { margin: 3px 0 0; font-size: clamp(17px, 1.6vw, 23px); font-weight: 800; line-height: 1.2; letter-spacing: -0.005em; color: #12361a; }
+.site-underline { width: 64px; height: 3px; margin-top: 7px; border-radius: 3px; background: linear-gradient(90deg, #2e7d32, #1565c0); }
 
 /* ---------- Carbon hero ---------- */
 .carbon-hero { position: relative; overflow: hidden; border-radius: 14px; margin-bottom: 16px; color: #fff; isolation: isolate; }
@@ -232,9 +232,9 @@ select:focus, .btn:focus-visible { outline: 2px solid var(--green-700); outline-
 
 /* ---------- Responsive ---------- */
 @media (max-width: 1200px) {
-  .site-header { gap: 16px; }
-  .site-header .iit-logo { width: 170px; }
-  .site-header .slcr-logo { width: 120px; }
+  .site-bar { gap: 16px; }
+  .site-header .slcr-logo { width: 100px; }
+  .site-header .iit-logo { width: 120px; }
 }
 @media (max-width: 1180px) {
   .nav-village-pill .nav-village-co2 { display: none; }
@@ -263,13 +263,13 @@ select:focus, .btn:focus-visible { outline: 2px solid var(--green-700); outline-
   .nav-link.active::after { left: 0; right: auto; top: 8px; bottom: 8px; width: 3px; height: auto; border-radius: 0 3px 3px 0; }
   .backdrop { display: block; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.4); z-index: 1500; animation: fade-in 0.18s; }
   .main { padding: 14px 16px 32px; }
-  .site-header { grid-template-columns: auto auto; justify-content: space-between; gap: 12px; padding: 8px 16px; }
-  .site-header-title { grid-column: 1 / -1; grid-row: 2; }
-  .site-header-title p { display: none; }
-  .co2-icon { width: 40px; height: 40px; }
-  .site-header .seal { width: 44px; }
-  .site-header .iit-logo { width: 150px; }
-  .site-header .slcr-logo { width: 100px; }
+  .site-strip { padding: 4px 16px; }
+  .site-strip nav { display: none; }
+  .site-bar { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 10px; padding: 8px 12px 10px; }
+    .site-header-title { order: 3; flex-basis: 100%; }
+  .site-header .seal { width: 32px; }
+  .site-header .iit-logo { width: 110px; }
+  .site-header .slcr-logo { width: 84px; }
   .carbon-hero-body { padding: 18px; }
   .gas-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); max-width: none; }
   .grid-2, .grid-3, .grid-4, .grid-5 { grid-template-columns: minmax(0, 1fr); }
@@ -1329,3 +1329,52 @@ button.nav-link { background: none; border: none; font: inherit; cursor: pointer
 .blog-grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 @media (max-width: 1100px) { .home-duo { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 640px) { .blog-grid.two { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---------- Comparison swipe map ---------- */
+.swipe-intro { margin: -6px 0 12px; font-size: 13px; }
+.swipe-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) minmax(180px, 240px) auto; align-items: end; gap: 10px; margin-bottom: 12px; }
+.swipe-swap { height: 42px; display: grid; place-items: center; }
+.swipe-basemap { height: 38px; align-self: end; }
+.swipe-wrap { position: relative; height: 600px; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 4px rgba(16, 38, 64, 0.12); background: #f7f8fa; user-select: none; }
+.swipe-wrap.loading { display: grid; place-items: center; }
+.swipe-map { position: absolute; inset: 0; height: 100%; width: 100%; }
+.swipe-top { position: absolute; inset: 0; z-index: 400; }
+.swipe-divider { position: absolute; top: 0; bottom: 0; z-index: 800; width: 0; border-left: 3px solid #fff; box-shadow: 0 0 6px rgba(0, 0, 0, 0.45); pointer-events: none; }
+.swipe-handle {
+  position: absolute; top: 50%; left: -21px; transform: translateY(-50%); pointer-events: auto; cursor: ew-resize; touch-action: none;
+  display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 50%; border: 3px solid #fff;
+  background: #0b4a6f; color: #fff; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+.swipe-handle:focus-visible { outline: 3px solid #ffeb3b; }
+.swipe-card { position: absolute; top: 12px; z-index: 900; max-width: 230px; background: rgba(255, 255, 255, 0.95); border-radius: 10px; padding: 10px 12px; box-shadow: 0 2px 10px rgba(16, 38, 64, 0.2); pointer-events: none; }
+.swipe-card.left { left: 12px; }
+.swipe-card.right { right: 56px; text-align: right; }
+.swipe-card small { display: block; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; color: #6b7783; font-weight: 700; }
+.swipe-card b { display: block; font-size: 16px; color: #1f2a33; }
+.swipe-card dl { margin: 6px 0 0; display: grid; gap: 2px; font-size: 12px; }
+.swipe-card dl div { display: flex; justify-content: space-between; gap: 10px; }
+.swipe-card dt { color: #5b6774; }
+.swipe-card dd { margin: 0; font-weight: 700; }
+.swipe-missing { display: block; margin-top: 6px; font-size: 11px; color: #8d6e00; background: #fff8e1; border-radius: 6px; padding: 2px 6px; }
+.swipe-legend { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 16px; margin: 10px 0 26px; font-size: 13px; }
+.swipe-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.swipe-legend i { width: 14px; height: 12px; border-radius: 3px; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15); }
+.swipe-legend small { flex-basis: 100%; text-align: center; color: #6b7783; }
+@media (max-width: 1100px) {
+  .swipe-controls { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+}
+@media (max-width: 800px) {
+  .swipe-controls { grid-template-columns: minmax(0, 1fr); }
+  .swipe-swap { justify-self: center; height: 34px; width: 48px; }
+  .swipe-wrap { height: 460px; }
+  .swipe-card { max-width: 46%; padding: 8px 9px; }
+  .swipe-card.right { right: 8px; top: auto; bottom: 24px; }
+  .swipe-card dl { display: none; }
+}
+
+/* Green-blue accent line between the partner logos and the dark footer. */
+.footer-partners { border-bottom: 3px solid; border-image: linear-gradient(90deg, #1b5e20, #2e7d32 30%, #0b4a6f 70%, #1565c0) 1; }
+
+/* Keep Leaflet's internal z-indexes (400–1000) inside each map so dropdowns and menus can open over maps. */
+.leaflet-container { isolation: isolate; }
+.page-body > .toolbar { z-index: 1100; }

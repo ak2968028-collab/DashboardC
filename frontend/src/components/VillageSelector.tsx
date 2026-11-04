@@ -3,9 +3,9 @@
 import Link from "next/link";
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import {
-  ChevronDown, ChevronLeft, ChevronRight, Download, Eye, EyeOff, Layers, MapPin, Scale, Search, X,
+  ChevronDown, Eye, EyeOff, Layers, Scale, Search, X,
 } from "lucide-react";
-import { reportPdfUrl, useBlocks } from "@/lib/api";
+import { useBlocks } from "@/lib/api";
 import { interpolate, SCALES } from "@/lib/colors";
 import { fmt } from "@/lib/format";
 import type { Village } from "@/lib/types";
@@ -370,16 +370,8 @@ export function CensusCode({ code, tone = "light" }: { code: string; tone?: "lig
 
 /** Block + village selection bar shown above the dashboard pages. */
 export function VillageToolbar() {
-  const {
-    filteredVillages, selectedCode, setSelectedCode, activeVillage, showCodes, setShowCodes,
-  } = useDashboard();
+  const { filteredVillages, selectedCode, setSelectedCode } = useDashboard();
   const searchRef = useRef<HTMLInputElement>(null);
-  const index = filteredVillages.findIndex((v) => v.village_code === selectedCode);
-  const step = (delta: number) => {
-    if (!filteredVillages.length) return;
-    const next = (index + delta + filteredVillages.length) % filteredVillages.length;
-    setSelectedCode(filteredVillages[next].village_code);
-  };
 
   // "/" jumps to the village search from anywhere on the page.
   useEffect(() => {
@@ -394,6 +386,7 @@ export function VillageToolbar() {
     return () => document.removeEventListener("keydown", onKey);
   }, []);
 
+  // Kept to block + village + compare: the map, report download and village figures are in the navbar and page hero.
   return (
     <section className="toolbar" aria-label="Choose block and village">
       <BlockPicker />
@@ -402,40 +395,12 @@ export function VillageToolbar() {
           villages={filteredVillages}
           value={selectedCode}
           onChange={setSelectedCode}
-          showCodes={showCodes}
+          showCodes={false}
           inputRef={searchRef}
         />
-        <div className="stepper" role="group" aria-label="Step through villages">
-          <button type="button" className="stepper-btn" onClick={() => step(-1)} aria-label="Previous village" title="Previous village">
-            <ChevronLeft size={16} />
-          </button>
-          <span className="stepper-pos" aria-live="polite">
-            {index >= 0 ? `${(index + 1).toLocaleString()} / ${filteredVillages.length.toLocaleString()}` : "—"}
-          </span>
-          <button type="button" className="stepper-btn" onClick={() => step(1)} aria-label="Next village" title="Next village">
-            <ChevronRight size={16} />
-          </button>
-        </div>
       </div>
       <div className="toolbar-actions">
-        <button
-          type="button"
-          className={`btn toggle ${showCodes ? "on" : ""}`}
-          aria-pressed={showCodes}
-          onClick={() => setShowCodes(!showCodes)}
-          title={showCodes ? "Hide census codes" : "Show census codes"}
-        >
-          {showCodes ? <EyeOff size={16} /> : <Eye size={16} />} Codes
-        </button>
-        <Link href="/map" className="btn" title="Show on map"><MapPin size={16} /> Map</Link>
         <Link href="/comparison" className="btn"><Scale size={16} /> Compare</Link>
-        {activeVillage ? (
-          <a href={reportPdfUrl(activeVillage.village_code)} className="btn primary" download>
-            <Download size={16} /> Report
-          </a>
-        ) : (
-          <span className="btn primary disabled"><Download size={16} /> Report</span>
-        )}
       </div>
     </section>
   );
