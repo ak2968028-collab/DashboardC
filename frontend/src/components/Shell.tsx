@@ -26,8 +26,12 @@ import {
   PAGES,
   type NavPage,
 } from "./nav";
+import SiteFooter from "./SiteFooter";
 import SiteHeader from "./SiteHeader";
 import { CensusCode, VillageToolbar } from "./VillageSelector";
+
+// Policy pages linked from the footer: no village controls, and readable while the API is down.
+const LEGAL_PATHS = ["/privacy", "/terms", "/disclaimer"];
 
 export default function Shell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -49,7 +53,7 @@ export default function Shell({ children }: { children: ReactNode }) {
   }, []);
 
   // Login and role pages are work areas: no block / village selector.
-  const showControls = pathname !== "/login" && !page?.role;
+  const showControls = pathname !== "/login" && !page?.role && !LEGAL_PATHS.includes(pathname);
 
   // Close mobile navigation on route change and scroll active link into view
   useEffect(() => {
@@ -209,14 +213,9 @@ export default function Shell({ children }: { children: ReactNode }) {
         {(pathname === "/" || pathname === "/carbon") && <CarbonHero />}
         {showControls && <VillageToolbar />}
         {page?.needsVillage && <VillageBanner />}
-        <DataGate>{children}</DataGate>
-        <footer className="footer">
-          <ActiveVillageInfo />
-          <p className="caption">
-            Varanasi Village Carbon Dashboard v2.0 · M.Tech Research Project · Survey of India &amp; IPCC Tier-1
-          </p>
-        </footer>
+        {LEGAL_PATHS.includes(pathname) ? children : <DataGate>{children}</DataGate>}
       </main>
+      <SiteFooter />
     </div>
   );
 }
@@ -397,21 +396,6 @@ function NavDropdown({
   );
 }
 
-function ActiveVillageInfo() {
-  const { activeVillage: v } = useDashboard();
-  if (!v) return null;
-  return (
-    <dl className="info-list">
-      <div><dt>Active Village</dt><dd>{v.village_name}</dd></div>
-      <div><dt>Block</dt><dd>{v.block_name}</dd></div>
-      <div><dt>Census Code</dt><dd><CensusCode code={v.village_code} /></dd></div>
-      <div><dt>Residents</dt><dd>{fmt(v.total_residents)}</dd></div>
-      <div><dt>Total Area</dt><dd>{fmt(v.total_area_ha, 1)} ha</dd></div>
-      <div><dt>Total Carbon</dt><dd><b>{fmt(v.total_co2e_t_yr, 1)} t CO₂e/yr</b></dd></div>
-      <div><dt>Per Capita</dt><dd>{fmt(v.per_capita_co2e_kg_yr, 1)} kg/yr</dd></div>
-    </dl>
-  );
-}
 
 function VillageBanner() {
   const { activeVillage: v } = useDashboard();
