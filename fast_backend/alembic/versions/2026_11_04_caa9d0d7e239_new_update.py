@@ -1,8 +1,8 @@
 """new update
 
-Revision ID: 397047c14eb8
+Revision ID: caa9d0d7e239
 Revises: 
-Create Date: 2026-10-31 04:46:15.894497
+Create Date: 2026-11-04 10:59:43.837207
 
 """
 from typing import Sequence, Union
@@ -14,7 +14,7 @@ from geoalchemy2 import Geometry
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = '397047c14eb8'
+revision: str = 'caa9d0d7e239'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -261,6 +261,25 @@ def upgrade() -> None:
     sa.UniqueConstraint('username'),
     sa.UniqueConstraint('village_code')
     )
+    op.create_table('blog_posts',
+    sa.Column('slug', sa.String(), nullable=False),
+    sa.Column('title', sa.String(), nullable=False),
+    sa.Column('excerpt', sa.Text(), nullable=True),
+    sa.Column('body', sa.Text(), nullable=False),
+    sa.Column('category', sa.String(), server_default=sa.text("'Update'"), nullable=False),
+    sa.Column('published', sa.Boolean(), server_default=sa.text('false'), nullable=False),
+    sa.Column('published_at', sa.DateTime(), nullable=True),
+    sa.Column('author_id', sa.Integer(), nullable=True),
+    sa.Column('cover_filename', sa.String(), nullable=True),
+    sa.Column('cover_type', sa.String(), nullable=True),
+    sa.Column('cover_data', sa.LargeBinary(), nullable=True),
+    sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
+    sa.Column('modified_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
+    sa.ForeignKeyConstraint(['author_id'], ['users.id'], ondelete='SET NULL'),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('slug')
+    )
     op.create_table('data_submissions',
     sa.Column('village_code', sa.String(), nullable=False),
     sa.Column('submitted_by', sa.Integer(), nullable=True),
@@ -301,6 +320,7 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_data_submissions_village_code'), table_name='data_submissions')
     op.drop_index(op.f('ix_data_submissions_status'), table_name='data_submissions')
     op.drop_table('data_submissions')
+    op.drop_table('blog_posts')
     op.drop_table('users')
     op.drop_index(op.f('ix_census_villages_village_name'), table_name='census_villages')
     op.drop_index(op.f('ix_census_villages_subdistrict_code'), table_name='census_villages')
