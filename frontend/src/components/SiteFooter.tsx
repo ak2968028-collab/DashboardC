@@ -80,7 +80,7 @@ export default function SiteFooter() {
             Village-level environmental resource assessment and carbon emission modelling for Varanasi district, built
             with IPCC Tier-1 methods on village survey data, cadastral maps and land-cover rasters.
           </p>
-          <p className="footer-muted">Smart Lab on Clean Rivers · IIT (BHU) Varanasi · M.Tech research project</p>
+          <p className="footer-muted">Smart Lab on Clean Rivers · IIT (BHU) Varanasi</p>
         </div>
         <nav aria-label="Explore">
           <h3>Explore</h3>

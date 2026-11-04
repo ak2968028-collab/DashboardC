@@ -125,7 +125,7 @@ export default function OverviewPage() {
   const { allVillages, setSelectedCode, showCodes } = useDashboard();
   const { data: s } = useSummary();
   const { data: blocks = [] } = useBlocks();
-  const { data: posts = [] } = useBlogPosts(3);
+  const { data: posts = [] } = useBlogPosts(2);
   const [block, setBlock] = useState(ALL_BLOCKS);
   // Livestock is the largest source in almost every village, so the map opens on emission level instead.
   const [colorBy, setColorBy] = useState<ColorBy>("total");
@@ -307,28 +307,30 @@ export default function OverviewPage() {
         <Link href="/ranking" className="home-view-all">View all villages <ArrowRight size={16} /></Link>
       </section>
 
-      {/* ── Blog ── */}
+      {/* ── Updates & Watch (one row) ── */}
       <section className="home-section">
-        <div className="home-row-head">
-          <div>
-            <h2 className="home-h2">Recent Updates</h2>
-            <p className="home-sub">News, field reports and research updates from the project team.</p>
+        <div className="home-duo">
+          <div className="home-duo-main">
+            <div className="home-row-head">
+              <div>
+                <h2 className="home-h2">Recent Updates</h2>
+                <p className="home-sub">News, field reports and research updates from the project team.</p>
+              </div>
+              {user?.role === "admin" && <Link href="/blog/new" className="btn primary"><PenSquare size={15} /> Write a post</Link>}
+            </div>
+            {posts.length ? (
+              <div className="blog-grid two">{posts.slice(0, 2).map((p) => <BlogCard key={p.id} post={p} />)}</div>
+            ) : (
+              <div className="blog-empty small"><p>No updates published yet.</p></div>
+            )}
+            <Link href="/blog" className="home-view-all">View all updates <ArrowRight size={16} /></Link>
           </div>
-          {user?.role === "admin" && <Link href="/blog/new" className="btn primary"><PenSquare size={15} /> Write a post</Link>}
+          <div className="home-duo-side">
+            <h2 className="home-h2">Watch</h2>
+            <p className="home-sub">Carbon in motion — from village smoke to the global atmosphere.</p>
+            <div className="home-watch"><MiniVideo videos={VIDEOS} /></div>
+          </div>
         </div>
-        {posts.length ? (
-          <div className="blog-grid three">{posts.map((p) => <BlogCard key={p.id} post={p} />)}</div>
-        ) : (
-          <div className="blog-empty small"><p>No updates published yet.</p></div>
-        )}
-        <Link href="/blog" className="home-view-all">View all updates <ArrowRight size={16} /></Link>
-      </section>
-
-      {/* ── Watch ── */}
-      <section className="home-section tint">
-        <h2 className="home-h2">Watch</h2>
-        <p className="home-sub">Carbon in motion — from village smoke to the global atmosphere.</p>
-        <div className="home-watch"><MiniVideo videos={VIDEOS} /></div>
       </section>
 
       {/* ── Resources ── */}

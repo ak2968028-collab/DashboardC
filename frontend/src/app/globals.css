@@ -1320,3 +1320,12 @@ button.nav-link { background: none; border: none; font: inherit; cursor: pointer
 .banner-name { display: inline-flex; align-items: center; gap: 6px; font-size: 18px; font-weight: 700; }
 .banner-meta { margin-left: 12px; font-size: 13px; opacity: 0.9; }
 .banner-pill { font-size: 14px; background: rgba(255, 255, 255, 0.2); padding: 4px 10px; border-radius: 4px; }
+
+/* Home: Recent Updates and Watch side by side. */
+.home-duo { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(320px, 1fr); gap: 28px; align-items: start; }
+.home-duo .home-h2, .home-duo .home-sub { margin-left: 0; }
+.home-duo-main, .home-duo-side { min-width: 0; }
+.home-duo .home-watch { max-width: none !important; margin: 0; }
+.blog-grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 1100px) { .home-duo { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 640px) { .blog-grid.two { grid-template-columns: minmax(0, 1fr); } }
