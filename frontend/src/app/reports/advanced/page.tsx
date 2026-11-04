@@ -63,8 +63,10 @@ function Download({ village }: { village: VillageDetails }) {
   return (
     <Card title={`Advanced Report · ${village.village_name}`}>
       <p className="caption">
-        About 8 pages, A4: executive summary, full inventory, district emission map, benchmarking, reduction
-        opportunities, data quality checks and methodology annex. Choose another village with the selector above.
+        About 13 pages, A4: executive summary, full inventory, district emission map, the village in 3D with land
+        cover, emission maps inside the village, benchmarking and district ranking, reduction opportunities and Carbon
+        Lab scenarios, data quality checks, data still needed and the methodology annex. Choose another village with the
+        selector above.
       </p>
       {own && (
         <p>

@@ -54,6 +54,27 @@ export interface VillageDetails extends Village {
 
 type Point = [number, number];
 
+export interface BlogPost {
+  id: number;
+  slug: string;
+  title: string;
+  excerpt: string | null;
+  category: string;
+  published: boolean;
+  published_at: string | null;
+  created_at: string;
+  modified_at: string;
+  has_cover: boolean;
+  cover_filename: string | null;
+  author: string | null;
+  author_name: string | null;
+}
+
+export interface BlogPostDetails extends BlogPost {
+  /** Plain text: "## " headings, "- " bullets, blank lines between paragraphs. */
+  body: string;
+}
+
 export type ParcelUse = "builtup" | "cropland" | "trees" | "water" | "rangeland" | "bare" | "land";
 
 export interface House3D {

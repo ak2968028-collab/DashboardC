@@ -23,12 +23,12 @@ interface Props {
 }
 
 const NO_DATA = "#cfd8dc";
-const featureCode = (f: Feature) => String(f.properties?.village_code ?? "").trim();
+export const featureCode = (f: Feature) => String(f.properties?.village_code ?? "").trim();
 
 export const bandOf = (bands: RankBand[], rank: number) => bands.find((b) => rank >= b.from && rank <= b.to);
 
 /** Village boundaries: dissolved khasra parcels where available, census boundaries for the rest. */
-function useBoundaries(): FeatureCollection | null {
+export function useBoundaries(): FeatureCollection | null {
   const { data: census } = useGeoJson("villages");
   const { data: cadastral } = useGeoJson("villages_cadastral");
   return useMemo(() => {

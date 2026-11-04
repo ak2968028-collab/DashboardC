@@ -12,9 +12,14 @@ export const REPORT_SECTIONS: [string, string, boolean][] = [
   ["Full village inventory", "Every survey value: demography, land use, water, energy, transport, waste and livestock — per year and per household.", false],
   ["Calculation for each source", "Activity, emission factor and result line by line, so figures can be checked.", false],
   ["District emission map", "All village polygons shaded by emissions per person, showing high- and low-emission clusters.", false],
+  ["The village in 3D (Carbon Lab)", "3D and plan views built from the khasra parcels, coloured by satellite land cover, with houses on the built-up land.", false],
+  ["Emission maps inside the village", "Where each source's emissions fall within the village (per-hectare cells from the GeoServer emission rasters).", false],
   ["Benchmarking", "Village vs. its block vs. the district, per person and per source, and the village's rank.", false],
+  ["District ranking", "The village's rank among all villages for seven indicators, as on the Village Ranking map.", false],
   ["Reduction opportunities", "Savings from 10% and 25% cuts per source, practical actions and relevant government schemes.", false],
+  ["Carbon Lab scenarios", "Clean cooking, rooftop solar, e-mobility, composting, all four together, and unchecked growth.", false],
   ["Data source & quality checks", "Where the data came from, the last approved Pradhan update, and consistency warnings.", false],
+  ["Data still needed", "What is estimated today and which data would make the next edition more accurate.", false],
   ["Annex: factors, method & glossary", "Every emission factor with its reference, the IPCC Tier 1 method and key terms.", false],
 ];
 

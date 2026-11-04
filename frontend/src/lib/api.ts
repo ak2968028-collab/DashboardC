@@ -2,7 +2,7 @@ import useSWR, { mutate } from "swr";
 import type { FeatureCollection } from "geojson";
 import type {
   CensusVillage, District, EmissionFactor, RasterFactor, RasterLayer, State, Submission, SubmissionDetails, Subdistrict, Summary,
-  SupervisorVillage, SurveyField, User, Village, VillageDetails, VillageFactorStats, VillageScene, VillageElevation, EmissionGrid,
+  SupervisorVillage, SurveyField, User, Village, VillageDetails, VillageFactorStats, VillageScene, VillageElevation, EmissionGrid, BlogPost, BlogPostDetails,
 } from "./types";
 
 export class ApiError extends Error {
@@ -104,6 +104,16 @@ export const useVillageCadastral = (code: string | null) =>
 /** The village's cells of each source emission raster, for rescaling to the Carbon Lab scenario. */
 export const useEmissionGrid = (village: string | null) =>
   useSWR<EmissionGrid>(village ? `/api/geo/emission-grid?village=${village}` : null, fetcher, { revalidateOnFocus: false, shouldRetryOnError: false });
+
+/** Published blog posts (newest first); admins use the manage list, which includes drafts. */
+export const useBlogPosts = (limit?: number) => useSWR<BlogPost[]>(`/api/blog${limit ? `?limit=${limit}` : ""}`, fetcher);
+export const useManagedPosts = (enabled: boolean) => useSWR<BlogPost[]>(enabled ? "/api/blog/manage" : null, authFetcher);
+export const useBlogPost = (slug: string | null, asAdmin = false) =>
+  useSWR<BlogPostDetails>(slug ? (asAdmin ? `/api/blog/manage/${slug}` : `/api/blog/${slug}`) : null, asAdmin ? authFetcher : fetcher, {
+    shouldRetryOnError: false,
+  });
+export const blogCoverUrl = (p: Pick<BlogPost, "slug" | "has_cover" | "modified_at">) =>
+  p.has_cover ? `/api/blog/${p.slug}/cover?v=${encodeURIComponent(p.modified_at)}` : null;
 
 /** Raster factors listed from GeoServer (curated + added from the dashboard). */
 export const useRasterFactors = () => useSWR<RasterFactor[]>("/api/geo/factors", fetcher, { revalidateOnFocus: false });

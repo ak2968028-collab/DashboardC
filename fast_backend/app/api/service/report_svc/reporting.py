@@ -2,8 +2,9 @@
 # app/api/service/report_svc/reporting.py
 # Village PDF reports (ReportLab):
 #   basic    - public summary: purpose, profile, location maps, carbon footprint
-#   advanced - for logged-in Pradhans / admins: full inventory, district emission map, benchmarking,
-#              reduction opportunities, data provenance and methodology annex
+#   advanced - for logged-in Pradhans / admins: full inventory, district emission map, the Carbon Lab 3D village
+#              (cadastral parcels + LULC), emission rasters inside the village, benchmarking, district ranking,
+#              reduction opportunities and scenarios, data provenance, data needs and methodology annex
 # ====================================================================
 import io
 
@@ -14,6 +15,9 @@ from reportlab.platypus import (
     CondPageBreak, KeepTogether, PageBreak, SimpleDocTemplate, Spacer, Table, TableStyle,
 )
 
+from app.api.service.report_svc.lab_parts import (
+    USE_LABELS, emission_cell_map, emission_legend, landcover_legend, plan_view, scenario_bars, village_3d,
+)
 from app.api.service.report_svc.pdf_parts import (
     Banner, P, PageDecor, PhotoStrip, bullets, callout, choropleth_map, comparison_bars,
     data_table, fmt, kpi_tiles, land_bar, location_map, sector_pie, village_map,
@@ -115,6 +119,10 @@ def _purpose(level, v):
             "surveyed villages.",
             "<b>Act:</b> estimate how much a given reduction in each activity would save, with practical actions and "
             "relevant government schemes.",
+            "<b>See:</b> a 3D view of the village built from its cadastral (khasra) parcels and satellite land cover, and "
+            "maps of where each source's emissions fall inside the village.",
+            "<b>Test:</b> Carbon Lab scenarios such as clean cooking, rooftop solar and composting show how much the "
+            "village total could change.",
             "<b>Track:</b> record the data source and last update, so that next year's report can show progress after "
             "the Pradhan submits new survey figures through the dashboard.",
             "<b>Explain:</b> the annex lists every emission factor, formula and reference, so the numbers can be checked "
@@ -349,7 +357,7 @@ def _benchmark(v, bench):
         [w * 0.37, w * 0.21, w * 0.21, w * 0.21], total_rows=1,
     )
     parts = [
-        P("5. Benchmarking", "h1"),
+        P("7. Benchmarking", "h1"),
         P("<i>Purpose:</i> a village's total emissions grow with its size, so fair comparison uses emissions <b>per "
           "person</b>. The block and district figures are totals divided by total population (large villages weigh "
           "more). Sources where the village is well above the block show where it differs from its neighbours.", "small"),
@@ -376,7 +384,7 @@ def _opportunities(v):
         [w * 0.24, w * 0.18, w * 0.2, w * 0.2, w * 0.18],
     )
     return [
-        P("6. Reduction opportunities", "h1"),
+        P("9. Reduction opportunities", "h1"),
         P("<i>Purpose:</i> turns the footprint into targets. Emissions in this model are proportional to activity, so a "
           "10% cut in, for example, firewood use removes 10% of the firewood emissions. Sources are listed from largest "
           "to smallest: the first rows give the biggest savings for the same effort.", "small"),
@@ -389,7 +397,7 @@ def _opportunities(v):
 
 def _why_it_matters():
     return [KeepTogether([
-        P("7. Why village carbon accounting matters", "h1"),
+        P("11. Why village carbon accounting matters", "h1"),
         PhotoStrip(CONTENT_WIDTH, "co2_swirl.jpg", "Visualisation of carbon dioxide spreading through the global atmosphere."),
         Spacer(1, 6),
         P("Greenhouse gases from millions of small sources — kitchens, pumps, vehicles, animals and waste dumps — add up "
@@ -425,7 +433,7 @@ def _provenance(v, provenance, warnings):
         ]
     w = CONTENT_WIDTH
     parts = [
-        P("8. Data source and quality checks", "h1"),
+        P("12. Data source and quality checks", "h1"),
         P("<i>Purpose:</i> records where the numbers come from and whether they are internally consistent, so the report "
           "can be trusted and compared with future editions.", "small"),
         data_table(rows, [w * 0.3, w * 0.7], header=False),
@@ -470,13 +478,238 @@ def _annex(factor_table):
     ]
 
 
+# ---------- Carbon Lab sections (advanced) ----------
+
+# Inventory column -> emission raster source key (lab_parts / emission rasters).
+RASTER_SOURCES = [
+    ("LPG cooking", "lpg"), ("Firewood (chulha)", "firewood"), ("Grid electricity", "electricity"),
+    ("Motorbike petrol", "transport"), ("Solid waste", "waste"), ("Livestock", "livestock"),
+]
+
+
+def _village_3d(v, scene):
+    w = CONTENT_WIDTH
+    head = [
+        P("5. The village in 3D: layout and land cover", "h1"),
+        P("<i>Purpose:</i> the same view as the dashboard's Carbon Lab. The village is rebuilt from its cadastral "
+          "(khasra) parcels; each parcel is coloured by the land cover the satellite-based LULC map shows inside it, and "
+          "houses are placed on the built-up land. It shows where people live, farm and graze, which is where most "
+          "emissions start, and helps place projects such as biogas plants, compost pits or solar pumps.", "small"),
+    ]
+    if not scene:
+        return [KeepTogether(head + [callout(
+            "No cadastral parcel map is available for this village yet, so the dashboard shows an illustrative village. "
+            "Adding the village's khasra map would enable this section.")])]
+
+    uses = [u for u in USE_LABELS if any(p["use"] == u for p in scene["parcels"])]
+    lc = scene.get("landcover_ha") or {}
+    lc_total = sum(lc.values()) or 1
+    from_lulc = scene.get("landcover_source", "").startswith("LULC")
+    lc_rows = [["Land cover", "Area (ha)", "Share"]] + [
+        [USE_LABELS.get(u, u), fmt(ha, 1), _pct(ha, lc_total)] for u, ha in sorted(lc.items(), key=lambda kv: -kv[1])
+    ]
+    if not from_lulc:
+        lc_rows = [["Land cover", "Area (ha)", "Share"], ["Built-up (estimated)", fmt(scene["builtup_est_ha"], 1), "—"]]
+    facts = [
+        ["Khasra parcels", f"{scene['parcel_count']:,}"],
+        ["Village extent", f"{fmt(scene['extent_m'][0] / 1000, 2)} × {fmt(scene['extent_m'][1] / 1000, 2)} km"],
+        ["Built-up land (LULC)" if from_lulc else "Built-up land (estimated)", f"{fmt(scene['builtup_est_ha'], 1)} ha "
+         f"(survey records: {fmt(v.get('builtup_area_ha'), 1)} ha)"],
+        ["Houses drawn", f"{len(scene.get('houses', [])):,}"
+         + (f" (1 marker ≈ {fmt(scene['households_per_house'], 1)} households)" if scene.get("households_per_house", 0) > 1 else "")],
+        ["Land-cover source", scene.get("landcover_source", "—")],
+    ]
+    if scene.get("elevation_relief_m") is not None and scene.get("elevation_base_m"):
+        facts.append(["Ground elevation", f"about {fmt(scene['elevation_base_m'])} m above sea level, "
+                      f"relief {fmt(scene['elevation_relief_m'], 1)} m ({scene.get('elevation_source', 'DEM')})"])
+    half = (w - 10) / 2
+    side = Table([[plan_view(scene, half, 170), data_table(lc_rows, [half * 0.5, half * 0.25, half * 0.25])]],
+                 colWidths=[half + 5, half + 5])
+    side.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0)]))
+    return [KeepTogether(
+        head + [
+            village_3d(scene, w, 290),
+            landcover_legend(w, uses),
+            P(f"Figure 1. 3D view of {v['village_name']} from {scene['parcel_count']:,} khasra parcels (north towards the "
+              "top left, see arrow). "
+              "House sizes are exaggerated so they remain visible; their exact positions, storeys and roof types are "
+              "illustrative.", "caption"),
+            P("Plan view and land cover", "h2"),
+            side,
+            P("Figure 2. Plan view: parcels by land cover, red squares = house markers. Table: land cover inside the "
+              "village parcels.", "caption"),
+            data_table(facts, [w * 0.3, w * 0.7], header=False),
+        ])]
+
+
+def _emission_maps(v, grid, layers):
+    w = CONTENT_WIDTH
+    head = [
+        P("6. Where emissions come from inside the village", "h1"),
+        P("<i>Purpose:</i> the village totals above are spread over the land where each activity happens, using the "
+          "LULC land cover: household fuel, electricity and most waste on built-up land, livestock on grazing land, "
+          "cropland and homesteads. The maps show which parts of the village carry the most emissions per hectare "
+          "and so where action on the ground would matter most. Each source's cells add up to its village total.", "small"),
+    ]
+    if not grid:
+        return [KeepTogether(head + [callout("The emission rasters have not been generated on GeoServer yet; an admin can "
+                                             "build them from the dashboard (Carbon Lab → Rebuild from latest data).")])]
+    # The cadastral boundary the cells were built from (census boundary where the village has no parcels).
+    import json
+
+    import shapely
+
+    from app.api.service.geoserver_svc.factors import _village_shapes
+    shape = _village_shapes().get(v["village_code"])
+    boundary = json.loads(shapely.to_geojson(shape)) if shape is not None else (layers.get("village") or {}).get("geom")
+    total_map = emission_cell_map(grid, "total", boundary, w, 260, "All sources (t CO2e per hectare per year)")
+    cell = (w - 20) / 3
+    small = [emission_cell_map(grid, key, boundary, cell, 150, title) for title, key in RASTER_SOURCES]
+    small_grid = Table([small[:3], small[3:]], colWidths=[cell + 6.6] * 3)
+    small_grid.setStyle(TableStyle([("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                                    ("TOPPADDING", (0, 0), (-1, -1), 3)]))
+    from app.api.service.geoserver_svc.emission_rasters import ALLOCATION
+    alloc = [["Source", "Land cover it is placed on"]] + [
+        [title, ", ".join(f"{lab} {wt:.0%}" for lab, wt in ALLOCATION[key][2].items())]
+        for title, key in RASTER_SOURCES
+    ]
+    return [
+        KeepTogether(head + [
+            total_map,
+            emission_legend(grid, "total", w),
+            P("Map 4. Total emissions per hectare inside the village (about 98 m cells); village boundary in green. "
+              "Classes are shared by all villages in the district, so colours can be compared between reports.", "caption"),
+        ]),
+        KeepTogether([
+            P("By source", "h2"),
+            small_grid,
+            P("Map 5. Emissions per hectare for each source (same colour scale family: light = low, dark red = high; "
+              "the figure in each corner is the source's village total).", "caption"),
+            data_table(alloc, [w * 0.3, w * 0.7]),
+            P("Cells are generated from the survey inventory and published on the project's GeoServer. Villages outside "
+              "the LULC coverage are spread evenly over the village.", "small"),
+        ]),
+    ]
+
+
+# Metrics ranked in the dashboard's Village Ranking page.
+RANK_METRICS = [
+    ("Total carbon emission", "total_co2e_t_yr", "t CO2e/yr", 1),
+    ("Per-capita carbon", "per_capita_co2e_kg_yr", "kg CO2e/yr", 1),
+    ("Population", "total_residents", "residents", 0),
+    ("Agricultural land", "agri_area_ha", "ha", 1),
+    ("Electricity use", "electricity_monthly_kwh", "kWh/month", 0),
+    ("Solid waste", "waste_monthly_kg", "kg/month", 0),
+    ("Livestock", "total_livestock", "head", 0),
+]
+RANK_BANDS = [10, 25, 50, 100, 250, 500]
+
+
+def _band(rank, n):
+    lo = 1
+    for hi in [b for b in RANK_BANDS if b < n] + [n]:
+        if rank <= hi:
+            return f"{lo}–{hi}"
+        lo = hi + 1
+    return "—"
+
+
+def _ranking(v, villages):
+    if not villages:
+        return []
+    w = CONTENT_WIDTH
+    block = [x for x in villages if x.get("block_name") == v.get("block_name")]
+    rows = [["Metric", "This village", "District rank", "Rank band", "Block rank"]]
+    for label, col, unit, dec in RANK_METRICS:
+        val = v.get(col)
+        if val is None:
+            rows.append([label, "no data", "—", "—", "—"])
+            continue
+        pool = [x[col] for x in villages if x.get(col) is not None]
+        bpool = [x[col] for x in block if x.get(col) is not None]
+        rank = 1 + sum(1 for x in pool if x > val)
+        brank = 1 + sum(1 for x in bpool if x > val)
+        rows.append([label, f"{fmt(val, dec)} {unit}", f"{rank:,} of {len(pool):,}", _band(rank, len(pool)),
+                     f"{brank} of {len(bpool)}"])
+    return [KeepTogether([
+        P("8. District ranking", "h1"),
+        P("<i>Purpose:</i> places the village among all surveyed villages for each indicator, as on the dashboard's "
+          "Village Ranking map. Here <b>rank 1 = highest value</b> (for emissions, the largest emitter); the rank band is "
+          "the colour class used on the ranking map.", "small"),
+        data_table(rows, [w * 0.24, w * 0.22, w * 0.2, w * 0.14, w * 0.2]),
+    ])]
+
+
+def _scenarios(v, factors):
+    """Carbon Lab scenarios: emissions are proportional to activity, so each scenario rescales one or more sources."""
+    e = {key: v.get(key) or 0 for _, key, *_ in SECTORS}
+    base = sum(e.values())
+    lpg_factor = (factors or {}).get("lpg", 2.984)
+    # 1 kg LPG gives about as much useful cooking heat as ~11.5 kg of wood in a traditional chulha.
+    extra_lpg = (v.get("firewood_monthly_kg") or 0) / 11.5 * 12 * lpg_factor / 1000
+
+    def total(**changes):
+        return sum(changes.get(k, e[k]) for k in e)
+
+    clean = {"firewood_co2e_t_yr": 0, "lpg_co2e_t_yr": e["lpg_co2e_t_yr"] + extra_lpg}
+    solar = {"electricity_co2e_t_yr": e["electricity_co2e_t_yr"] * 0.4}
+    emob = {"transport_co2e_t_yr": e["transport_co2e_t_yr"] * 0.3}
+    compost = {"waste_co2e_t_yr": e["waste_co2e_t_yr"] * 0.4}
+    scenarios = [
+        ("Clean cooking", "All firewood replaced by LPG (1 kg LPG ≈ 11.5 kg wood of useful heat)", total(**clean)),
+        ("Rooftop solar", "Grid electricity use cut by 60%", total(**solar)),
+        ("E-mobility", "Petrol use cut by 70% (electric two-wheelers, e-rickshaws)", total(**emob)),
+        ("Composting", "Dumped waste cut by 60% (segregation and composting)", total(**compost)),
+        ("All four together", "Clean cooking + rooftop solar + e-mobility + composting", total(**clean, **solar, **emob, **compost)),
+        ("Unchecked growth", "Every activity grows by 50%", base * 1.5),
+    ]
+    pop = v.get("total_residents") or 0
+    w = CONTENT_WIDTH
+    table = data_table(
+        [["Scenario", "What changes", "Village total", "Change", "Per person"]]
+        + [[n, desc, f"{fmt(t, 1)} t", f"{'+' if t > base else ''}{fmt(t - base, 1)} t ({_pct(abs(t - base), base)})",
+            f"{fmt(t * 1000 / pop) if pop else '—'} kg"] for n, desc, t in scenarios],
+        [w * 0.16, w * 0.38, w * 0.15, w * 0.17, w * 0.14],
+    )
+    return [
+        P("10. Carbon Lab scenarios", "h1"),
+        P(f"<i>Purpose:</i> the Carbon Lab on the dashboard lets you move each activity with sliders. These are its "
+          f"ready-made scenarios applied to {v['village_name']}'s survey values (now {fmt(base, 1)} t CO<sub>2</sub>e per "
+          "year). They show the size of the prize for each programme and how much is at stake if activity simply grows.", "small"),
+        table,
+        Spacer(1, 6),
+        scenario_bars([(n, t) for n, _, t in scenarios], base, w, 150),
+        P("Scenario effects use the same emission factors as the inventory and assume emissions scale with activity. "
+          "They are planning estimates, not forecasts; the dashboard's Carbon Lab can try any other combination.", "small"),
+    ]
+
+
+def _data_needs():
+    return [KeepTogether([
+        P("13. Data that would make this report more accurate", "h1"),
+        P("<i>Purpose:</i> lists what is estimated today and the data that would replace the estimates in the next edition.", "small"),
+        *bullets([
+            "<b>Missing emission sources:</b> dung cakes, crop-residue burning, diesel pumps and tractors, fertiliser use "
+            "and buffalo numbers are not yet surveyed, so the total is likely an underestimate.",
+            "<b>Building footprints and heights</b> (e.g. Google Open Buildings) to replace the house markers in the 3D view "
+            "and place household emissions on real buildings.",
+            "<b>Land cover for the whole district and a 30 m elevation model</b> (Copernicus or CartoDEM) — the current "
+            "elevation layer is coarse (about 1 km).",
+            "<b>Roads, water bodies and waste-dump locations</b> (OpenStreetMap, PMGSY, a short field survey) to place "
+            "transport and waste emissions exactly.",
+            "<b>Seasonal survey values</b> and a 'not surveyed' flag instead of blank entries, which are counted as zero today.",
+        ], "small"),
+    ])]
+
+
 # ---------- Report assembly ----------
 
 def generate_village_pdf(v, context, level=BASIC):
     """Builds the basic or advanced village report and returns the PDF bytes.
 
     context: layers (map GeoJSON), bench (ranks & per-capita averages) and, for the advanced report,
-    factors ({key: value}), factor_table (rows), provenance (last approved submission or None), warnings.
+    factors ({key: value}), factor_table (rows), provenance (last approved submission or None), warnings,
+    scene (Carbon Lab cadastral layout or None), grid (emission raster cells or None), villages (all village records).
     """
     buffer = io.BytesIO()
     label = "Basic Village Report" if level == BASIC else "Advanced Village Report — for Pradhan / Gram Panchayat"
@@ -502,10 +735,16 @@ def generate_village_pdf(v, context, level=BASIC):
         story += [PageBreak()] + _inventory(v)
         story += [PageBreak()] + _footprint(v, bench, level) + _emission_detail(v, context["factors"])
         story += [PageBreak()] + _spatial(layers)
-        story += _benchmark(v, bench)
+        story += [PageBreak()] + _village_3d(v, context.get("scene"))
+        # Without parcels section 5 is a short note, so section 6 can follow on the same page.
+        story += [PageBreak() if context.get("scene") else CondPageBreak(420)] + _emission_maps(v, context.get("grid"), layers)
+        story += [PageBreak()] + _benchmark(v, bench)
+        story += [CondPageBreak(260)] + _ranking(v, context.get("villages") or [])
         story += [CondPageBreak(300)] + _opportunities(v)
+        story += [CondPageBreak(320)] + _scenarios(v, context.get("factors"))
         story += [Spacer(1, 6)] + _why_it_matters()
         story += [CondPageBreak(200)] + _provenance(v, context.get("provenance"), _land_warnings(v) + (context.get("warnings") or []))
+        story += [CondPageBreak(180)] + _data_needs()
         story += _annex(context["factor_table"])
         story += _disclaimer(v, level)
 

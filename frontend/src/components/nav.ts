@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   Leaf,
   Map,
+  Newspaper,
   Scale,
   Settings,
   ShieldCheck,
@@ -124,6 +125,15 @@ export const PAGES: readonly NavPage[] = [
     hint: "Interactive GIS satellite boundaries & spatial overlays",
     accentColor: "#0284c7",
     keywords: ["gis", "map", "satellite", "boundaries", "spatial", "spatial data", "location"],
+  },
+  {
+    href: "/blog",
+    label: "Blog",
+    icon: Newspaper,
+    needsVillage: false,
+    hint: "News, field reports and research updates from the project team",
+    accentColor: "#0d47a1",
+    keywords: ["blog", "news", "updates", "articles", "posts"],
   },
 
   // ── Sectors: 6 Rural Environmental Domains ─────────────────────────────────
@@ -243,7 +253,7 @@ export const PAGES: readonly NavPage[] = [
     icon: Trophy,
     needsVillage: false,
     group: "Analytics",
-    hint: "District leaderboard ranked by per-capita carbon efficiency",
+    hint: "Map and table of all villages ranked by emissions, population, land, energy, waste or livestock",
     badge: "Leaderboard",
     badgeVariant: "warning",
     accentColor: "#b45309",

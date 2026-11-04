@@ -1,11 +1,13 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import type { VillageDetails } from "@/lib/types";
 import { useDashboard } from "./DashboardContext";
 
+/** Section heading under the page hero; a leading emoji in plain-text titles is dropped for the cleaner look. */
 export function PageTitle({ children }: { children: ReactNode }) {
-  return <h3 className="page-title">{children}</h3>;
+  const text = typeof children === "string" ? children.replace(/^[^\p{L}\p{N}]+/u, "") : children;
+  return <h2 className="page-title">{text}</h2>;
 }
 
 export function Badge({ kind, children }: { kind: "observed" | "derived"; children: ReactNode }) {
@@ -15,7 +17,7 @@ export function Badge({ kind, children }: { kind: "observed" | "derived"; childr
 /** Bordered KPI card. */
 export function MetricCard({ label, value, sub, color }: { label: string; value: ReactNode; sub?: ReactNode; color?: string }) {
   return (
-    <div className="metric-card" style={color ? { borderLeftColor: color } : undefined}>
+    <div className="metric-card" style={color ? ({ borderLeftColor: color, "--accent": color } as CSSProperties) : undefined}>
       <div className="metric-label">{label}</div>
       <div className="metric-val">{value}</div>
       {sub && <div className="metric-sub">{sub}</div>}

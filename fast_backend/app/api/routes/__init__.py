@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.routes import admin, auth, data_io, district, emissions, geo, locations, supervisor, villages
+from app.api.routes import admin, auth, blog, data_io, district, emissions, geo, locations, supervisor, villages
 
 app_router = APIRouter()
 
@@ -45,4 +45,9 @@ app_router.include_router(
     admin.router,
     prefix="/admin",
     tags=["Admin (users & approvals)"]
+)
+app_router.include_router(
+    blog.router,
+    prefix="/blog",
+    tags=["Blog"]
 )

@@ -6,7 +6,6 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import { createPortal } from "react-dom";
 import {
   ChevronDown,
-  Home,
   Leaf,
   Lock,
   LogIn,
@@ -26,9 +25,10 @@ import {
   PAGES,
   type NavPage,
 } from "./nav";
+import PageHero from "./PageHero";
 import SiteFooter from "./SiteFooter";
 import SiteHeader from "./SiteHeader";
-import { CensusCode, VillageToolbar } from "./VillageSelector";
+import { VillageToolbar } from "./VillageSelector";
 
 // Policy pages linked from the footer: no village controls, and readable while the API is down.
 const LEGAL_PATHS = ["/privacy", "/terms", "/disclaimer"];
@@ -53,7 +53,10 @@ export default function Shell({ children }: { children: ReactNode }) {
   }, []);
 
   // Login and role pages are work areas: no block / village selector.
-  const showControls = pathname !== "/login" && !page?.role && !LEGAL_PATHS.includes(pathname);
+  // The home page has its own hero and filters; policy pages and work areas need no village controls.
+  const isHome = pathname === "/";
+  // The block / village selector only where the page follows the selected village (and the ranking's block filter).
+  const showControls = !!page && !isHome && !page.role && (page.needsVillage || pathname === "/ranking");
 
   // Close mobile navigation on route change and scroll active link into view
   useEffect(() => {
@@ -209,11 +212,13 @@ export default function Shell({ children }: { children: ReactNode }) {
 
       {navOpen && <div className="backdrop" onClick={() => setNavOpen(false)} />}
 
-      <main className="main">
-        {(pathname === "/" || pathname === "/carbon") && <CarbonHero />}
-        {showControls && <VillageToolbar />}
-        {page?.needsVillage && <VillageBanner />}
-        {LEGAL_PATHS.includes(pathname) ? children : <DataGate>{children}</DataGate>}
+      <main className={`main ${isHome ? "main-home" : page ? "main-page" : ""}`}>
+        {!isHome && page && <PageHero page={page} />}
+        <div className={page && !isHome ? `page-body ${showControls ? "has-toolbar" : ""}` : undefined}>
+          {showControls && <VillageToolbar />}
+          {pathname === "/carbon" && <CarbonHero />}
+          {LEGAL_PATHS.includes(pathname) ? children : <DataGate>{children}</DataGate>}
+        </div>
       </main>
       <SiteFooter />
     </div>
@@ -397,23 +402,6 @@ function NavDropdown({
 }
 
 
-function VillageBanner() {
-  const { activeVillage: v } = useDashboard();
-  if (!v) return null;
-  return (
-    <div className="village-banner">
-      <div>
-        <span className="banner-name"><Home size={20} /> {v.village_name}</span>
-        <span className="banner-meta">
-          Block: <b>{v.block_name}</b> | Tehsil: <b>{v.subdistrict}</b> | Code: <CensusCode code={v.village_code} tone="dark" />
-        </span>
-      </div>
-      <span className="banner-pill">
-        🌿 <b>{fmt(v.total_co2e_t_yr, 1)} t CO₂e/yr</b> ({fmt(v.per_capita_co2e_kg_yr, 1)} kg/person)
-      </span>
-    </div>
-  );
-}
 
 function DataGate({ children }: { children: ReactNode }) {
   const { loading, error } = useDashboard();

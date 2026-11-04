@@ -29,3 +29,4 @@ from app.database.models.user import (
     PradhanCertificate,
     DataSubmission,
 )
+from app.database.models.blog import BlogPost

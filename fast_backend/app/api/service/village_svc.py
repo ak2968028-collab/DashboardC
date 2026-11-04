@@ -12,11 +12,31 @@ from app.api.service.submission_svc.submission import check_warnings
 from app.database.crud.report.async_crud import Report_crud
 from app.database.crud.user.async_crud import Submission_crud
 from app.database.crud.village.async_crud import Village_crud
+from app.conf.logging.applog import logger
 from app.database.models.user import STATUS_APPROVED
 
 
 def safe_filename(name) -> str:
     return "".join(c if c.isalnum() or c in "-_" else "_" for c in str(name))
+
+
+def _lab_context(v) -> dict:
+    """Carbon Lab data for the advanced report; each part is optional (missing parcels, GeoServer down, …)."""
+    from app.api.service.geoserver_svc.emission_rasters import village_grid
+    from app.api.service.scene_svc import build_scene
+
+    out = {"scene": None, "grid": None}
+    code = v["village_code"]
+    try:
+        if code.isdigit():
+            out["scene"] = build_scene(code, int(v.get("total_households") or 0), float(v.get("builtup_area_ha") or 0))
+    except Exception:
+        logger.exception("Advanced report: 3D village layout unavailable for %s", code)
+    try:
+        out["grid"] = village_grid(code)
+    except Exception as e:
+        logger.warning("Advanced report: emission rasters unavailable for %s (%s)", code, e)
+    return out
 
 
 class village_svc:
@@ -56,6 +76,8 @@ class village_svc:
                 "factor_table": await emission_svc.get_factor_table(db),
                 "provenance": approved[0] if approved else None,
                 "warnings": check_warnings(v),
+                "villages": await Village_crud(db).get_records(),
+                **await run_in_threadpool(_lab_context, v),
             }
         kind = "Advanced" if level == ADVANCED else "Basic"
         filename = f"{kind}_Village_Report_{safe_filename(v['village_name'])}_{v['village_code']}.pdf"

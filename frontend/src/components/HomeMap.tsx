@@ -1,0 +1,59 @@
+"use client";
+
+import "leaflet/dist/leaflet.css";
+import { useEffect, useMemo } from "react";
+import type { Feature, FeatureCollection } from "geojson";
+import { geoJSON, type Layer, type PathOptions } from "leaflet";
+import { GeoJSON, MapContainer, ScaleControl, TileLayer, useMap } from "react-leaflet";
+import { featureCode, useBoundaries } from "./RankingMap";
+
+export interface MapClass { key: string; label: string; color: string }
+
+interface Props {
+  /** Class key and tooltip HTML per village code (villages outside the filter are left out). */
+  classes: Map<string, { cls: string; tooltip: string }>;
+  legend: MapClass[];
+  onSelect: (code: string) => void;
+  styleKey: string;
+}
+
+function FitPool({ geo }: { geo: FeatureCollection | null }) {
+  const map = useMap();
+  const n = geo?.features.length;
+  useEffect(() => {
+    if (geo?.features.length) map.fitBounds(geoJSON(geo).getBounds(), { padding: [10, 10] });
+  }, [n]);
+  return null;
+}
+
+/** District overview map: each village coloured by a category (dominant source, emission level…). */
+export default function HomeMap({ classes, legend, onSelect, styleKey }: Props) {
+  const boundaries = useBoundaries();
+  const pool = useMemo<FeatureCollection | null>(() => boundaries && {
+    ...boundaries, features: boundaries.features.filter((f) => classes.has(featureCode(f))),
+  }, [boundaries, classes]);
+  const colorOf = useMemo(() => new Map(legend.map((l) => [l.key, l.color])), [legend]);
+
+  const style = (f?: Feature): PathOptions => ({
+    fillColor: (f && colorOf.get(classes.get(featureCode(f))?.cls ?? "")) || "#e0e0e0",
+    fillOpacity: 0.85, color: "#ffffff", weight: 0.6,
+  });
+  const onEach = (f: Feature, layer: Layer) => {
+    const c = classes.get(featureCode(f));
+    if (c) layer.bindTooltip(c.tooltip, { sticky: true });
+    layer.on("click", () => onSelect(featureCode(f)));
+  };
+
+  return (
+    <div className="home-map-wrap">
+      <MapContainer center={[25.37, 82.93]} zoom={10} preferCanvas className="home-map" scrollWheelZoom={false}>
+        <TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' />
+        {pool && <GeoJSON key={styleKey} data={pool} style={style} onEachFeature={onEach} />}
+        <FitPool geo={pool} />
+        <ScaleControl position="bottomleft" imperial={false} />
+      </MapContainer>
+      {!pool && <div className="loading home-map-loading">Loading village boundaries…</div>}
+    </div>
+  );
+}

@@ -939,27 +939,31 @@ export default function CarbonLabScene({
       const isZeroTrees = treeCountVal === 0;
       const sinkText = isZeroTrees ? "⚠️ 0 Trees (No Sink)" : `🌳 ${treeCountVal.toLocaleString()} trees (−${treeCO2Val.toFixed(1)}t)`;
       const tw = ctx.measureText(sinkText).width + 20;
-      const tx = w - sw - 20 - tw;
+      // Narrow scenes (phones): stack the badges down the right edge so they clear the control buttons.
+      const stackBadges = w < 600;
+      const tx = stackBadges ? w - tw - 12 : w - sw - 20 - tw;
+      const ty = stackBadges ? 40 : 12;
       ctx.fillStyle = isZeroTrees ? "rgba(255,235,238,0.95)" : "rgba(241,248,233,0.95)";
       ctx.beginPath();
-      ctx.roundRect(tx, 12, tw, 22, 11);
+      ctx.roundRect(tx, ty, tw, 22, 11);
       ctx.fill();
       ctx.fillStyle = isZeroTrees ? "#c62828" : "#2e7d32";
       ctx.textAlign = "left";
-      ctx.fillText(sinkText, tx + 10, 27);
+      ctx.fillText(sinkText, tx + 10, ty + 15);
 
       // DEM Elevation badge (top right, left of tree badge).
       if (L.elevationBaseM) {
         const elevText = `⛰️ ${Math.round(L.elevationBaseM)}m MSL${L.elevationReliefM ? ` (±${(L.elevationReliefM / 2).toFixed(1)}m)` : ""}`;
         const ew = ctx.measureText(elevText).width + 20;
-        const ex = tx - 8 - ew;
+        const ex = stackBadges ? w - ew - 12 : tx - 8 - ew;
+        const ey = stackBadges ? 68 : 12;
         ctx.fillStyle = "rgba(255,255,255,0.92)";
         ctx.beginPath();
-        ctx.roundRect(ex, 12, ew, 22, 11);
+        ctx.roundRect(ex, ey, ew, 22, 11);
         ctx.fill();
         ctx.fillStyle = "#1b5e20";
         ctx.textAlign = "left";
-        ctx.fillText(elevText, ex + 10, 27);
+        ctx.fillText(elevText, ex + 10, ey + 15);
       }
 
       // Heat trapped: sun rays bounce back down off the blanket only over the village polygon
