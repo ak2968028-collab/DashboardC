@@ -80,7 +80,7 @@ async def get_village_factor_stats(layer: str = Query(..., description="workspac
 
 @router.get("/{layer}")
 async def get_geojson_layer(layer: str):
-    """Boundary GeoJSON: district, blocks or villages."""
+    """Boundary GeoJSON: district, blocks, villages (census) or villages_cadastral (dissolved khasra parcels)."""
     path = settings.GEOJSON_LAYERS.get(layer)
     if not path or not path.exists():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Unknown layer '{layer}'")

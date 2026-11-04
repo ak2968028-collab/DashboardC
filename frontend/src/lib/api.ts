@@ -91,7 +91,7 @@ export const useVillageScene = (code: string | null) =>
 /** Digital Elevation Model (DEM) profile and house elevations for one village. */
 export const useVillageElevation = (code: string | null) =>
   useSWR<VillageElevation>(code ? `/api/villages/${code}/elevation` : null, fetcher, { revalidateOnFocus: false, shouldRetryOnError: false });
-export const useGeoJson = (layer: "district" | "blocks" | "villages") =>
+export const useGeoJson = (layer: "district" | "blocks" | "villages" | "villages_cadastral") =>
   useSWR<FeatureCollection>(`/api/geo/${layer}`, fetcher, { revalidateOnFocus: false });
 
 export const useRasterLayers = () =>

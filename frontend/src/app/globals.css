@@ -997,3 +997,35 @@ button.nav-link { background: none; border: none; font: inherit; cursor: pointer
 .factor-extra { border-top: 1px solid var(--border); padding-top: 6px; font-size: 13px; }
 .factor-extra summary { cursor: pointer; font-weight: 600; color: var(--muted); font-size: 12px; }
 .factor-extra[open] summary { margin-bottom: 6px; }
+
+/* ---------- Village ranking (map + table) ---------- */
+.rank-controls .field select { min-width: 160px; }
+.rank-layout { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(300px, 1fr); gap: 14px; align-items: start; }
+.rank-map-wrap .rank-map { height: 640px; }
+.rank-legend {
+  position: absolute; right: 10px; bottom: 22px; z-index: 500; display: flex; flex-direction: column; gap: 3px;
+  background: rgba(255, 255, 255, 0.94); border-radius: 8px; padding: 8px 10px; font-size: 12px; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+.rank-legend span { display: flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
+.rank-legend i { width: 18px; height: 12px; border-radius: 3px; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15); }
+.rank-table-card { background: var(--card); border-radius: 8px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08); display: flex; flex-direction: column; max-height: 640px; }
+.rank-table-card header { padding: 12px 14px 8px; display: flex; flex-direction: column; gap: 2px; border-bottom: 1px solid var(--border); }
+.rank-table-card header small, .rank-table-card footer { font-size: 12px; color: var(--muted); }
+.rank-table-card footer { padding: 8px 14px; border-top: 1px solid var(--border); }
+.rank-table-wrap { overflow-y: auto; flex: 1; min-height: 0; }
+.rank-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.rank-table th { position: sticky; top: 0; background: #f5f7f6; text-align: left; font-size: 11px; text-transform: uppercase; color: var(--muted); padding: 6px 10px; z-index: 1; }
+.rank-table td { padding: 6px 10px; border-bottom: 1px solid #f0f2f1; vertical-align: middle; }
+.rank-table td small { display: block; color: var(--faint); font-size: 11px; }
+.rank-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.rank-row { cursor: pointer; }
+.rank-row:hover { background: var(--green-25); }
+.rank-row.selected { background: #e3f2fd; box-shadow: inset 3px 0 0 #0d47a1; }
+.rank-badge { display: inline-block; min-width: 34px; padding: 2px 6px; border-radius: 999px; text-align: center; font-weight: 700; font-size: 12px; }
+.rank-code { margin-left: 6px; }
+.rank-gap td { text-align: center; color: var(--faint); padding: 2px; }
+@media (max-width: 1100px) {
+  .rank-layout { grid-template-columns: minmax(0, 1fr); }
+  .rank-map-wrap .rank-map { height: 460px; }
+  .rank-table-card { max-height: 520px; }
+}

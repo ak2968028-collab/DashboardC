@@ -67,10 +67,10 @@ function usePerCapitaScale(villages: Village[]) {
 
 // ---------- Village search ----------
 
-type Row = { village: Village; section?: string };
+type Row = { village: Village };
 
 export function VillageCombobox({
-  villages, value, onChange, label = "Village", placeholder = "Search village…", recentCodes = [], showCodes,
+  villages, value, onChange, label = "Village", placeholder = "Search village…", showCodes,
   clearOnSelect = false, disabled = false, inputRef,
 }: {
   villages: Village[];
@@ -78,7 +78,6 @@ export function VillageCombobox({
   onChange: (code: string) => void;
   label?: string;
   placeholder?: string;
-  recentCodes?: string[];
   showCodes: boolean;
   /** Empty the box after choosing (for "add a village" pickers). */
   clearOnSelect?: boolean;
@@ -372,7 +371,7 @@ export function CensusCode({ code, tone = "light" }: { code: string; tone?: "lig
 /** Block + village selection bar shown above the dashboard pages. */
 export function VillageToolbar() {
   const {
-    filteredVillages, selectedCode, setSelectedCode, activeVillage, showCodes, setShowCodes, recentCodes,
+    filteredVillages, selectedCode, setSelectedCode, activeVillage, showCodes, setShowCodes,
   } = useDashboard();
   const searchRef = useRef<HTMLInputElement>(null);
   const index = filteredVillages.findIndex((v) => v.village_code === selectedCode);
@@ -403,7 +402,6 @@ export function VillageToolbar() {
           villages={filteredVillages}
           value={selectedCode}
           onChange={setSelectedCode}
-          recentCodes={recentCodes}
           showCodes={showCodes}
           inputRef={searchRef}
         />

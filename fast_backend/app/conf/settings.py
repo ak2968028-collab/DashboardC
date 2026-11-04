@@ -79,6 +79,7 @@ class Settings(BaseSettings):
             "district": processed / "varanasi_district.geojson",
             "blocks": processed / "varanasi_blocks.geojson",
             "villages": processed / "varanasi_villages_optimized.geojson",
+            "villages_cadastral": self.CADASTRAL_BOUNDARIES_PATH,
         }
 
     @property
