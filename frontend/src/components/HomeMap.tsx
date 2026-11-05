@@ -14,6 +14,8 @@ interface Props {
   classes: Map<string, { cls: string; tooltip: string }>;
   legend: MapClass[];
   onSelect: (code: string) => void;
+  /** Village outlined as picked. */
+  picked?: string | null;
   styleKey: string;
 }
 
@@ -27,17 +29,20 @@ function FitPool({ geo }: { geo: FeatureCollection | null }) {
 }
 
 /** District overview map: each village coloured by a category (dominant source, emission level…). */
-export default function HomeMap({ classes, legend, onSelect, styleKey }: Props) {
+export default function HomeMap({ classes, legend, onSelect, picked, styleKey }: Props) {
   const boundaries = useBoundaries();
   const pool = useMemo<FeatureCollection | null>(() => boundaries && {
     ...boundaries, features: boundaries.features.filter((f) => classes.has(featureCode(f))),
   }, [boundaries, classes]);
   const colorOf = useMemo(() => new Map(legend.map((l) => [l.key, l.color])), [legend]);
 
-  const style = (f?: Feature): PathOptions => ({
-    fillColor: (f && colorOf.get(classes.get(featureCode(f))?.cls ?? "")) || "#e0e0e0",
-    fillOpacity: 0.85, color: "#ffffff", weight: 0.6,
-  });
+  const style = (f?: Feature): PathOptions => {
+    const isPicked = !!f && featureCode(f) === picked;
+    return {
+      fillColor: (f && colorOf.get(classes.get(featureCode(f))?.cls ?? "")) || "#e0e0e0",
+      fillOpacity: isPicked ? 1 : 0.85, color: isPicked ? "#0d47a1" : "#ffffff", weight: isPicked ? 3 : 0.6,
+    };
+  };
   const onEach = (f: Feature, layer: Layer) => {
     const c = classes.get(featureCode(f));
     if (c) layer.bindTooltip(c.tooltip, { sticky: true });
@@ -46,10 +51,10 @@ export default function HomeMap({ classes, legend, onSelect, styleKey }: Props) 
 
   return (
     <div className="home-map-wrap">
-      <MapContainer center={[25.37, 82.93]} zoom={10} preferCanvas className="home-map" scrollWheelZoom={false}>
+      <MapContainer center={[25.37, 82.93]} zoom={10} preferCanvas className="home-map">
         <TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' />
-        {pool && <GeoJSON key={styleKey} data={pool} style={style} onEachFeature={onEach} />}
+        {pool && <GeoJSON key={`${styleKey}|${picked}`} data={pool} style={style} onEachFeature={onEach} />}
         <FitPool geo={pool} />
         <ScaleControl position="bottomleft" imperial={false} />
       </MapContainer>

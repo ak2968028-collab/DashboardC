@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 import tunnel from "./tunnel.json";
 
 // Where the Next.js server proxies /api/* (FastAPI backend) and /geoserver/* (GeoServer WMS) requests.
-// Env vars win; otherwise the Cloudflare tunnel URL kept in tunnel.json by ../update-tunnel-url.sh.
+// Env vars win; otherwise the fixed Cloudflare named-tunnel hostname in tunnel.json.
 const API_URL = process.env.API_URL || tunnel.API_URL || "http://localhost:8000";
 const GEOSERVER_URL = process.env.GEOSERVER_URL || tunnel.GEOSERVER_URL || "http://localhost:8080";
 

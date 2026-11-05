@@ -3,8 +3,8 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, BookOpen, ExternalLink, FileText, FlaskConical, Map as MapIcon, PenSquare, Plus } from "lucide-react";
+import { useMemo, useState, type ReactNode } from "react";
+import { ArrowRight, BookOpen, ExternalLink, FileText, FlaskConical, Map as MapIcon, PenSquare, Plus } from "lucide-react";
 import { useAuth } from "@/components/AuthContext";
 import BlogCard from "@/components/blog/BlogCard";
 import { SimpleBarChart } from "@/components/charts";
@@ -119,17 +119,71 @@ const RESOURCES = {
   ],
 };
 
+type InsightTab = "sources" | "blocks" | "percapita";
+const INSIGHT_TABS: { key: InsightTab; label: string; note: string }[] = [
+  { key: "sources", label: "By source", note: "t CO₂e per year, all villages." },
+  { key: "blocks", label: "By block", note: "t CO₂e per year. Click a block to filter the map; click again to clear." },
+  { key: "percapita", label: "Per person", note: "Number of villages by kg CO₂e per person per year." },
+];
+const RESOURCE_TABS = [
+  { key: "guidance", label: "Guidance", icon: BookOpen },
+  { key: "project", label: "Methodology & data", icon: FlaskConical },
+  { key: "other", label: "Other", icon: ExternalLink },
+] as const;
+
+/** Section heading: small label, title and one-line description, with optional actions on the right. */
+function SectionHead({ eyebrow, title, sub, action }: { eyebrow: string; title: string; sub?: string; action?: ReactNode }) {
+  return (
+    <div className="home-head">
+      <div>
+        <span className="home-eyebrow">{eyebrow}</span>
+        <h2 className="home-h2">{title}</h2>
+        {sub && <p className="home-sub">{sub}</p>}
+      </div>
+      {action && <div className="home-head-actions">{action}</div>}
+    </div>
+  );
+}
+
+/** Horizontal bars as a list: hover highlights a row, `onPick` makes rows clickable. */
+function BarList({ rows, total, color, unit, active, onPick }: {
+  rows: { key: string; label: string; value: number }[]; total: number; color: string; unit: string; active?: string; onPick?: (key: string) => void;
+}) {
+  const max = Math.max(...rows.map((r) => r.value), 1);
+  return (
+    <ul className="home-barlist">
+      {rows.map((r) => {
+        const body = (
+          <>
+            <span className="home-barlist-label">{r.label}</span>
+            <span className="home-barlist-track"><i style={{ width: `${(r.value / max) * 100}%`, background: color }} /></span>
+            <span className="home-barlist-val">{fmt(r.value)} {unit}<small>{fmt((r.value / total) * 100, 0)}%</small></span>
+          </>
+        );
+        return (
+          <li key={r.key} className={active === r.key ? "active" : ""}>
+            {onPick ? <button type="button" onClick={() => onPick(r.key)}>{body}</button> : <div>{body}</div>}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 export default function OverviewPage() {
   const router = useRouter();
   const { user } = useAuth();
-  const { allVillages, setSelectedCode, showCodes } = useDashboard();
+  const { allVillages, setSelectedCode } = useDashboard();
   const { data: s } = useSummary();
   const { data: blocks = [] } = useBlocks();
   const { data: posts = [] } = useBlogPosts(2);
   const [block, setBlock] = useState(ALL_BLOCKS);
   // Livestock is the largest source in almost every village, so the map opens on emission level instead.
   const [colorBy, setColorBy] = useState<ColorBy>("total");
-  const rail = useRef<HTMLDivElement>(null);
+  const [picked, setPicked] = useState<string | null>(null);
+  const [insight, setInsight] = useState<InsightTab>("sources");
+  const [resTab, setResTab] = useState<keyof typeof RESOURCES>("guidance");
+  const [faq, setFaq] = useState<number | null>(0);
 
   const pool = useMemo(() => (block === ALL_BLOCKS ? allVillages : allVillages.filter((v) => v.block_name === block)), [allVillages, block]);
   const cuts = useMemo(() => ({
@@ -152,8 +206,6 @@ export default function OverviewPage() {
     return c;
   }, [classes]);
 
-  // Factsheets: the highest-emitting villages of the current filter.
-  const factsheets = useMemo(() => [...pool].sort((a, b) => num(b.total_co2e_t_yr) - num(a.total_co2e_t_yr)).slice(0, 12), [pool]);
 
   // Per-capita distribution across all villages (kg CO2e / person / yr).
   const histogram = useMemo(() => {
@@ -164,11 +216,11 @@ export default function OverviewPage() {
     }));
   }, [allVillages]);
 
+  const pickedVillage = allVillages.find((v) => v.village_code === picked);
   const openVillage = (code: string, page = "/carbon") => {
     setSelectedCode(code);
     router.push(page);
   };
-  const scrollRail = (dir: number) => rail.current?.scrollBy({ left: dir * rail.current.clientWidth * 0.9, behavior: "smooth" });
 
   if (!s) return <div className="loading">Loading district summary…</div>;
   const sectors = [...s.sector_emissions].sort((a, b) => b.co2e_t_yr - a.co2e_t_yr);
@@ -211,8 +263,7 @@ export default function OverviewPage() {
 
       {/* ── Map ── */}
       <section className="home-section tint">
-        <h2 className="home-h2">Village Emissions Across Varanasi</h2>
-        <p className="home-sub">See where emissions come from and how they vary by village. Click a village to open its emission profile.</p>
+        <SectionHead eyebrow="Explore" title="Village Emissions Across Varanasi" sub="Click a village to see its details on the right." />
         <div className="home-card">
           <div className="home-filters">
             <b>Filter:</b>
@@ -231,7 +282,11 @@ export default function OverviewPage() {
             </label>
             <span className="home-filter-count">{fmt(pool.length)} villages</span>
           </div>
-          <HomeMap classes={classes} legend={legend} onSelect={(code) => openVillage(code)} styleKey={`${block}|${colorBy}|${pool.length}`} />
+          <div className="home-map-split">
+            <HomeMap classes={classes} legend={legend} onSelect={setPicked} picked={picked} styleKey={`${block}|${colorBy}|${pool.length}`} />
+            <VillageInfo village={pickedVillage} level={pickedVillage ? levelOf(num(pickedVillage.per_capita_co2e_kg_yr), cuts.per_capita) : null}
+              onOpen={(page) => pickedVillage && openVillage(pickedVillage.village_code, page)} />
+          </div>
           <div className="home-legend">
             <b>{COLOR_BY.find((c) => c.key === colorBy)!.label}:</b>
             {legend.map((l) => (
@@ -246,138 +301,128 @@ export default function OverviewPage() {
         </div>
       </section>
 
-      {/* ── Insights ── */}
+      {/* ── Insights: one tabbed panel ── */}
       <section className="home-section">
-        <h2 className="home-h2">District Emission Insights</h2>
-        <p className="home-sub">Key figures from the village inventory.</p>
-        <div className="home-charts">
-          <div className="home-card">
-            <h3>Emissions by Source</h3>
-            <p className="home-card-sub">t CO₂e per year, all villages.</p>
-            <SimpleBarChart data={sectors} category="sector" series={[{ key: "co2e_t_yr", name: "t CO₂e/yr", color: "#7b3f98" }]}
-              horizontal decimals={0} height={300} showValues={false} />
-          </div>
-          <div className="home-card">
-            <h3>Emissions by Block</h3>
-            <p className="home-card-sub">t CO₂e per year.</p>
-            <SimpleBarChart data={blockRows} category="block_name" series={[{ key: "total_co2e_t_yr", name: "t CO₂e/yr", color: "#c77c33" }]}
-              horizontal decimals={0} height={300} showValues={false} />
-          </div>
-          <div className="home-card">
-            <h3>Per-Person Emissions</h3>
-            <p className="home-card-sub">Number of villages by kg CO₂e per person per year.</p>
-            <SimpleBarChart data={histogram} category="range" series={[{ key: "villages", name: "Villages", color: "#1565c0" }]}
-              decimals={0} height={300} />
-          </div>
-        </div>
-      </section>
-
-      {/* ── Factsheets ── */}
-      <section className="home-section tint">
-        <div className="home-row-head">
-          <div>
-            <h2 className="home-h2">Explore Village Factsheets</h2>
-            <p className="home-sub">The highest-emitting villages{block !== ALL_BLOCKS ? ` in ${block}` : ""}, with their level and largest source.</p>
-          </div>
-          <div className="home-rail-nav">
-            <button type="button" aria-label="Previous villages" onClick={() => scrollRail(-1)}><ArrowLeft size={16} /></button>
-            <button type="button" aria-label="Next villages" onClick={() => scrollRail(1)}><ArrowRight size={16} /></button>
-          </div>
-        </div>
-        <div className="home-rail" ref={rail}>
-          {factsheets.map((v) => {
-            const top = dominant(v);
-            const level = levelOf(num(v.per_capita_co2e_kg_yr), cuts.per_capita);
-            return (
-              <article key={v.village_code} className="home-fact">
-                <header>
-                  <h3>{v.village_name}</h3>
-                  <span className="home-fact-block">{v.block_name}{showCodes ? ` · ${v.village_code}` : ""}</span>
-                </header>
-                <dl>
-                  <div><dt>Total:</dt><dd><b>{fmt(v.total_co2e_t_yr, 0)} t CO₂e/yr</b></dd></div>
-                  <div><dt>Per person:</dt><dd><span className={`home-level ${level}`}>{fmt(v.per_capita_co2e_kg_yr, 0)} kg · {level}</span></dd></div>
-                  <div><dt>Largest source:</dt><dd><span className="home-source" style={{ background: `${top.color}22`, color: top.color }}>{top.label}</span></dd></div>
-                </dl>
-                <button type="button" className="home-fact-link" onClick={() => openVillage(v.village_code)}>View details <ArrowRight size={14} /></button>
-              </article>
-            );
-          })}
-        </div>
-        <Link href="/ranking" className="home-view-all">View all villages <ArrowRight size={16} /></Link>
-      </section>
-
-      {/* ── Updates & Watch (one row) ── */}
-      <section className="home-section">
-        <div className="home-duo">
-          <div className="home-duo-main">
-            <div className="home-row-head">
-              <div>
-                <h2 className="home-h2">Recent Updates</h2>
-                <p className="home-sub">News, field reports and research updates from the project team.</p>
-              </div>
-              {user?.role === "admin" && <Link href="/blog/new" className="btn primary"><PenSquare size={15} /> Write a post</Link>}
+        <SectionHead eyebrow="Analysis" title="District Emission Insights" sub="Key figures from the village inventory. Click a block to show it on the map." />
+        <div className="home-insights">
+          <div className="home-card home-tabs-card">
+            <div className="home-tabs" role="tablist" aria-label="Insight">
+              {INSIGHT_TABS.map((t) => (
+                <button key={t.key} type="button" role="tab" aria-selected={insight === t.key} className={insight === t.key ? "active" : ""}
+                  onClick={() => setInsight(t.key)}>{t.label}</button>
+              ))}
             </div>
+            {insight === "sources" && (
+              <BarList rows={sectors.map((x) => ({ key: x.sector, label: x.sector, value: x.co2e_t_yr }))} total={s.total_co2e_t_yr} color="#7b3f98" unit="t" />
+            )}
+            {insight === "blocks" && (
+              <BarList rows={blockRows.map((x) => ({ key: x.block_name, label: x.block_name, value: x.total_co2e_t_yr }))} total={s.total_co2e_t_yr}
+                color="#c77c33" unit="t" active={block} onPick={(b) => { setBlock(b === block ? ALL_BLOCKS : b); document.querySelector(".home-map-split")?.scrollIntoView({ behavior: "smooth", block: "center" }); }} />
+            )}
+            {insight === "percapita" && (
+              <SimpleBarChart data={histogram} category="range" series={[{ key: "villages", name: "Villages", color: "#1565c0" }]} decimals={0} height={230} />
+            )}
+            <p className="home-card-sub">{INSIGHT_TABS.find((t) => t.key === insight)!.note}</p>
+          </div>
+          <dl className="home-highlights">
+            <div><dt>Largest source</dt><dd>{sectors[0]?.sector}</dd><small>{fmt((sectors[0]?.co2e_t_yr / s.total_co2e_t_yr) * 100, 0)}% of district emissions</small></div>
+            <div><dt>Highest-emitting block</dt><dd>{blockRows[0]?.block_name}</dd><small>{fmt(blockRows[0]?.total_co2e_t_yr)} t CO₂e / year</small></div>
+            <div><dt>Typical village</dt><dd>{fmt(s.mean_per_capita_co2e_kg_yr, 0)} kg</dd><small>CO₂e per person per year</small></div>
+          </dl>
+        </div>
+      </section>
+
+      {/* ── Updates · Watch · Resources · FAQ in one row ── */}
+      <section className="home-section tint">
+        <div className="home-quad">
+          <div>
+            <SectionHead eyebrow="Blog" title="Recent Updates" sub="News and field reports."
+              action={<>
+                {user?.role === "admin" && <Link href="/blog/new" className="btn primary home-write" aria-label="Write a post"><PenSquare size={14} /></Link>}
+                <Link href="/blog" className="home-view-all">All <ArrowRight size={15} /></Link>
+              </>} />
             {posts.length ? (
-              <div className="blog-grid two">{posts.slice(0, 2).map((p) => <BlogCard key={p.id} post={p} />)}</div>
+              <div className="home-quad-posts">{posts.slice(0, 2).map((p) => <BlogCard key={p.id} post={p} />)}</div>
             ) : (
               <div className="blog-empty small"><p>No updates published yet.</p></div>
             )}
-            <Link href="/blog" className="home-view-all">View all updates <ArrowRight size={16} /></Link>
           </div>
-          <div className="home-duo-side">
-            <h2 className="home-h2">Watch</h2>
-            <p className="home-sub">Carbon in motion — from village smoke to the global atmosphere.</p>
+          <div>
+            <SectionHead eyebrow="Video" title="Watch" sub="Carbon in motion." />
             <div className="home-watch"><MiniVideo videos={VIDEOS} /></div>
           </div>
-        </div>
-      </section>
-
-      {/* ── Resources ── */}
-      <section className="home-section">
-        <h2 className="home-h2">Resources</h2>
-        <p className="home-sub">Guidance, methodology and reference material behind the inventory.</p>
-        <div className="home-charts">
-          <div className="home-card">
-            <h3 className="home-res-h"><BookOpen size={18} /> Guidance Documents</h3>
-            {RESOURCES.guidance.map((r) => (
-              <a key={r.href} className="home-res" href={r.href} target="_blank" rel="noopener noreferrer">
-                <FileText size={18} /><span><b>{r.title}</b><small>{r.note}</small></span>
-              </a>
-            ))}
+          <div>
+            <SectionHead eyebrow="Library" title="Resources" sub="Guidance and references." />
+            <div className="home-card home-tabs-card">
+              <div className="home-tabs" role="tablist" aria-label="Resources">
+                {RESOURCE_TABS.map((t) => (
+                  <button key={t.key} type="button" role="tab" aria-selected={resTab === t.key} className={resTab === t.key ? "active" : ""}
+                    onClick={() => setResTab(t.key)}><t.icon size={14} /> {t.label}</button>
+                ))}
+              </div>
+              {RESOURCES[resTab].map((r) => {
+                const external = r.href.startsWith("http");
+                const body = <><FileText size={17} /><span><b>{r.title}</b><small>{"note" in r ? r.note : r.href.replace(/^https?:\/\//, "")}</small></span>{external && <ExternalLink size={14} />}</>;
+                return external
+                  ? <a key={r.href} className="home-res" href={r.href} target="_blank" rel="noopener noreferrer">{body}</a>
+                  : <Link key={r.href} className="home-res" href={r.href}>{body}</Link>;
+              })}
+            </div>
           </div>
-          <div className="home-card">
-            <h3 className="home-res-h"><FlaskConical size={18} /> Methodology &amp; Data</h3>
-            {RESOURCES.project.map((r) => (
-              <Link key={r.href} className="home-res" href={r.href}>
-                <MapIcon size={18} /><span><b>{r.title}</b><small>{r.note}</small></span>
-              </Link>
-            ))}
+          <div>
+            <SectionHead eyebrow="Help" title="FAQ" sub="Common questions." />
+            <div className="home-faq">
+              {FAQ.map((f, i) => (
+                <details key={f.q} open={faq === i} onToggle={(e) => { if ((e.target as HTMLDetailsElement).open) setFaq(i); else if (faq === i) setFaq(null); }}>
+                  <summary>{f.q}<Plus size={16} aria-hidden /></summary>
+                  <p>{f.a}</p>
+                </details>
+              ))}
+            </div>
           </div>
-          <div className="home-card">
-            <h3 className="home-res-h"><ExternalLink size={18} /> Other Resources</h3>
-            {RESOURCES.other.map((r) => (
-              <a key={r.href} className="home-res link" href={r.href} target="_blank" rel="noopener noreferrer">
-                <span><b>{r.title}</b><small>{r.href.replace(/^https?:\/\//, "")}</small></span><ExternalLink size={16} />
-              </a>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── FAQ ── */}
-      <section className="home-section tint">
-        <h2 className="home-h2">Frequently Asked Questions</h2>
-        <p className="home-sub">About village carbon footprints and this dashboard.</p>
-        <div className="home-faq">
-          {FAQ.map((f) => (
-            <details key={f.q}>
-              <summary>{f.q}<Plus size={18} aria-hidden /></summary>
-              <p>{f.a}</p>
-            </details>
-          ))}
         </div>
       </section>
     </div>
+  );
+}
+
+/** Right-hand panel of the home map: details of the clicked village. */
+function VillageInfo({ village: v, level, onOpen }: { village?: Village; level: string | null; onOpen: (page: string) => void }) {
+  if (!v) {
+    return (
+      <aside className="home-info empty">
+        <MapIcon size={30} />
+        <b>Click a village on the map</b>
+        <p>Its emissions, largest sources and population appear here.</p>
+      </aside>
+    );
+  }
+  const total = num(v.total_co2e_t_yr);
+  const rows = SOURCES.map((s) => ({ ...s, t: num(v[s.col]) })).sort((a, b) => b.t - a.t);
+  return (
+    <aside className="home-info">
+      <small>{v.block_name} block</small>
+      <h3>{v.village_name}</h3>
+      <dl className="home-info-kpis">
+        <div><dt>t CO₂e / yr</dt><dd>{fmt(total, 0)}</dd></div>
+        <div><dt>kg per person</dt><dd>{fmt(v.per_capita_co2e_kg_yr, 0)}{level && <span className={`home-level ${level}`}>{level}</span>}</dd></div>
+        <div><dt>Residents</dt><dd>{fmt(v.total_residents)}</dd></div>
+        <div><dt>Area</dt><dd>{fmt(v.total_area_ha, 0)} ha</dd></div>
+      </dl>
+      <b className="home-info-h">Emissions by source</b>
+      <ul className="home-info-src">
+        {rows.map((r) => (
+          <li key={r.key}>
+            <span>{r.label}</span>
+            <span className="home-info-bar"><i style={{ width: `${total ? (r.t / total) * 100 : 0}%`, background: r.color }} /></span>
+            <span>{fmt(r.t, 0)} t</span>
+          </li>
+        ))}
+      </ul>
+      <div className="home-info-actions">
+        <button type="button" className="btn primary" onClick={() => onOpen("/carbon")}>Emission profile</button>
+        <button type="button" className="btn" onClick={() => onOpen("/visualize")}>Carbon Lab 3D</button>
+      </div>
+    </aside>
   );
 }

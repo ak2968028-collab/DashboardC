@@ -6,10 +6,11 @@ x-postgres-env: &postgres-env
 services:
   cloudflared:
     image: cloudflare/cloudflared:latest
-    command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml --url http://fast_backend:8000
-    configs:
-      - source: cloudflared
-        target: /etc/cloudflared/config.yml
+    # Named tunnel "carbondashboard". Routes (public hostname -> service) are
+    # managed in the Cloudflare dashboard; the token lives in ./.env.
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN in .env}
     depends_on:
       - fast_backend
       - geoserver
@@ -117,31 +118,6 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./logs:/logs
     restart: unless-stopped
-
-  # Writes the current quick-tunnel URL to frontend/tunnel.json and, when
-  # GITHUB_TOKEN is set (in ./.env), commits + pushes it so Vercel redeploys.
-  # See update-tunnel-url.sh.
-  tunnel_url:
-    image: docker:27-cli
-    # docker:27-cli already ships git; only install it if missing (apk can hang offline).
-    entrypoint: ["sh", "-c", "command -v git >/dev/null || timeout 60 apk add --no-cache -q git; exec sh /repo/update-tunnel-url.sh"]
-    environment:
-      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
-      LOG_OWNER: ${LOG_OWNER:-1000:1000}
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - .:/repo
-    depends_on:
-      - cloudflared
-    restart: unless-stopped
-
-configs:
-  cloudflared:
-    content: |
-      ingress:
-        - path: ^/geoserver(/.*)?$$
-          service: http://geoserver:8080
-        - service: http://fast_backend:8000
 
 volumes:
   varanasi_pgdata:
