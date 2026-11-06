@@ -16,6 +16,9 @@ interface Props {
   onSelect: (code: string) => void;
   /** Village outlined as picked. */
   picked?: string | null;
+  /** When set, only these villages keep their colour; the rest are greyed out. */
+  focus?: Set<string> | null;
+  /** Changes whenever classes or focus change, so the layer is restyled. */
   styleKey: string;
 }
 
@@ -29,7 +32,7 @@ function FitPool({ geo }: { geo: FeatureCollection | null }) {
 }
 
 /** District overview map: each village coloured by a category (dominant source, emission level…). */
-export default function HomeMap({ classes, legend, onSelect, picked, styleKey }: Props) {
+export default function HomeMap({ classes, legend, onSelect, picked, focus, styleKey }: Props) {
   const boundaries = useBoundaries();
   const pool = useMemo<FeatureCollection | null>(() => boundaries && {
     ...boundaries, features: boundaries.features.filter((f) => classes.has(featureCode(f))),
@@ -37,10 +40,12 @@ export default function HomeMap({ classes, legend, onSelect, picked, styleKey }:
   const colorOf = useMemo(() => new Map(legend.map((l) => [l.key, l.color])), [legend]);
 
   const style = (f?: Feature): PathOptions => {
-    const isPicked = !!f && featureCode(f) === picked;
+    const code = f ? featureCode(f) : "";
+    const isPicked = !!f && code === picked;
+    const dimmed = !!focus && !focus.has(code) && !isPicked;
     return {
-      fillColor: (f && colorOf.get(classes.get(featureCode(f))?.cls ?? "")) || "#e0e0e0",
-      fillOpacity: isPicked ? 1 : 0.85, color: isPicked ? "#0d47a1" : "#ffffff", weight: isPicked ? 3 : 0.6,
+      fillColor: dimmed ? "#cfd6de" : (f && colorOf.get(classes.get(code)?.cls ?? "")) || "#e0e0e0",
+      fillOpacity: isPicked ? 1 : dimmed ? 0.35 : 0.85, color: isPicked ? "#0d47a1" : "#ffffff", weight: isPicked ? 3 : 0.6,
     };
   };
   const onEach = (f: Feature, layer: Layer) => {

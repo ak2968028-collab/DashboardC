@@ -4,10 +4,11 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, type ReactNode } from "react";
-import { ArrowRight, BookOpen, ExternalLink, FileText, FlaskConical, Map as MapIcon, PenSquare, Plus } from "lucide-react";
+import {
+  ArrowRight, ArrowUpRight, BookOpen, ExternalLink, FileText, FlaskConical, HelpCircle, Info, Map as MapIcon, Newspaper, PenSquare, Plus, Search, X,
+} from "lucide-react";
 import { useAuth } from "@/components/AuthContext";
-import BlogCard from "@/components/blog/BlogCard";
-import { SimpleBarChart } from "@/components/charts";
+import { postDate } from "@/components/blog/BlogCard";
 import { ALL_BLOCKS, useDashboard } from "@/components/DashboardContext";
 import type { MapClass } from "@/components/HomeMap";
 import MiniVideo, { type VideoItem } from "@/components/MiniVideo";
@@ -100,7 +101,7 @@ const FAQ = [
   },
 ];
 
-const RESOURCES = {
+const RESOURCES: Record<"guidance" | "project" | "other", { title: string; note?: string; href: string }[]> = {
   guidance: [
     { title: "IPCC 2006 Guidelines — Energy (Vol. 2)", note: "Stationary & mobile combustion factors", href: "https://www.ipcc-nggip.iges.or.jp/public/2006gl/vol2.html" },
     { title: "IPCC 2006 Guidelines — AFOLU (Vol. 4)", note: "Livestock enteric fermentation & manure", href: "https://www.ipcc-nggip.iges.or.jp/public/2006gl/vol4.html" },
@@ -119,17 +120,25 @@ const RESOURCES = {
   ],
 };
 
-type InsightTab = "sources" | "blocks" | "percapita";
+type InsightTab = "sources" | "blocks" | "percapita" | "top";
 const INSIGHT_TABS: { key: InsightTab; label: string; note: string }[] = [
-  { key: "sources", label: "By source", note: "t CO₂e per year, all villages." },
-  { key: "blocks", label: "By block", note: "t CO₂e per year. Click a block to filter the map; click again to clear." },
-  { key: "percapita", label: "Per person", note: "Number of villages by kg CO₂e per person per year." },
+  { key: "sources", label: "By source", note: "t CO₂e / yr · click a source to highlight its top-third villages" },
+  { key: "blocks", label: "By block", note: "t CO₂e / yr · click a block to filter the map" },
+  { key: "percapita", label: "Per person", note: "Villages by kg CO₂e per person · click a range to highlight it" },
+  { key: "top", label: "Top villages", note: "Click a village to open it on the map" },
 ];
-const RESOURCE_TABS = [
-  { key: "guidance", label: "Guidance", icon: BookOpen },
+const RESOURCE_GROUPS = [
+  { key: "guidance", label: "IPCC guidance", icon: BookOpen },
   { key: "project", label: "Methodology & data", icon: FlaskConical },
-  { key: "other", label: "Other", icon: ExternalLink },
+  { key: "other", label: "Other references", icon: ExternalLink },
 ] as const;
+type HubTab = "faq" | "resources" | "updates";
+
+/** Villages highlighted on the map; everything else is greyed out. */
+interface Focus { id: string; label: string; test: (v: Village) => boolean }
+
+const PC_EDGES = [0, 150, 200, 250, 300, 350, 400, Infinity];
+const matches = (q: string, ...texts: (string | undefined)[]) => !q || texts.some((t) => t?.toLowerCase().includes(q));
 
 /** Section heading: small label, title and one-line description, with optional actions on the right. */
 function SectionHead({ eyebrow, title, sub, action }: { eyebrow: string; title: string; sub?: string; action?: ReactNode }) {
@@ -146,8 +155,10 @@ function SectionHead({ eyebrow, title, sub, action }: { eyebrow: string; title: 
 }
 
 /** Horizontal bars as a list: hover highlights a row, `onPick` makes rows clickable. */
-function BarList({ rows, total, color, unit, active, onPick }: {
-  rows: { key: string; label: string; value: number }[]; total: number; color: string; unit: string; active?: string; onPick?: (key: string) => void;
+function BarList({ rows, total, color, unit, decimals = 0, active, onPick }: {
+  rows: { key: string; label: string; hint?: string; value: number; color?: string }[];
+  /** When given, each row also shows its share of this total. */
+  total?: number; color: string; unit: string; decimals?: number; active?: string | null; onPick?: (key: string) => void;
 }) {
   const max = Math.max(...rows.map((r) => r.value), 1);
   return (
@@ -155,14 +166,15 @@ function BarList({ rows, total, color, unit, active, onPick }: {
       {rows.map((r) => {
         const body = (
           <>
-            <span className="home-barlist-label">{r.label}</span>
-            <span className="home-barlist-track"><i style={{ width: `${(r.value / max) * 100}%`, background: color }} /></span>
-            <span className="home-barlist-val">{fmt(r.value)} {unit}<small>{fmt((r.value / total) * 100, 0)}%</small></span>
+            <span className="home-barlist-label">{r.label}{r.hint && <small>{r.hint}</small>}</span>
+            <span className="home-barlist-track"><i style={{ width: `${(r.value / max) * 100}%`, background: r.color ?? color }} /></span>
+            <span className="home-barlist-val">{fmt(r.value, decimals)} {unit}{total ? <small>{fmt((r.value / total) * 100, 0)}%</small> : null}</span>
+            {onPick && <ArrowUpRight size={14} className="home-barlist-go" aria-hidden />}
           </>
         );
         return (
           <li key={r.key} className={active === r.key ? "active" : ""}>
-            {onPick ? <button type="button" onClick={() => onPick(r.key)}>{body}</button> : <div>{body}</div>}
+            {onPick ? <button type="button" aria-pressed={active === r.key} onClick={() => onPick(r.key)}>{body}</button> : <div>{body}</div>}
           </li>
         );
       })}
@@ -176,13 +188,16 @@ export default function OverviewPage() {
   const { allVillages, setSelectedCode } = useDashboard();
   const { data: s } = useSummary();
   const { data: blocks = [] } = useBlocks();
-  const { data: posts = [] } = useBlogPosts(2);
+  const { data: posts = [] } = useBlogPosts(4);
   const [block, setBlock] = useState(ALL_BLOCKS);
   // Livestock is the largest source in almost every village, so the map opens on emission level instead.
   const [colorBy, setColorBy] = useState<ColorBy>("total");
   const [picked, setPicked] = useState<string | null>(null);
+  const [focus, setFocus] = useState<Focus | null>(null);
   const [insight, setInsight] = useState<InsightTab>("sources");
-  const [resTab, setResTab] = useState<keyof typeof RESOURCES>("guidance");
+  const [topBy, setTopBy] = useState<"total" | "per_capita">("total");
+  const [hub, setHub] = useState<HubTab>("faq");
+  const [query, setQuery] = useState("");
   const [faq, setFaq] = useState<number | null>(0);
 
   const pool = useMemo(() => (block === ALL_BLOCKS ? allVillages : allVillages.filter((v) => v.block_name === block)), [allVillages, block]);
@@ -190,36 +205,57 @@ export default function OverviewPage() {
     total: terciles(allVillages.map((v) => num(v.total_co2e_t_yr))),
     per_capita: terciles(allVillages.map((v) => num(v.per_capita_co2e_kg_yr))),
   }), [allVillages]);
+  // Top-third cut point of each source across villages.
+  const sourceCuts = useMemo(() => new Map(SOURCES.map((x) => [x.key, terciles(allVillages.map((v) => num(v[x.col])))[1]])), [allVillages]);
 
   const legend: MapClass[] = colorBy === "dominant" ? SOURCES.map((x) => ({ key: x.key, label: x.label, color: x.color })) : LEVELS;
+  const classOf = (v: Village) => colorBy === "dominant" ? dominant(v).key
+    : levelOf(num(colorBy === "total" ? v.total_co2e_t_yr : v.per_capita_co2e_kg_yr), cuts[colorBy]);
   const classes = useMemo(() => new Map(pool.map((v) => {
     const top = dominant(v);
-    const cls = colorBy === "dominant" ? top.key
-      : levelOf(num(colorBy === "total" ? v.total_co2e_t_yr : v.per_capita_co2e_kg_yr), cuts[colorBy]);
     const tooltip = `<b>${v.village_name}</b><br>${v.block_name}<br>Total: <b>${fmt(v.total_co2e_t_yr, 1)} t CO₂e/yr</b>`
       + `<br>Per person: ${fmt(v.per_capita_co2e_kg_yr, 0)} kg/yr<br>Largest source: ${top.label}`;
-    return [v.village_code, { cls, tooltip }];
-  })), [pool, colorBy, cuts]);
+    return [v.village_code, { cls: classOf(v), tooltip }];
+  })), [pool, colorBy, cuts]); // eslint-disable-line react-hooks/exhaustive-deps
   const counts = useMemo(() => {
     const c = new Map<string, number>();
     for (const { cls } of classes.values()) c.set(cls, (c.get(cls) ?? 0) + 1);
     return c;
   }, [classes]);
-
+  const focusCodes = useMemo(() => focus ? new Set(pool.filter(focus.test).map((v) => v.village_code)) : null, [focus, pool]);
 
   // Per-capita distribution across all villages (kg CO2e / person / yr).
-  const histogram = useMemo(() => {
-    const edges = [0, 150, 200, 250, 300, 350, 400, Infinity];
-    return edges.slice(0, -1).map((lo, i) => ({
-      range: edges[i + 1] === Infinity ? `${lo}+` : `${lo}–${edges[i + 1]}`,
-      villages: allVillages.filter((v) => num(v.per_capita_co2e_kg_yr) >= lo && num(v.per_capita_co2e_kg_yr) < edges[i + 1]).length,
-    }));
-  }, [allVillages]);
+  const histogram = useMemo(() => PC_EDGES.slice(0, -1).map((lo, i) => {
+    const hi = PC_EDGES[i + 1];
+    return {
+      key: String(lo), lo, hi, range: hi === Infinity ? `${lo}+ kg` : `${lo}–${hi} kg`,
+      villages: allVillages.filter((v) => num(v.per_capita_co2e_kg_yr) >= lo && num(v.per_capita_co2e_kg_yr) < hi).length,
+    };
+  }), [allVillages]);
+  const topVillages = useMemo(() => {
+    const val = (v: Village) => num(topBy === "total" ? v.total_co2e_t_yr : v.per_capita_co2e_kg_yr);
+    return [...pool].sort((x, y) => val(y) - val(x)).slice(0, 8).map((v) => ({ key: v.village_code, label: v.village_name, hint: v.block_name, value: val(v) }));
+  }, [pool, topBy]);
 
   const pickedVillage = allVillages.find((v) => v.village_code === picked);
   const openVillage = (code: string, page = "/carbon") => {
     setSelectedCode(code);
     router.push(page);
+  };
+  const showMap = () => document.querySelector(".home-map-split")?.scrollIntoView({ behavior: "smooth", block: "center" });
+  /** Highlight villages on the map (clicking the active highlight again clears it). */
+  const toggleFocus = (f: Focus, scroll = true) => {
+    setFocus((cur) => (cur?.id === f.id ? null : f));
+    if (scroll && focus?.id !== f.id) showMap();
+  };
+  const focusSource = (key: string) => {
+    const src = SOURCES.find((x) => x.key === key);
+    const hi = sourceCuts.get(key) ?? 0;
+    if (src) toggleFocus({ id: `src:${key}`, label: `Top third for ${src.label.toLowerCase()}`, test: (v) => num(v[src.col]) >= hi });
+  };
+  const changeColorBy = (c: ColorBy) => {
+    setColorBy(c);
+    setFocus((cur) => (cur?.id.startsWith("cls:") ? null : cur));
   };
 
   if (!s) return <div className="loading">Loading district summary…</div>;
@@ -276,107 +312,157 @@ export default function OverviewPage() {
             </label>
             <label className="home-select">
               <span className="sr-only">Colour villages by</span>
-              <select value={colorBy} onChange={(e) => setColorBy(e.target.value as ColorBy)}>
+              <select value={colorBy} onChange={(e) => changeColorBy(e.target.value as ColorBy)}>
                 {COLOR_BY.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
               </select>
             </label>
+            {focus && (
+              <button type="button" className="home-focus-chip" onClick={() => setFocus(null)} title="Clear highlight">
+                <span className="home-focus-dot" />{focus.label}<b>{fmt(focusCodes?.size ?? 0)}</b><X size={13} />
+              </button>
+            )}
             <span className="home-filter-count">{fmt(pool.length)} villages</span>
           </div>
           <div className="home-map-split">
-            <HomeMap classes={classes} legend={legend} onSelect={setPicked} picked={picked} styleKey={`${block}|${colorBy}|${pool.length}`} />
+            <HomeMap classes={classes} legend={legend} onSelect={setPicked} picked={picked} focus={focusCodes}
+              styleKey={`${block}|${colorBy}|${pool.length}|${focus?.id ?? ""}`} />
             <VillageInfo village={pickedVillage} level={pickedVillage ? levelOf(num(pickedVillage.per_capita_co2e_kg_yr), cuts.per_capita) : null}
-              onOpen={(page) => pickedVillage && openVillage(pickedVillage.village_code, page)} />
+              onOpen={(page) => pickedVillage && openVillage(pickedVillage.village_code, page)} onClose={() => setPicked(null)} />
           </div>
           <div className="home-legend">
-            <b>{COLOR_BY.find((c) => c.key === colorBy)!.label}:</b>
-            {legend.map((l) => (
-              <span key={l.key}><i style={{ background: l.color }} />{l.label} <small>({fmt(counts.get(l.key) ?? 0)})</small></span>
-            ))}
+            <span className="home-legend-title">{COLOR_BY.find((c) => c.key === colorBy)!.label}</span>
+            {legend.map((l) => {
+              const id = `cls:${colorBy}:${l.key}`;
+              return (
+                <button key={l.key} type="button" aria-pressed={focus?.id === id} className={focus?.id === id ? "active" : focus ? "muted" : ""}
+                  onClick={() => toggleFocus({ id, label: l.label, test: (v) => classOf(v) === l.key }, false)}>
+                  <i style={{ background: l.color }} />{l.label}<small>{fmt(counts.get(l.key) ?? 0)}</small>
+                </button>
+              );
+            })}
+            <span className="home-legend-info" tabIndex={0}>
+              <Info size={14} /> Method
+              <span role="tooltip">
+                Emissions follow IPCC 2006 Tier-1 factors applied to surveyed activity data.
+                {colorBy !== "dominant" && " Levels split all district villages into thirds."} Village boundaries come from cadastral
+                (khasra) maps where available and census boundaries elsewhere.
+              </span>
+            </span>
           </div>
-          <p className="home-note">
-            Emissions follow IPCC 2006 Tier-1 factors applied to surveyed activity data.
-            {colorBy !== "dominant" && " Levels split all district villages into thirds."} Village boundaries come from cadastral
-            (khasra) maps where available and census boundaries elsewhere.
-          </p>
         </div>
       </section>
 
-      {/* ── Insights: one tabbed panel ── */}
+      {/* ── Insights: tabbed chart + clickable highlights ── */}
       <section className="home-section">
-        <SectionHead eyebrow="Analysis" title="District Emission Insights" sub="Key figures from the village inventory. Click a block to show it on the map." />
+        <SectionHead eyebrow="Analysis" title="District Emission Insights" sub="Every row is clickable and updates the map above." />
         <div className="home-insights">
           <div className="home-card home-tabs-card">
-            <div className="home-tabs" role="tablist" aria-label="Insight">
-              {INSIGHT_TABS.map((t) => (
-                <button key={t.key} type="button" role="tab" aria-selected={insight === t.key} className={insight === t.key ? "active" : ""}
-                  onClick={() => setInsight(t.key)}>{t.label}</button>
-              ))}
+            <div className="home-card-bar">
+              <div className="home-tabs" role="tablist" aria-label="Insight">
+                {INSIGHT_TABS.map((t) => (
+                  <button key={t.key} type="button" role="tab" aria-selected={insight === t.key} className={insight === t.key ? "active" : ""}
+                    onClick={() => setInsight(t.key)}>{t.label}</button>
+                ))}
+              </div>
+              {insight === "top" ? (
+                <div className="home-seg" role="group" aria-label="Rank by">
+                  <button type="button" className={topBy === "total" ? "active" : ""} onClick={() => setTopBy("total")}>Total</button>
+                  <button type="button" className={topBy === "per_capita" ? "active" : ""} onClick={() => setTopBy("per_capita")}>Per person</button>
+                </div>
+              ) : <span className="home-card-note">{INSIGHT_TABS.find((t) => t.key === insight)!.note}</span>}
             </div>
             {insight === "sources" && (
-              <BarList rows={sectors.map((x) => ({ key: x.sector, label: x.sector, value: x.co2e_t_yr }))} total={s.total_co2e_t_yr} color="#7b3f98" unit="t" />
+              <BarList rows={sectors.map((x) => {
+                const src = SOURCES.find((o) => x.sector.toLowerCase().includes(o.key));
+                return { key: src?.key ?? x.sector, label: x.sector, value: x.co2e_t_yr, color: src?.color };
+              })} total={s.total_co2e_t_yr} color="#7b3f98" unit="t" active={focus?.id.startsWith("src:") ? focus.id.slice(4) : null} onPick={focusSource} />
             )}
             {insight === "blocks" && (
               <BarList rows={blockRows.map((x) => ({ key: x.block_name, label: x.block_name, value: x.total_co2e_t_yr }))} total={s.total_co2e_t_yr}
-                color="#c77c33" unit="t" active={block} onPick={(b) => { setBlock(b === block ? ALL_BLOCKS : b); document.querySelector(".home-map-split")?.scrollIntoView({ behavior: "smooth", block: "center" }); }} />
+                color="#c77c33" unit="t" active={block} onPick={(b) => { setBlock(b === block ? ALL_BLOCKS : b); showMap(); }} />
             )}
             {insight === "percapita" && (
-              <SimpleBarChart data={histogram} category="range" series={[{ key: "villages", name: "Villages", color: "#1565c0" }]} decimals={0} height={230} />
+              <BarList rows={histogram.map((h) => ({ key: h.key, label: h.range, value: h.villages }))} total={allVillages.length} color="#1565c0"
+                unit="villages" active={focus?.id.startsWith("pc:") ? focus.id.slice(3) : null}
+                onPick={(key) => {
+                  const h = histogram.find((x) => x.key === key)!;
+                  toggleFocus({ id: `pc:${key}`, label: `${h.range} per person`, test: (v) => num(v.per_capita_co2e_kg_yr) >= h.lo && num(v.per_capita_co2e_kg_yr) < h.hi });
+                }} />
             )}
-            <p className="home-card-sub">{INSIGHT_TABS.find((t) => t.key === insight)!.note}</p>
+            {insight === "top" && (
+              <>
+                <BarList rows={topVillages} color={topBy === "total" ? "#c62828" : "#6a1b9a"} unit={topBy === "total" ? "t" : "kg"} active={picked}
+                  onPick={(code) => { setPicked(code); showMap(); }} />
+                <p className="home-card-note">{block === ALL_BLOCKS ? "All blocks" : `${block} block`} · {topBy === "total" ? "t CO₂e / yr" : "kg CO₂e per person / yr"} · click to open on the map</p>
+              </>
+            )}
           </div>
-          <dl className="home-highlights">
-            <div><dt>Largest source</dt><dd>{sectors[0]?.sector}</dd><small>{fmt((sectors[0]?.co2e_t_yr / s.total_co2e_t_yr) * 100, 0)}% of district emissions</small></div>
-            <div><dt>Highest-emitting block</dt><dd>{blockRows[0]?.block_name}</dd><small>{fmt(blockRows[0]?.total_co2e_t_yr)} t CO₂e / year</small></div>
-            <div><dt>Typical village</dt><dd>{fmt(s.mean_per_capita_co2e_kg_yr, 0)} kg</dd><small>CO₂e per person per year</small></div>
-          </dl>
+          <div className="home-highlights">
+            <button type="button" onClick={() => { setInsight("sources"); const k = SOURCES.find((o) => sectors[0]?.sector.toLowerCase().includes(o.key))?.key; if (k) focusSource(k); }}>
+              <span>Largest source</span><b>{sectors[0]?.sector}</b>
+              <small>{fmt((sectors[0]?.co2e_t_yr / s.total_co2e_t_yr) * 100, 0)}% of district emissions</small><ArrowUpRight size={15} />
+            </button>
+            <button type="button" className={block === blockRows[0]?.block_name ? "active" : ""}
+              onClick={() => { setInsight("blocks"); setBlock(blockRows[0]?.block_name); showMap(); }}>
+              <span>Highest-emitting block</span><b>{blockRows[0]?.block_name}</b>
+              <small>{fmt(blockRows[0]?.total_co2e_t_yr)} t CO₂e / year</small><ArrowUpRight size={15} />
+            </button>
+            <button type="button" onClick={() => setInsight("percapita")}>
+              <span>Typical village</span><b>{fmt(s.mean_per_capita_co2e_kg_yr, 0)} kg</b>
+              <small>CO₂e per person per year</small><ArrowUpRight size={15} />
+            </button>
+          </div>
         </div>
       </section>
 
-      {/* ── Updates · Watch · Resources · FAQ in one row ── */}
+      {/* ── Learn: video beside one tabbed help hub ── */}
       <section className="home-section tint">
-        <div className="home-quad">
-          <div>
-            <SectionHead eyebrow="Blog" title="Recent Updates" sub="News and field reports."
-              action={<>
-                {user?.role === "admin" && <Link href="/blog/new" className="btn primary home-write" aria-label="Write a post"><PenSquare size={14} /></Link>}
-                <Link href="/blog" className="home-view-all">All <ArrowRight size={15} /></Link>
-              </>} />
-            {posts.length ? (
-              <div className="home-quad-posts">{posts.slice(0, 2).map((p) => <BlogCard key={p.id} post={p} />)}</div>
-            ) : (
-              <div className="blog-empty small"><p>No updates published yet.</p></div>
-            )}
-          </div>
-          <div>
-            <SectionHead eyebrow="Video" title="Watch" sub="Carbon in motion." />
-            <div className="home-watch"><MiniVideo videos={VIDEOS} /></div>
-          </div>
-          <div>
-            <SectionHead eyebrow="Library" title="Resources" sub="Guidance and references." />
-            <div className="home-card home-tabs-card">
-              <div className="home-tabs" role="tablist" aria-label="Resources">
-                {RESOURCE_TABS.map((t) => (
-                  <button key={t.key} type="button" role="tab" aria-selected={resTab === t.key} className={resTab === t.key ? "active" : ""}
-                    onClick={() => setResTab(t.key)}><t.icon size={14} /> {t.label}</button>
+        <SectionHead eyebrow="Learn" title="Resources & Help" sub="Videos, answers to common questions, references and project updates." />
+        <div className="home-hub">
+          <div className="home-watch"><MiniVideo videos={VIDEOS} /></div>
+          <div className="home-card home-hub-card">
+            <div className="home-card-bar">
+              <div className="home-tabs" role="tablist" aria-label="Help">
+                {([
+                  ["faq", "FAQ", HelpCircle, FAQ.length],
+                  ["resources", "Resources", BookOpen, Object.values(RESOURCES).flat().length],
+                  ["updates", "Updates", Newspaper, posts.length],
+                ] as const).map(([key, label, Icon, n]) => (
+                  <button key={key} type="button" role="tab" aria-selected={hub === key} className={hub === key ? "active" : ""} onClick={() => setHub(key)}>
+                    <Icon size={14} /> {label}<span className="home-tab-count">{n}</span>
+                  </button>
                 ))}
               </div>
-              {RESOURCES[resTab].map((r) => {
-                const external = r.href.startsWith("http");
-                const body = <><FileText size={17} /><span><b>{r.title}</b><small>{"note" in r ? r.note : r.href.replace(/^https?:\/\//, "")}</small></span>{external && <ExternalLink size={14} />}</>;
-                return external
-                  ? <a key={r.href} className="home-res" href={r.href} target="_blank" rel="noopener noreferrer">{body}</a>
-                  : <Link key={r.href} className="home-res" href={r.href}>{body}</Link>;
-              })}
+              {hub === "updates" ? (
+                <div className="home-head-actions">
+                  {user?.role === "admin" && <Link href="/blog/new" className="btn primary home-write" aria-label="Write a post"><PenSquare size={14} /></Link>}
+                  <Link href="/blog" className="home-view-all">All posts <ArrowRight size={15} /></Link>
+                </div>
+              ) : (
+                <label className="home-search">
+                  <Search size={14} aria-hidden />
+                  <span className="sr-only">Search</span>
+                  <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={hub === "faq" ? "Search questions…" : "Search resources…"} />
+                </label>
+              )}
             </div>
-          </div>
-          <div>
-            <SectionHead eyebrow="Help" title="FAQ" sub="Common questions." />
-            <div className="home-faq">
-              {FAQ.map((f, i) => (
-                <details key={f.q} open={faq === i} onToggle={(e) => { if ((e.target as HTMLDetailsElement).open) setFaq(i); else if (faq === i) setFaq(null); }}>
-                  <summary>{f.q}<Plus size={16} aria-hidden /></summary>
-                  <p>{f.a}</p>
-                </details>
+            <div className="home-hub-body">
+              {hub === "faq" && <FaqList query={query.trim().toLowerCase()} open={faq} setOpen={setFaq} />}
+              {hub === "resources" && <ResourceList query={query.trim().toLowerCase()} />}
+              {hub === "updates" && (posts.length ? (
+                <ul className="home-posts">
+                  {posts.map((p) => (
+                    <li key={p.id}>
+                      <Link href={`/blog/${p.slug}`}>
+                        <span className="home-post-meta"><span className="home-post-cat">{p.category}</span>{postDate(p)}{!p.published && " · Draft"}</span>
+                        <b>{p.title}</b>
+                        {p.excerpt && <small>{p.excerpt}</small>}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="home-empty"><Newspaper size={26} /><b>No updates yet</b><p>News and field reports will appear here.</p></div>
               ))}
             </div>
           </div>
@@ -386,8 +472,51 @@ export default function OverviewPage() {
   );
 }
 
+function FaqList({ query, open, setOpen }: { query: string; open: number | null; setOpen: (i: number | null) => void }) {
+  const items = FAQ.map((f, i) => ({ ...f, i })).filter((f) => matches(query, f.q, f.a));
+  if (!items.length) return <div className="home-empty"><Search size={22} /><b>No matching questions</b></div>;
+  return (
+    <div className="home-faq">
+      {items.map((f) => {
+        const isOpen = query ? true : open === f.i;
+        return (
+          <div key={f.q} className={`home-faq-item${isOpen ? " open" : ""}`}>
+            <button type="button" aria-expanded={isOpen} onClick={() => setOpen(open === f.i ? null : f.i)}>
+              {f.q}<Plus size={15} aria-hidden />
+            </button>
+            {isOpen && <p>{f.a}</p>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ResourceList({ query }: { query: string }) {
+  const groups = RESOURCE_GROUPS.map((g) => ({
+    ...g, items: RESOURCES[g.key].filter((r) => matches(query, r.title, r.note, r.href)),
+  })).filter((g) => g.items.length);
+  if (!groups.length) return <div className="home-empty"><Search size={22} /><b>No matching resources</b></div>;
+  return (
+    <div className="home-res-groups">
+      {groups.map((g) => (
+        <div key={g.key}>
+          <span className="home-res-h"><g.icon size={13} /> {g.label}</span>
+          {g.items.map((r) => {
+            const external = r.href.startsWith("http");
+            const body = <><FileText size={16} /><span><b>{r.title}</b><small>{r.note ?? r.href.replace(/^https?:\/\//, "")}</small></span>{external ? <ExternalLink size={13} /> : <ArrowRight size={13} />}</>;
+            return external
+              ? <a key={r.href} className="home-res" href={r.href} target="_blank" rel="noopener noreferrer">{body}</a>
+              : <Link key={r.href} className="home-res" href={r.href}>{body}</Link>;
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** Right-hand panel of the home map: details of the clicked village. */
-function VillageInfo({ village: v, level, onOpen }: { village?: Village; level: string | null; onOpen: (page: string) => void }) {
+function VillageInfo({ village: v, level, onOpen, onClose }: { village?: Village; level: string | null; onOpen: (page: string) => void; onClose: () => void }) {
   if (!v) {
     return (
       <aside className="home-info empty">
@@ -401,6 +530,7 @@ function VillageInfo({ village: v, level, onOpen }: { village?: Village; level: 
   const rows = SOURCES.map((s) => ({ ...s, t: num(v[s.col]) })).sort((a, b) => b.t - a.t);
   return (
     <aside className="home-info">
+      <button type="button" className="home-info-close" onClick={onClose} aria-label="Close village details"><X size={15} /></button>
       <small>{v.block_name} block</small>
       <h3>{v.village_name}</h3>
       <dl className="home-info-kpis">
