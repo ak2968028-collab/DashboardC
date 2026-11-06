@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, type ReactNode } from "react";
 import {
-  ArrowRight, ArrowUpRight, BookOpen, ExternalLink, FileText, FlaskConical, HelpCircle, Info, Map as MapIcon, Newspaper, PenSquare, Plus, Search, X,
+  ArrowRight, ArrowUpRight, BookOpen, ExternalLink, FileText, FlaskConical, Info, Map as MapIcon, Newspaper, PenSquare, Search, X,
 } from "lucide-react";
 import { useAuth } from "@/components/AuthContext";
 import { postDate } from "@/components/blog/BlogCard";
@@ -74,33 +74,6 @@ function terciles(values: number[]): [number, number] {
 }
 const levelOf = (v: number, [lo, hi]: [number, number]) => (v >= hi ? "high" : v >= lo ? "medium" : "low");
 
-const FAQ = [
-  {
-    q: "What is a village carbon footprint?",
-    a: "It is the total greenhouse gas released in a year by activities in the village — cooking fuel, electricity use, petrol for vehicles, solid waste and livestock — expressed in tonnes of CO₂-equivalent (t CO₂e).",
-  },
-  {
-    q: "How are the emissions calculated?",
-    a: "We follow the IPCC 2006 Tier-1 method: each surveyed activity (for example kg of firewood per month) is scaled to a year and multiplied by a standard emission factor. The factors are listed on the Methodology page.",
-  },
-  {
-    q: "What does CO₂-equivalent mean?",
-    a: "Different gases warm the climate by different amounts. Methane from livestock and waste, for example, is converted to the amount of CO₂ that would cause the same warming, so all sources can be added together.",
-  },
-  {
-    q: "Why is electricity counted when it is made elsewhere?",
-    a: "The power is generated at mostly coal-fired plants, but the village's use causes those emissions. Counting them where electricity is consumed (using the CEA grid factor) shows how saving power helps.",
-  },
-  {
-    q: "Where does the data come from?",
-    a: "Village surveys and approved supervisor entries, census and cadastral (khasra) village boundaries, and a land-use / land-cover raster. See Data & Disclaimer for the sources and their limits.",
-  },
-  {
-    q: "What can I do in the Carbon Lab?",
-    a: "Change each emission source with sliders or try scenarios such as clean cooking or rooftop solar, and see the effect on a 3D model of the village and on its emission map.",
-  },
-];
-
 const RESOURCES: Record<"guidance" | "project" | "other", { title: string; note?: string; href: string }[]> = {
   guidance: [
     { title: "IPCC 2006 Guidelines — Energy (Vol. 2)", note: "Stationary & mobile combustion factors", href: "https://www.ipcc-nggip.iges.or.jp/public/2006gl/vol2.html" },
@@ -132,7 +105,7 @@ const RESOURCE_GROUPS = [
   { key: "project", label: "Methodology & data", icon: FlaskConical },
   { key: "other", label: "Other references", icon: ExternalLink },
 ] as const;
-type HubTab = "faq" | "resources" | "updates";
+type HubTab = "resources" | "updates";
 
 /** Villages highlighted on the map; everything else is greyed out. */
 interface Focus { id: string; label: string; test: (v: Village) => boolean }
@@ -196,9 +169,8 @@ export default function OverviewPage() {
   const [focus, setFocus] = useState<Focus | null>(null);
   const [insight, setInsight] = useState<InsightTab>("sources");
   const [topBy, setTopBy] = useState<"total" | "per_capita">("total");
-  const [hub, setHub] = useState<HubTab>("faq");
+  const [hub, setHub] = useState<HubTab>("resources");
   const [query, setQuery] = useState("");
-  const [faq, setFaq] = useState<number | null>(0);
 
   const pool = useMemo(() => (block === ALL_BLOCKS ? allVillages : allVillages.filter((v) => v.block_name === block)), [allVillages, block]);
   const cuts = useMemo(() => ({
@@ -417,14 +389,13 @@ export default function OverviewPage() {
 
       {/* ── Learn: video beside one tabbed help hub ── */}
       <section className="home-section tint">
-        <SectionHead eyebrow="Learn" title="Resources & Help" sub="Videos, answers to common questions, references and project updates." />
+        <SectionHead eyebrow="Learn" title="Resources & Updates" sub="Videos, references and project updates." />
         <div className="home-hub">
           <div className="home-watch"><MiniVideo videos={VIDEOS} /></div>
           <div className="home-card home-hub-card">
             <div className="home-card-bar">
-              <div className="home-tabs" role="tablist" aria-label="Help">
+              <div className="home-tabs" role="tablist" aria-label="Resources">
                 {([
-                  ["faq", "FAQ", HelpCircle, FAQ.length],
                   ["resources", "Resources", BookOpen, Object.values(RESOURCES).flat().length],
                   ["updates", "Updates", Newspaper, posts.length],
                 ] as const).map(([key, label, Icon, n]) => (
@@ -442,12 +413,11 @@ export default function OverviewPage() {
                 <label className="home-search">
                   <Search size={14} aria-hidden />
                   <span className="sr-only">Search</span>
-                  <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={hub === "faq" ? "Search questions…" : "Search resources…"} />
+                  <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search resources…" />
                 </label>
               )}
             </div>
             <div className="home-hub-body">
-              {hub === "faq" && <FaqList query={query.trim().toLowerCase()} open={faq} setOpen={setFaq} />}
               {hub === "resources" && <ResourceList query={query.trim().toLowerCase()} />}
               {hub === "updates" && (posts.length ? (
                 <ul className="home-posts">
@@ -468,26 +438,6 @@ export default function OverviewPage() {
           </div>
         </div>
       </section>
-    </div>
-  );
-}
-
-function FaqList({ query, open, setOpen }: { query: string; open: number | null; setOpen: (i: number | null) => void }) {
-  const items = FAQ.map((f, i) => ({ ...f, i })).filter((f) => matches(query, f.q, f.a));
-  if (!items.length) return <div className="home-empty"><Search size={22} /><b>No matching questions</b></div>;
-  return (
-    <div className="home-faq">
-      {items.map((f) => {
-        const isOpen = query ? true : open === f.i;
-        return (
-          <div key={f.q} className={`home-faq-item${isOpen ? " open" : ""}`}>
-            <button type="button" aria-expanded={isOpen} onClick={() => setOpen(open === f.i ? null : f.i)}>
-              {f.q}<Plus size={15} aria-hidden />
-            </button>
-            {isOpen && <p>{f.a}</p>}
-          </div>
-        );
-      })}
     </div>
   );
 }

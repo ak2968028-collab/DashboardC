@@ -1155,20 +1155,13 @@ button.nav-link { background: none; border: none; font: inherit; cursor: pointer
 .home-res b { color: var(--home-blue); font-weight: 600; }
 .home-res small { color: #5b6774; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .home-res:hover b { text-decoration: underline; }
-.home-faq { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 22px; align-items: start; }
-.home-faq details { background: #fff; border: 1px solid #dfe4ec; border-radius: 8px; }
-.home-faq summary { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 16px 20px; cursor: pointer; font-size: 16px; font-weight: 500; list-style: none; }
-.home-faq summary::-webkit-details-marker { display: none; }
-.home-faq summary svg { flex-shrink: 0; transition: transform 0.2s; }
-.home-faq details[open] summary svg { transform: rotate(45deg); }
-.home-faq details p { margin: 0; padding: 0 20px 16px; color: #3d4955; line-height: 1.6; font-size: 14px; }
 @media (max-width: 1100px) {
   .home-charts { grid-template-columns: minmax(0, 1fr); }
   .home-rail { grid-auto-columns: calc((100% - 18px) / 2); }
 }
 @media (max-width: 800px) {
   .home-hero { padding: 40px 16px; }
-  .home-hero-cards, .home-faq { grid-template-columns: minmax(0, 1fr); }
+  .home-hero-cards { grid-template-columns: minmax(0, 1fr); }
   .home-hero-card { flex-direction: column; align-items: flex-start; }
   .home-stats { gap: 18px 28px; }
   .home-stats div:first-child { padding-right: 0; border-right: none; }
@@ -1441,10 +1434,6 @@ button.nav-link { background: none; border: none; font: inherit; cursor: pointer
 .home-barlist-val { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
 .home-barlist-val small { margin-left: 6px; font-weight: 500; color: #6b7783; }
 .home-duo.even { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-.home-faq { grid-template-columns: minmax(0, 1fr); gap: 8px; }
-.home-faq summary { padding: 11px 16px; font-size: 14.5px; }
-.home-faq details p { padding: 0 16px 12px; font-size: 13.5px; }
-.home-faq details[open] { border-color: #a5d6a7; box-shadow: 0 2px 8px rgba(46, 125, 50, 0.1); }
 .home-res { padding: 9px 4px; }
 .home-res > svg:last-child { margin-left: auto; color: #90a4ae; }
 @media (max-width: 1100px) {
@@ -1529,14 +1518,6 @@ button.nav-link { background: none; border: none; font: inherit; cursor: pointer
 .home-search { display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid #dfe4ec; border-radius: 8px; background: #fafbfc; color: #6b7783; transition: border-color 0.15s, box-shadow 0.15s; }
 .home-search:focus-within { border-color: #0b4a8b; box-shadow: 0 0 0 3px rgba(11, 74, 139, 0.12); background: #fff; }
 .home-search input { width: 190px; border: none; background: none; padding: 6px 0; font: inherit; font-size: 13px; outline: none; }
-.home-faq { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; align-items: start; }
-.home-faq-item { border: 1px solid #e3e7ee; border-radius: 8px; background: #fff; transition: border-color 0.15s, box-shadow 0.15s; }
-.home-faq-item button { display: flex; width: 100%; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 12px; border: none; background: none; font: inherit; font-size: 13.5px; font-weight: 600; color: #1f2a33; text-align: left; cursor: pointer; }
-.home-faq-item button svg { flex-shrink: 0; color: #6b7783; transition: transform 0.2s; }
-.home-faq-item:hover { border-color: #c8d1dc; }
-.home-faq-item.open { border-color: #a5d6a7; box-shadow: 0 2px 8px rgba(46, 125, 50, 0.08); }
-.home-faq-item.open button svg { transform: rotate(45deg); color: #2e7d32; }
-.home-faq-item p { margin: 0; padding: 0 12px 11px; font-size: 13px; line-height: 1.55; color: #3d4955; animation: home-pop 0.18s ease-out; }
 .home-res-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 18px; }
 .home-res-groups > div:first-child { grid-column: 1 / -1; }
 .home-res-h { display: flex; align-items: center; gap: 6px; margin: 6px 0 2px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: #6b7783; }
