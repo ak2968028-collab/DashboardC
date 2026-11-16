@@ -6,12 +6,14 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import { createPortal } from "react-dom";
 import {
   ChevronDown,
+  ClipboardList,
   Leaf,
   Lock,
   LogIn,
   LogOut,
   MapPin,
   Menu,
+  ShieldCheck,
   User,
   X,
 } from "lucide-react";
@@ -89,12 +91,8 @@ export default function Shell({ children }: { children: ReactNode }) {
       <SiteHeader />
       <header className={`navbar ${navOpen ? "open" : ""} ${scrolled ? "scrolled" : ""}`}>
         <div className="navbar-head">
-          <Link href="/" className="brand" onClick={() => setNavOpen(false)}>
+          <Link href="/" className="brand" aria-label="Home" title="Home" onClick={() => setNavOpen(false)}>
             <span className="brand-badge"><Leaf size={16} /></span>
-            <span className="brand-text">
-              Carbon Dashboard
-              <small>Varanasi District</small>
-            </span>
           </Link>
           <button
             type="button"
@@ -197,14 +195,7 @@ export default function Shell({ children }: { children: ReactNode }) {
                 </button>
               </div>
             ) : (
-              <Link
-                href="/login"
-                className={`nav-link nav-auth ${pathname === "/login" ? "active" : ""}`}
-                onClick={() => setNavOpen(false)}
-              >
-                <LogIn size={14} />
-                <span>Sign In</span>
-              </Link>
+              <SignInMenu pathname={pathname} onNavigate={() => setNavOpen(false)} />
             )}
           </div>
         </nav>
@@ -226,6 +217,91 @@ export default function Shell({ children }: { children: ReactNode }) {
 }
 
 /** Rich interactive mega-dropdown menu for navigation groups with responsive desktop & mobile support. */
+const SIGN_IN_OPTIONS = [
+  { role: "admin", label: "Admin login", hint: "Review and approve survey data, manage accounts", icon: ShieldCheck },
+  { role: "supervisor", label: "Village Supervisor login", hint: "Submit village survey data", icon: ClipboardList },
+] as const;
+
+/** "Sign In" button that asks which kind of account to log in with. */
+function SignInMenu({ pathname, onNavigate }: { pathname: string; onNavigate: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [inline, setInline] = useState(false);
+  const [pos, setPos] = useState({ top: 0, right: 0 });
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const place = () => {
+    const isMobile = window.matchMedia("(max-width: 860px)").matches;
+    setInline(isMobile);
+    if (!isMobile && buttonRef.current) {
+      const r = buttonRef.current.getBoundingClientRect();
+      setPos({ top: r.bottom + 8, right: Math.max(12, window.innerWidth - r.right) });
+    }
+  };
+
+  useEffect(() => setOpen(false), [pathname]);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (!buttonRef.current?.contains(t) && !menuRef.current?.contains(t)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { setOpen(false); buttonRef.current?.focus(); }
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open]);
+
+  const menu = (
+    <div ref={menuRef} role="menu" aria-label="Sign in as" className={`nav-mega-menu nav-signin-menu ${inline ? "inline" : ""}`}
+      style={inline ? undefined : { top: pos.top, right: pos.right, width: 300 }}>
+      {!inline && (
+        <div className="nav-mega-header">
+          <div className="nav-mega-header-title">
+            <span className="nav-mega-icon-box"><LogIn size={14} /></span>
+            <span className="nav-mega-label">Sign in as</span>
+          </div>
+          <p className="nav-mega-desc">The dashboard is open to everyone. Sign in only to enter or review data.</p>
+        </div>
+      )}
+      <div className="nav-mega-grid cols-1">
+        {SIGN_IN_OPTIONS.map((o) => (
+          <Link key={o.role} href={`/login?role=${o.role}`} role="menuitem" className="nav-card-item"
+            onClick={() => { setOpen(false); onNavigate(); }}>
+            <span className="nav-card-icon"><o.icon size={15} /></span>
+            <span className="nav-card-content">
+              <span className="nav-card-title">{o.label}</span>
+              <span className="nav-card-hint">{o.hint}</span>
+            </span>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      <button ref={buttonRef} type="button" aria-haspopup="menu" aria-expanded={open}
+        className={`nav-link nav-auth ${pathname === "/login" ? "active" : ""} ${open ? "dropdown-open" : ""}`}
+        onClick={() => { place(); setOpen(!open); }}>
+        <LogIn size={14} />
+        <span>Sign In</span>
+        <ChevronDown size={13} className={`nav-chevron ${open ? "open" : ""}`} />
+      </button>
+      {open && (inline ? menu : createPortal(menu, document.body))}
+    </>
+  );
+}
+
 function NavDropdown({
   items,
   pathname,

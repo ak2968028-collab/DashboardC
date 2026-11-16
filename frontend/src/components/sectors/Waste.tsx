@@ -1,5 +1,3 @@
-"use client";
-
 import { Badge, Grid, PageTitle, Stat, WithVillage } from "@/components/ui";
 import { fmt, num } from "@/lib/format";
 

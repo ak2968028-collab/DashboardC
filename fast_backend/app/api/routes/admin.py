@@ -35,8 +35,11 @@ async def update_user(db: db_write, admin: admin_user, user_id: int, body: User_
 
 
 @router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_user(db: db_write, admin: admin_user, user_id: int, tasks: BackgroundTasks):
-    tasks.add_task(export_users_csv, {await user_svc.delete_user(db, admin, user_id)})
+async def delete_user(db: db_write, admin: admin_user, user_id: int, tasks: BackgroundTasks,
+                      delete_submissions: bool = Query(False, description="Also delete the data submissions this account made")):
+    """Deletes the account. Its submissions are kept (shown without a submitter) unless `delete_submissions` is set.
+    Values already approved into the dashboard tables are not rolled back either way."""
+    tasks.add_task(export_users_csv, {await user_svc.delete_user(db, admin, user_id, delete_submissions)})
 
 
 @router.get("/verifications", response_model=list[User_record])

@@ -1,5 +1,3 @@
-"use client";
-
 import { SimpleBarChart } from "@/components/charts";
 import { useDashboard } from "@/components/DashboardContext";
 import { Badge, Card, Grid, MetricCard, PageTitle, WithVillage } from "@/components/ui";

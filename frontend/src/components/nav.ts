@@ -33,7 +33,7 @@ export interface NavPage {
   /** Only listed for this login role. */
   role?: Role;
   /** Consecutive pages with the same group share one navbar dropdown. */
-  group?: "Sectors" | "Analytics" | "Reports" | "Tools" | string;
+  group?: "Analytics" | "Reports" | "Tools" | string;
   /** Listed for everyone, but only usable after logging in (shown with a lock). */
   loginRequired?: boolean;
   /** Clear one-line hint shown in the dropdown and command palette. */
@@ -60,15 +60,6 @@ export interface NavGroupMeta {
 
 /** Rich metadata describing each navigation group. */
 export const NAV_GROUPS: Record<string, NavGroupMeta> = {
-  Sectors: {
-    id: "Sectors",
-    label: "Sectors",
-    icon: Layers,
-    description: "6 rural environmental & emission sectors surveyed at village resolution",
-    badge: "6 Sectors",
-    columns: 2,
-    menuWidth: 440,
-  },
   Analytics: {
     id: "Analytics",
     label: "Analytics",
@@ -100,7 +91,6 @@ export const NAV_GROUPS: Record<string, NavGroupMeta> = {
 
 /** Backward-compatible dropdown icons mapping. */
 export const GROUP_ICONS: Record<string, typeof Map> = {
-  Sectors: Layers,
   Analytics: BarChart3,
   Reports: FileText,
   Tools: Settings,
@@ -136,78 +126,16 @@ export const PAGES: readonly NavPage[] = [
     keywords: ["blog", "news", "updates", "articles", "posts"],
   },
 
-  // ── Sectors: 6 Rural Environmental Domains ─────────────────────────────────
+  // ── Sectors: one page, six tabs (SECTORS below) ───────────────────────────
   {
-    href: "/demography",
-    label: "Demography",
-    icon: Users,
+    href: "/sectors",
+    label: "Sectors",
+    icon: Layers,
     needsVillage: true,
-    group: "Sectors",
-    hint: "Household census, caste profiles, literacy & population stats",
-    badge: "Census",
-    badgeVariant: "neutral",
+    hint: "Demography, land & water, energy, transport, waste and livestock for the selected village",
     accentColor: "#7c3aed",
-    keywords: ["population", "census", "residents", "households", "literacy", "caste", "demographics"],
-  },
-  {
-    href: "/land-water",
-    label: "Land & Water",
-    icon: Wheat,
-    needsVillage: true,
-    group: "Sectors",
-    hint: "Land utilization, irrigation sources & water table depths",
-    badge: "LULC",
-    badgeVariant: "success",
-    accentColor: "#059669",
-    keywords: ["land", "water", "irrigation", "groundwater", "crops", "agriculture", "forest", "ponds", "wells"],
-  },
-  {
-    href: "/energy",
-    label: "Energy",
-    icon: Flame,
-    needsVillage: true,
-    group: "Sectors",
-    hint: "Domestic electricity, LPG cylinder usage & clean cooking",
-    badge: "Power & Fuel",
-    badgeVariant: "warning",
-    accentColor: "#d97706",
-    keywords: ["electricity", "power", "lpg", "biogas", "solar", "cooking fuel", "kwh", "grid"],
-  },
-  {
-    href: "/transport",
-    label: "Transport",
-    icon: Bike,
-    needsVillage: true,
-    group: "Sectors",
-    hint: "Vehicle ownership, commuting modes & fuel consumption",
-    badge: "Mobility",
-    badgeVariant: "info",
-    accentColor: "#2563eb",
-    keywords: ["vehicles", "cars", "bikes", "tractors", "diesel", "petrol", "commuting", "transport"],
-  },
-  {
-    href: "/waste",
-    label: "Waste Management",
-    icon: Trash2,
-    needsVillage: true,
-    group: "Sectors",
-    hint: "Solid & liquid waste generation, composting & treatment",
-    badge: "Sanitation",
-    badgeVariant: "neutral",
-    accentColor: "#dc2626",
-    keywords: ["solid waste", "plastic", "organic", "sewage", "drainage", "compost", "garbage"],
-  },
-  {
-    href: "/livestock",
-    label: "Livestock",
-    icon: Beef,
-    needsVillage: true,
-    group: "Sectors",
-    hint: "Indigenous cattle, buffalo, enteric fermentation & manure",
-    badge: "Animals",
-    badgeVariant: "success",
-    accentColor: "#15803d",
-    keywords: ["cattle", "cows", "buffalo", "poultry", "manure", "enteric fermentation", "methane", "livestock"],
+    keywords: ["sectors", "population", "census", "land", "water", "irrigation", "energy", "electricity", "lpg",
+      "firewood", "transport", "vehicles", "petrol", "waste", "garbage", "livestock", "cattle", "goats", "sheep"],
   },
 
   // ── Analytics & Simulations ────────────────────────────────────────────────
@@ -338,6 +266,81 @@ export const PAGES: readonly NavPage[] = [
     badgeVariant: "primary",
     accentColor: "#e11d48",
     keywords: ["admin", "users", "passwords", "security", "permissions", "roles", "audit"],
+  },
+];
+
+/** One tab of the Sectors page (/sectors?s=<key>). */
+export interface SectorTab {
+  key: string;
+  label: string;
+  icon: typeof Map;
+  hint: string;
+  badge?: string;
+  badgeVariant?: NavBadgeVariant;
+  accentColor: string;
+  keywords?: readonly string[];
+}
+
+export const SECTORS: readonly SectorTab[] = [
+  {
+    key: "demography",
+    label: "Demography",
+    icon: Users,
+    hint: "Household census, caste profiles, literacy & population stats",
+    badge: "Census",
+    badgeVariant: "neutral",
+    accentColor: "#7c3aed",
+    keywords: ["population", "census", "residents", "households", "literacy", "caste", "demographics"],
+  },
+  {
+    key: "land-water",
+    label: "Land & Water",
+    icon: Wheat,
+    hint: "Land utilization, irrigation sources & water table depths",
+    badge: "LULC",
+    badgeVariant: "success",
+    accentColor: "#059669",
+    keywords: ["land", "water", "irrigation", "groundwater", "crops", "agriculture", "forest", "ponds", "wells"],
+  },
+  {
+    key: "energy",
+    label: "Energy",
+    icon: Flame,
+    hint: "Domestic electricity, LPG cylinder usage & clean cooking",
+    badge: "Power & Fuel",
+    badgeVariant: "warning",
+    accentColor: "#d97706",
+    keywords: ["electricity", "power", "lpg", "biogas", "solar", "cooking fuel", "kwh", "grid"],
+  },
+  {
+    key: "transport",
+    label: "Transport",
+    icon: Bike,
+    hint: "Vehicle ownership, commuting modes & fuel consumption",
+    badge: "Mobility",
+    badgeVariant: "info",
+    accentColor: "#2563eb",
+    keywords: ["vehicles", "cars", "bikes", "tractors", "diesel", "petrol", "commuting", "transport"],
+  },
+  {
+    key: "waste",
+    label: "Waste Management",
+    icon: Trash2,
+    hint: "Solid & liquid waste generation, composting & treatment",
+    badge: "Sanitation",
+    badgeVariant: "neutral",
+    accentColor: "#dc2626",
+    keywords: ["solid waste", "plastic", "organic", "sewage", "drainage", "compost", "garbage"],
+  },
+  {
+    key: "livestock",
+    label: "Livestock",
+    icon: Beef,
+    hint: "Indigenous cattle, buffalo, enteric fermentation & manure",
+    badge: "Animals",
+    badgeVariant: "success",
+    accentColor: "#15803d",
+    keywords: ["cattle", "cows", "buffalo", "poultry", "manure", "enteric fermentation", "methane", "livestock"],
   },
 ];
 

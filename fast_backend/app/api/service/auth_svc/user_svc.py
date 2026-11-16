@@ -1,13 +1,14 @@
 from datetime import datetime
 
 from fastapi import HTTPException, status
+from sqlalchemy import delete
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.service.auth_svc.security import create_access_token, hash_password, verify_password
 from app.database.crud.location.async_crud import Location_crud
 from app.database.crud.user.async_crud import Certificate_crud, User_crud
-from app.database.models import User
+from app.database.models import DataSubmission, User
 from app.database.models.user import (
     ROLE_SUPERVISOR, VERIFY_DONE, VERIFY_NONE, VERIFY_PENDING, VERIFY_REJECTED,
 )
@@ -115,13 +116,15 @@ class user_svc:
         await _flush(db)
         return await user_svc.get_user(db, user.id)
 
-    async def delete_user(db: AsyncSession, admin: User, user_id: int) -> str:
-        """Deletes the account; returns its username."""
+    async def delete_user(db: AsyncSession, admin: User, user_id: int, delete_submissions: bool = False) -> str:
+        """Deletes the account (and, if asked, the submissions it made); returns its username."""
         user = await db.get(User, user_id)
         if not user:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"User {user_id} not found")
         if user.id == admin.id:
             raise _conflict("You cannot delete your own account")
+        if delete_submissions:
+            await db.execute(delete(DataSubmission).where(DataSubmission.submitted_by == user.id))
         await db.delete(user)
         return user.username
 

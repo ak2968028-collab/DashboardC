@@ -1,5 +1,3 @@
-"use client";
-
 import { DonutChart, SimpleBarChart } from "@/components/charts";
 import { useDashboard } from "@/components/DashboardContext";
 import { Badge, Card, Grid, PageTitle, Stat, WithVillage } from "@/components/ui";

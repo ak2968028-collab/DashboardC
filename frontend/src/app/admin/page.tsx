@@ -312,6 +312,7 @@ function Users({ admin }: { admin: User }) {
   const { data: users = [], mutate } = useUsers(true);
   const [message, setMessage] = useState<Message>(null);
   const [villageFor, setVillageFor] = useState<User | null>(null);
+  const [deleting, setDeleting] = useState<User | null>(null);
   const takenCodes = users.flatMap((u) => (u.village_code ? [u.village_code] : []));
 
   async function run(action: () => Promise<unknown>, success: string) {
@@ -334,9 +335,14 @@ function Users({ admin }: { admin: User }) {
     if (password) patch(u, { password }, `Password for ${u.username} changed. Share it with them securely.`);
   }
 
-  function remove(u: User) {
-    if (confirm(`Delete ${u.username}? Their past submissions are kept.`)) {
-      run(() => sendApi("DELETE", `/api/admin/users/${u.id}`), `${u.username} deleted.`);
+  async function remove(u: User, withSubmissions: boolean) {
+    const ok = await run(
+      () => sendApi("DELETE", `/api/admin/users/${u.id}${withSubmissions ? "?delete_submissions=true" : ""}`),
+      withSubmissions ? `${u.username} and their past submissions deleted.` : `${u.username} deleted. Their past submissions are kept.`,
+    );
+    if (ok) {
+      setDeleting(null);
+      if (withSubmissions) refreshAll();
     }
   }
 
@@ -372,7 +378,7 @@ function Users({ admin }: { admin: User }) {
                       onClick={() => patch(u, { is_active: !u.is_active }, `${u.username} ${u.is_active ? "disabled" : "enabled"}.`)}>
                       <Power size={14} />
                     </button>
-                    <button className="btn danger" title="Delete" onClick={() => remove(u)}><Trash2 size={14} /></button>
+                    <button className="btn danger" title="Delete" onClick={() => setDeleting(u)}><Trash2 size={14} /></button>
                   </>
                 )}
               </div>
@@ -380,6 +386,7 @@ function Users({ admin }: { admin: User }) {
           },
         ]}
       />
+      {deleting && <DeleteUser key={deleting.id} user={deleting} onCancel={() => setDeleting(null)} onConfirm={(withSubs) => remove(deleting, withSubs)} />}
       {villageFor && (
         <ChangeVillage
           key={villageFor.id}
@@ -394,6 +401,61 @@ function Users({ admin }: { admin: User }) {
         />
       )}
     </>
+  );
+}
+
+/** Confirmation dialog for deleting an account, with the choice to also delete its past submissions. */
+function DeleteUser({ user, onCancel, onConfirm }: { user: User; onCancel: () => void; onConfirm: (withSubmissions: boolean) => Promise<void> }) {
+  const { data: all, isLoading } = useSubmissions(true, "");
+  const [withSubs, setWithSubs] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const mine = (all ?? []).filter((x) => x.submitted_by === user.username);
+  const count = (st: string) => mine.filter((x) => x.status === st).length;
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && !busy) onCancel(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [busy, onCancel]);
+
+  return (
+    <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) onCancel(); }}>
+      <div className="modal" role="alertdialog" aria-modal="true" aria-labelledby="del-title">
+        <div className="modal-head">
+          <span className="modal-icon danger"><Trash2 size={18} /></span>
+          <div>
+            <h3 id="del-title">Delete {user.username}?</h3>
+            <p>{user.full_name || user.username} · {user.role === "admin" ? "Admin" : "Supervisor"}{user.village_name ? ` · ${user.village_name}` : ""}</p>
+          </div>
+        </div>
+        <p className="modal-text">The account will be removed and they will no longer be able to log in. This cannot be undone.</p>
+
+        <label className={`modal-check ${withSubs ? "on" : ""} ${!mine.length ? "disabled" : ""}`}>
+          <input type="checkbox" checked={withSubs} disabled={!mine.length || busy} onChange={(e) => setWithSubs(e.target.checked)} />
+          <span>
+            <b>Also delete their past submissions</b>
+            <small>
+              {isLoading ? "Counting submissions…" : mine.length
+                ? `${mine.length} submission${mine.length === 1 ? "" : "s"}: ${count("pending")} pending, ${count("approved")} approved, ${count("rejected")} rejected.`
+                : "This account has no submissions."}
+            </small>
+          </span>
+        </label>
+        <p className="modal-note">
+          {withSubs
+            ? "Submission records will be deleted. Values already approved stay on the dashboard; pending ones will never be reviewed."
+            : "Submission records are kept for the audit trail and shown without a submitter."}
+        </p>
+
+        <div className="modal-actions">
+          <button type="button" className="btn" onClick={onCancel} disabled={busy}>Cancel</button>
+          <button type="button" className="btn danger-solid" disabled={busy}
+            onClick={async () => { setBusy(true); await onConfirm(withSubs); setBusy(false); }}>
+            <Trash2 size={14} /> {busy ? "Deleting…" : withSubs ? "Delete account & submissions" : "Delete account only"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
