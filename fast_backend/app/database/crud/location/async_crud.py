@@ -39,13 +39,17 @@ class Location_crud(CrudBase):
                  .where(Subdistrict.district_code == district_code).order_by(Subdistrict.subdistrict_name))
         return await self._rows(query)
 
-    async def get_villages(self, subdistrict_code: int | None = None, search: str | None = None) -> list[dict]:
+    async def get_villages(self, subdistrict_code: int | None = None, search: str | None = None,
+                           district_code: int | None = None) -> list[dict]:
         query = select(*VILLAGE_COLUMNS).order_by(CensusVillage.village_name)
         if subdistrict_code is not None:
             query = query.where(CensusVillage.subdistrict_code == subdistrict_code)
+        if district_code is not None:
+            query = query.where(CensusVillage.subdistrict_code.in_(
+                select(Subdistrict.subdistrict_code).where(Subdistrict.district_code == district_code)))
         if search:
             query = query.where(CensusVillage.village_name.ilike(f"%{search}%"))
-            if subdistrict_code is None:
+            if subdistrict_code is None and district_code is None:
                 query = query.limit(SEARCH_LIMIT)
         return await self._rows(query)
 

@@ -40,7 +40,7 @@ export default function AdvancedReportPage() {
 
 function Download({ village }: { village: VillageDetails }) {
   const { user } = useAuth();
-  const { allVillages, setSelectedCode, setSelectedBlock } = useDashboard();
+  const { allVillages, selectVillage } = useDashboard();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // A Pradhan's own village, when it is on the dashboard and not the one selected.
@@ -70,7 +70,7 @@ function Download({ village }: { village: VillageDetails }) {
       </p>
       {own && (
         <p>
-          <button className="btn" onClick={() => { setSelectedBlock(own.block_name); setSelectedCode(own.village_code); }}>
+          <button className="btn" onClick={() => selectVillage(own.village_code)}>
             <Home size={16} /> Switch to my village ({own.village_name})
           </button>
         </p>

@@ -1,7 +1,7 @@
 import useSWR, { mutate } from "swr";
 import type { FeatureCollection } from "geojson";
 import type {
-  CensusVillage, District, EmissionFactor, RasterFactor, RasterLayer, State, Submission, SubmissionDetails, Subdistrict, Summary,
+  CensusVillage, CensusVillageDetails, District, EmissionFactor, RasterFactor, RasterLayer, State, Submission, SubmissionDetails, Subdistrict, Summary,
   SupervisorVillage, SurveyField, User, Village, VillageDetails, VillageFactorStats, VillageScene, VillageElevation, EmissionGrid, BlogPost, BlogPostDetails,
 } from "./types";
 
@@ -91,8 +91,29 @@ export const useVillageScene = (code: string | null) =>
 /** Digital Elevation Model (DEM) profile and house elevations for one village. */
 export const useVillageElevation = (code: string | null) =>
   useSWR<VillageElevation>(code ? `/api/villages/${code}/elevation` : null, fetcher, { revalidateOnFocus: false, shouldRetryOnError: false });
-export const useGeoJson = (layer: "district" | "blocks" | "villages" | "villages_cadastral") =>
-  useSWR<FeatureCollection>(`/api/geo/${layer}`, fetcher, { revalidateOnFocus: false });
+/** Boundary layers served by GeoServer WFS (workspace varanasi) as WGS84 GeoJSON. */
+const GEO_LAYERS = {
+  district: { typeName: "district_boundary" },
+  blocks: { typeName: "block_boundaries" },
+  // Census village boundaries, with the names from the village table.
+  villages: { typeName: "villages_carbon", properties: "village_code,village_name,block_name,subdistrict,geom" },
+  // Village boundaries dissolved from the khasra parcels.
+  villages_cadastral: { typeName: "villages_cadastral" },
+} as const;
+
+export const geoJsonUrl = (layer: keyof typeof GEO_LAYERS) => {
+  const spec: { typeName: string; properties?: string } = GEO_LAYERS[layer];
+  const q = new URLSearchParams({
+    // WFS 1.0.0 keeps lon/lat axis order for EPSG:4326.
+    service: "WFS", version: "1.0.0", request: "GetFeature", typeName: `varanasi:${spec.typeName}`,
+    outputFormat: "application/json", srsName: "EPSG:4326",
+  });
+  if (spec.properties) q.set("propertyName", spec.properties);
+  return `/geoserver/varanasi/ows?${q}`;
+};
+
+export const useGeoJson = (layer: keyof typeof GEO_LAYERS) =>
+  useSWR<FeatureCollection>(geoJsonUrl(layer), fetcher, { revalidateOnFocus: false });
 
 export const useRasterLayers = () =>
   useSWR<RasterLayer[]>("/api/geo/rasters", fetcher, { revalidateOnFocus: false });
@@ -147,6 +168,12 @@ export const useSubdistricts = (district: number | null) =>
 export const useCensusVillages = (subdistrict: number | null) =>
   useSWR<CensusVillage[]>(subdistrict ? `/api/locations/villages?subdistrict_code=${subdistrict}` : null, fetcher,
     { revalidateOnFocus: false });
+/** Census villages of one district (every sub-district). */
+export const useDistrictCensusVillages = (district: number | null) =>
+  useSWR<CensusVillage[]>(district ? `/api/locations/villages?district_code=${district}` : null, fetcher,
+    { revalidateOnFocus: false });
+/** One census village with its State > District > Sub-district codes (404 for villages not in the census list). */
+export const fetchCensusVillage = (code: string) => fetcher<CensusVillageDetails>(`/api/locations/villages/${code}`);
 
 // ---------- Logged-in APIs (pass enabled=false until the user is known) ----------
 const useAuthed = <T,>(url: string | null) => useSWR<T>(url, authFetcher);

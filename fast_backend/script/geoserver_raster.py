@@ -1,11 +1,13 @@
 # Publishes every GeoTIFF in media/Rasters/files/<group>/ to GeoServer (workspace varanasi_raster),
-# styled with media/Rasters/SLD/<group>/<same name>.sld when present.
+# styled with media/Rasters/SLD/<group>/<same name>.sld when present, plus the DEM (workspace varanasi, up_dem).
 # Usage (from fast_backend/): python -m script.geoserver_raster [--replace]
 import sys
 import time
 import urllib.error
 
-from app.api.service.geoserver_svc.geoserver import RASTER_WORKSPACE, GeoServerError, find_rasters, publish_raster
+from app.api.service.geoserver_svc.geoserver import (
+    DEM_LAYER, RASTER_WORKSPACE, WORKSPACE, GeoServerError, find_rasters, publish_dem, publish_raster,
+)
 from app.conf.logging.applog import logger
 from app.conf.settings import settings
 
@@ -15,6 +17,8 @@ def publish_all(replace=False):
         uploaded = publish_raster(tif, sld, replace=replace)
         logger.info("GeoServer raster: %s:%s %s%s", RASTER_WORKSPACE, tif.stem,
                     "uploaded" if uploaded else "already published", "" if sld else " (no SLD found, default style)")
+    uploaded = publish_dem(replace=replace)
+    logger.info("GeoServer raster: %s:%s %s", WORKSPACE, DEM_LAYER, "uploaded" if uploaded else "already published")
 
 
 def main(replace=False, timeout_s=600, interval_s=10):

@@ -1,8 +1,8 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useState } from "react";
-import { ALL_BLOCKS, useDashboard } from "@/components/DashboardContext";
+import { useMemo, useState } from "react";
+import { useDashboard } from "@/components/DashboardContext";
 import { CensusCode } from "@/components/VillageSelector";
 import { Alert, PageTitle } from "@/components/ui";
 import { THEMATIC_METRICS } from "@/components/VillageMap";
@@ -15,7 +15,12 @@ const VillageMap = dynamic(() => import("@/components/VillageMap"), {
 });
 
 export default function MapPage() {
-  const { allVillages, selectedCode, setSelectedCode, selectedBlock, activeVillage: v } = useDashboard();
+  const { allVillages, filteredVillages, subdistrictCode, areaLabel, selectedCode, setSelectedCode, activeVillage: v } = useDashboard();
+  // A chosen sub-district narrows the map to its villages; "All sub-districts" shows the whole district.
+  const areaFilter = useMemo(
+    () => (subdistrictCode ? { label: areaLabel, codes: new Set(filteredVillages.map((x) => x.village_code)) } : null),
+    [subdistrictCode, areaLabel, filteredVillages],
+  );
   const [metricIdx, setMetricIdx] = useState(0);
   const metric = THEMATIC_METRICS[metricIdx];
 
@@ -26,7 +31,7 @@ export default function MapPage() {
         <VillageMap
           villages={allVillages}
           selectedCode={selectedCode}
-          blockFilter={selectedBlock === ALL_BLOCKS ? null : selectedBlock}
+          areaFilter={areaFilter}
           metric={metric}
           onSelect={setSelectedCode}
         />

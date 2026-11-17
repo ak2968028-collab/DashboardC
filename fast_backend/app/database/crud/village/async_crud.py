@@ -18,7 +18,7 @@ EMISSION_COLUMNS = [
 # Flat village record used by the dashboard list, map, ranking & comparison.
 LIST_COLUMNS = [
     Village.id.label("village_id"), Village.village_code, Village.village_name, Village.block_name,
-    Village.subdistrict, Village.latitude, Village.longitude,
+    Village.subdistrict, Village.district, Village.state, Village.latitude, Village.longitude,
     Demographics.total_residents, Demographics.total_households,
     LandUse.total_area_ha, LandUse.builtup_area_ha, LandUse.agri_area_ha,
     WaterResources.total_water_area_ha,
@@ -32,7 +32,7 @@ LIST_COLUMNS = [
 
 # Complete record of all 12 parameters for one village.
 DETAIL_COLUMNS = LIST_COLUMNS + [
-    Village.district, Village.state, Village.data_status, Village.created_at, Village.modified_at,
+    Village.data_status, Village.created_at, Village.modified_at,
     Demographics.total_male, Demographics.total_female,
     LandUse.forest_area_ha, LandUse.barren_area_ha, LandUse.culturable_waste_ha, LandUse.fallow_land_ha,
     LandUse.remaining_area_ha,

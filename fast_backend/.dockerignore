@@ -3,7 +3,5 @@
 .venv
 venv
 .fastdb.env
-media/data/raw/VARANASI_VILL.gpkg
-media/data/processed/sample_village_report.pdf
-media/Rasters/classified_raster.docx
+media/unnecessary
 media/Rasters/**/*.aux.xml

@@ -84,7 +84,19 @@ export function DataTable<T>({ rows, columns, rowKey }: { rows: T[]; columns: Co
 
 /** Renders children only once the active village has loaded. */
 export function WithVillage({ children }: { children: (v: VillageDetails) => ReactNode }) {
-  const { activeVillage } = useDashboard();
+  const { activeVillage, selectedPlace, districtCode, areaLabel } = useDashboard();
+  if (!districtCode) {
+    return <Alert kind="info">Choose a <b>state</b> and <b>district</b> above, then a village.</Alert>;
+  }
+  if (selectedPlace && !selectedPlace.survey) {
+    return (
+      <Alert kind="warning">
+        <b>{selectedPlace.village_name}</b>{areaLabel && <> ({areaLabel})</>} has no survey data on the dashboard yet
+        {!!selectedPlace.population_2011 && <> · Census 2011 population {selectedPlace.population_2011.toLocaleString()}</>}.
+        {" "}Pick a village marked with survey data, or sign in as a village supervisor to submit this village&apos;s data.
+      </Alert>
+    );
+  }
   if (!activeVillage) return <div className="loading">Loading village…</div>;
   return <>{children(activeVillage)}</>;
 }

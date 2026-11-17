@@ -60,21 +60,22 @@ mtech-thesis/
 │   ├── alembic/                   # Database migrations (alembic.ini alongside)
 │   │   └── versions/
 │   ├── script/
-│   │   ├── geoserver_publish.py   # Publishes PostGIS vector layers & SLD styles to GeoServer
-│   │   └── geoserver_raster.py    # Uploads media/Rasters GeoTIFFs to GeoServer with their SLDs
+│   │   ├── geoserver_publish.py   # Publishes PostGIS layers, khasra parcels & cadastral outlines to GeoServer
+│   │   └── geoserver_raster.py    # Uploads media/Rasters GeoTIFFs and the DEM to GeoServer with their SLDs
 │   ├── media/
 │   │   ├── run_all.py             # Runs the loader scripts below in order
 │   │   ├── scripts/               # One loader per table (read file -> df.to_sql), skips filled tables
 │   │   │   ├── db_connection.py   # DB connection details (from POSTGRES_* env vars)
 │   │   │   ├── masters/           # emission_factors.py
-│   │   │   ├── survey/            # villages.py, demographics.py, land_use.py, ... (village_data.xlsx)
+│   │   │   ├── survey/            # villages.py, demographics.py, land_use.py, ... (village_data.csv)
 │   │   │   ├── emissions/         # village_emissions.py (IPCC Tier-1 model)
 │   │   │   └── boundaries/        # district / block / village polygons -> PostGIS
-│   │   ├── data/raw/              # village_data.xlsx (1,334 villages), VARANASI_VILL.gpkg (SOI cadastral)
+│   │   ├── data/raw/              # village_data.csv (1,334 villages, survey)
 │   │   ├── data/processed/        # District, block & village GeoJSON
 │   │   ├── config/                # emission_factors.csv (IPCC & CEA)
-│   │   ├── geoserver/             # SLD styles for the vector layers
-│   │   └── Rasters/               # files/<group>/*.tif + SLD/<group>/*.sld (same file names)
+│   │   ├── geoserver/             # SLD styles for the vector layers and the DEM
+│   │   ├── Rasters/               # files/<group>/*.tif + SLD/<group>/*.sld (same file names)
+│   │   └── unnecessary/           # Files no code reads (kept for reference, not copied into Docker)
 │   ├── start.sh                   # Setup: migrations, data, GeoServer (run after docker compose up)
 │   ├── Dockerfile, gunicorn.conf.py, requirements.txt
 │   └── .fastdb.env.example        # Settings for running outside Docker
@@ -128,9 +129,10 @@ This starts four services:
 1. deletes the existing Alembic migration files (and clears Alembic's applied-revision record with `alembic stamp --purge base`;
    tables and data are kept), then autogenerates a fresh migration from the models (`alembic revision --autogenerate`),
 2. applies it (`alembic upgrade head`) and creates the views in `database/views.sql`,
-3. pushes data with `media/run_all.py` — each loader fills its table from `media/data/raw/village_data.xlsx`,
+3. pushes data with `media/run_all.py` — each loader fills its table from `media/data/raw/village_data.csv`,
    `emission_factors.csv` or the boundary GeoJSON; tables that already have data are skipped,
-4. publishes the vector layers (workspace `varanasi`) and the rasters (workspace `varanasi_raster`) to GeoServer.
+4. publishes the vector layers, khasra parcels, cadastral outlines and DEM (workspace `varanasi`) and the rasters
+   (workspace `varanasi_raster`) to GeoServer.
 
 Re-running it is safe: after a model change it migrates the tables, and existing data and rasters are kept.
 
@@ -140,12 +142,19 @@ Re-running it is safe: after a model change it migrates the tables, and existing
 | `varanasi:village_boundaries` | Village polygons | Default |
 | `varanasi:block_boundaries` | Block polygons | Dashed outline |
 | `varanasi:district_boundary` | District polygon | Dashed outline |
+| `varanasi:villages_cadastral` | Village outlines dissolved from the khasra parcels (GeoPackage store) | Green outline |
+| `varanasi:khasra_parcels` | Khasra parcels from `media/Smulation data/varanasi.gpkg` (GeoPackage store) | Thin outline, zoomed in only |
+| `varanasi:up_dem` | Uttar Pradesh elevation model `media/DEM/UP_DEM.tif` (raster) | Elevation ramp (`up_dem.sld`) |
+
+The website's maps load the district, block and village boundaries from GeoServer **WFS** (GeoJSON). The API still
+reads the GeoPackage, DEM and LULC files from disk for the Carbon Lab 3D view and emission calculations.
 
 The rasters also appear on the dashboard's **Village Map** as `Raster: …` overlays in the layer control (with their
 legend), served through the frontend's `/geoserver` proxy.
 
 Every GeoTIFF in `media/Rasters/files/<group>/` is published as `varanasi_raster:<file name>`, styled with
-`media/Rasters/SLD/<group>/<file name>.sld`. To add a raster, drop the `.tif` and its `.sld` there and run
+`media/Rasters/SLD/<group>/<file name>.sld`. To add a raster, drop the `.tif` and its `.sld` there (ready-made styles for rasters we don't have yet are in
+`media/unnecessary/Rasters/SLD/`) and run
 `docker compose exec fast_backend python -m script.geoserver_raster` (add `--replace` to re-upload changed files).
 
 Add them to QGIS via *Layer → Add WMS/WFS Layer* with `http://localhost:8080/geoserver/varanasi/wms` (or `/wfs`).

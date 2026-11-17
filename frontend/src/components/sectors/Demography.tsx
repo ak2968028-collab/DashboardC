@@ -8,11 +8,13 @@ export default function DemographyPage() {
   return (
     <WithVillage>
       {(v) => {
-        const block = allVillages.filter((x) => x.block_name === v.block_name);
-        const benchmark = `${v.block_name} Mean`;
+        // Benchmark: mean of the surveyed villages in the same sub-district.
+        const area = v.subdistrict ?? v.district;
+        const peers = allVillages.filter((x) => (x.subdistrict ?? x.district) === area);
+        const benchmark = `${area} Mean`;
         const comparison = [
-          { category: "Residents", village: num(v.total_residents), block: Math.round(mean(block.map((x) => x.total_residents))) },
-          { category: "Households", village: num(v.total_households), block: Math.round(mean(block.map((x) => x.total_households))) },
+          { category: "Residents", village: num(v.total_residents), block: Math.round(mean(peers.map((x) => x.total_residents))) },
+          { category: "Households", village: num(v.total_households), block: Math.round(mean(peers.map((x) => x.total_households))) },
         ];
         return (
           <>
@@ -33,7 +35,7 @@ export default function DemographyPage() {
                   decimals={0}
                 />
               </Card>
-              <Card title={`Comparison with ${v.block_name} Benchmark`}>
+              <Card title={`Comparison with ${area} Sub-district Benchmark`}>
                 <SimpleBarChart
                   data={comparison}
                   category="category"

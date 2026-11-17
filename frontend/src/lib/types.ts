@@ -6,6 +6,8 @@ export interface Village {
   village_name: string;
   block_name: string;
   subdistrict: string | null;
+  district: string;
+  state: string;
   latitude: number | null;
   longitude: number | null;
   total_residents: number | null;
@@ -36,8 +38,6 @@ export interface Village {
 }
 
 export interface VillageDetails extends Village {
-  district: string;
-  state: string;
   total_male: number | null;
   total_female: number | null;
   forest_area_ha: number | null;

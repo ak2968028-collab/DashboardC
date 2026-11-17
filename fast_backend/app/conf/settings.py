@@ -65,22 +65,18 @@ class Settings(BaseSettings):
         return self.MEDIA_DIR / "user" / "users.csv"
 
     @property
-    def EXCEL_PATH(self) -> Path:
-        return self.MEDIA_DIR / "data" / "raw" / "village_data.xlsx"
+    def SURVEY_CSV_PATH(self) -> Path:
+        """Village survey loaded by media/scripts/survey/*.py (Excel uploads on the website still work)."""
+        return self.MEDIA_DIR / "data" / "raw" / "village_data.csv"
 
     @property
     def EMISSION_FACTORS_PATH(self) -> Path:
         return self.MEDIA_DIR / "config" / "emission_factors.csv"
 
     @property
-    def GEOJSON_LAYERS(self) -> dict[str, Path]:
-        processed = self.MEDIA_DIR / "data" / "processed"
-        return {
-            "district": processed / "varanasi_district.geojson",
-            "blocks": processed / "varanasi_blocks.geojson",
-            "villages": processed / "varanasi_villages_optimized.geojson",
-            "villages_cadastral": self.CADASTRAL_BOUNDARIES_PATH,
-        }
+    def CENSUS_BOUNDARIES_PATH(self) -> Path:
+        """Census village boundaries, WGS84 (also loaded into PostGIS; the maps get them from GeoServer)."""
+        return self.MEDIA_DIR / "data" / "processed" / "varanasi_villages_optimized.geojson"
 
     @property
     def PARCELS_GPKG_PATH(self) -> Path:

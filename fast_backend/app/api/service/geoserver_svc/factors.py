@@ -298,7 +298,7 @@ def _village_shapes() -> dict[str, object]:
     """Village boundaries: dissolved from the khasra parcels where available, else the census boundary.
     Census-only villages come first so that, where the two overlap, later (cadastral) shapes win."""
     cadastral = _read_boundaries(settings.CADASTRAL_BOUNDARIES_PATH)
-    census = _read_boundaries(settings.GEOJSON_LAYERS['villages'])
+    census = _read_boundaries(settings.CENSUS_BOUNDARIES_PATH)
     return {**{c: g for c, g in census.items() if c not in cadastral}, **cadastral}
 
 

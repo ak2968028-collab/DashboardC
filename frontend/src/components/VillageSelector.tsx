@@ -3,13 +3,12 @@
 import Link from "next/link";
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import {
-  ChevronDown, Eye, EyeOff, Layers, Scale, Search, X,
+  ChevronDown, Eye, EyeOff, MapPin, Scale, Search, X,
 } from "lucide-react";
-import { useBlocks } from "@/lib/api";
 import { interpolate, SCALES } from "@/lib/colors";
 import { fmt } from "@/lib/format";
 import type { Village } from "@/lib/types";
-import { ALL_BLOCKS, useDashboard } from "./DashboardContext";
+import { useDashboard, type PlaceOption } from "./DashboardContext";
 
 /** Most rows rendered at once; typing narrows the list further. */
 const MAX_ROWS = 150;
@@ -234,114 +233,189 @@ export function VillageCombobox({
   );
 }
 
-// ---------- Block picker ----------
+// ---------- Area dropdowns (Census 2011) ----------
 
-function BlockPicker() {
-  const { allVillages, selectedBlock, setSelectedBlock } = useDashboard();
-  const { data: blocks = [] } = useBlocks();
+function AreaSelect({ label, value, options, placeholder, allLabel, disabled, onChange }: {
+  label: string;
+  value: number | null;
+  options: { code: number; name: string }[];
+  placeholder: string;
+  /** Offer an "all" choice (value null) instead of a placeholder. */
+  allLabel?: string;
+  disabled?: boolean;
+  onChange: (code: number | null) => void;
+}) {
+  const id = useId();
+  return (
+    <div className={`combo area-select ${disabled ? "disabled" : ""}`}>
+      <label className="combo-label" htmlFor={id}>{label}</label>
+      <div className="combo-control">
+        <MapPin size={16} className="combo-icon" aria-hidden />
+        <select id={id} value={value ?? ""} disabled={disabled} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}>
+          {allLabel ? <option value="">{allLabel}</option> : <option value="" disabled>{placeholder}</option>}
+          {options.map((o) => <option key={o.code} value={o.code}>{o.name}</option>)}
+        </select>
+        <ChevronDown size={16} className="combo-chevron" aria-hidden />
+      </div>
+    </div>
+  );
+}
+
+// ---------- Village picker over the selected area ----------
+
+function PlaceCombobox({ inputRef }: { inputRef: RefObject<HTMLInputElement | null> }) {
+  const { placeOptions, placesLoading, selectedCode, setSelectedCode, districtCode, showCodes } = useDashboard();
   const id = useId();
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const boxRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
+  const selected = placeOptions.find((p) => p.village_code === selectedCode);
+  const surveyedCount = useMemo(() => placeOptions.filter((p) => p.survey).length, [placeOptions]);
+  const surveyed = useMemo(() => placeOptions.flatMap((p) => (p.survey ? [p.survey] : [])), [placeOptions]);
+  const scale = usePerCapitaScale(surveyed);
+  const disabled = !districtCode;
 
-  const stats = useMemo(() => {
-    const by = new Map<string, { count: number; co2: number }>();
-    for (const v of allVillages) {
-      const s = by.get(v.block_name) ?? { count: 0, co2: 0 };
-      s.count += 1;
-      s.co2 += v.total_co2e_t_yr ?? 0;
-      by.set(v.block_name, s);
-    }
-    const total = { count: allVillages.length, co2: allVillages.reduce((a, v) => a + (v.total_co2e_t_yr ?? 0), 0) };
-    return { by, total };
-  }, [allVillages]);
+  const rows = useMemo<PlaceOption[]>(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return placeOptions;
+    const numeric = /^\d+$/.test(q);
+    const scored = placeOptions.flatMap((p) => {
+      const name = p.village_name.toLowerCase();
+      const score = name.startsWith(q) ? 0 : name.includes(q) ? 1 : numeric && p.village_code.startsWith(q) ? 2 : -1;
+      return score < 0 ? [] : [{ p, score }];
+    });
+    // Surveyed villages first within each match quality.
+    scored.sort((a, b) => a.score - b.score || Number(!a.p.survey) - Number(!b.p.survey)
+      || a.p.village_name.localeCompare(b.p.village_name));
+    return scored.map(({ p }) => p);
+  }, [placeOptions, query]);
 
-  const options = [ALL_BLOCKS, ...blocks];
-  const maxCo2 = Math.max(1, ...blocks.map((b) => stats.by.get(b)?.co2 ?? 0));
-  const current = selectedBlock === ALL_BLOCKS ? stats.total : stats.by.get(selectedBlock);
-  const close = () => setOpen(false);
+  const shown = rows.slice(0, MAX_ROWS);
+  const close = () => { setOpen(false); setQuery(""); };
   useDismiss(open, close, [boxRef]);
   useScrollActive(listRef, active, open);
 
-  function toggle() {
-    setActive(Math.max(0, options.indexOf(selectedBlock)));
-    setOpen(!open);
+  function openList() {
+    if (disabled) return;
+    setOpen(true);
+    setActive(0);
   }
 
-  function choose(block: string) {
-    setSelectedBlock(block);
+  function choose(p: PlaceOption) {
+    setSelectedCode(p.village_code);
     close();
-    buttonRef.current?.focus();
   }
 
-  function onKey(e: KeyboardEvent) {
-    if (!open && (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ")) {
+  function onKey(e: KeyboardEvent<HTMLInputElement>) {
+    if (!open && (e.key === "ArrowDown" || e.key === "Enter")) {
       e.preventDefault();
-      toggle();
+      openList();
       return;
     }
-    if (!open) return;
-    if (moveActive(e, options.length, setActive)) return;
-    if (e.key === "Enter" || e.key === " ") {
+    if (moveActive(e, shown.length, setActive)) return;
+    if (e.key === "Enter" && shown[active]) {
       e.preventDefault();
-      choose(options[active]);
+      choose(shown[active]);
     } else if (e.key === "Escape" || e.key === "Tab") {
       close();
     }
   }
 
+  const placeholder = disabled ? "Choose a district first" : placesLoading ? "Loading villages…" : "Search village…";
+
   return (
-    <div className={`combo block-picker ${open ? "open" : ""}`} ref={boxRef}>
-      <span className="combo-label" id={`${id}-label`}>Block</span>
-      <button
-        ref={buttonRef}
-        type="button"
-        className="combo-control combo-button"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-labelledby={`${id}-label ${id}-value`}
-        aria-activedescendant={open ? `${id}-opt-${active}` : undefined}
-        onClick={toggle}
-        onKeyDown={onKey}
-      >
-        <Layers size={16} className="combo-icon" aria-hidden />
-        <span className="combo-value" id={`${id}-value`}>{selectedBlock}</span>
-        {current && <span className="combo-count">{current.count.toLocaleString()}</span>}
+    <div className={`combo ${open ? "open" : ""} ${disabled ? "disabled" : ""}`} ref={boxRef}>
+      <label className="combo-label" htmlFor={`${id}-input`}>Village</label>
+      <div className="combo-control" onClick={() => { inputRef.current?.focus(); if (!open) openList(); }}>
+        <Search size={16} className="combo-icon" aria-hidden />
+        <input
+          ref={inputRef}
+          id={`${id}-input`}
+          role="combobox"
+          aria-expanded={open}
+          aria-controls={`${id}-list`}
+          aria-autocomplete="list"
+          aria-activedescendant={open && shown[active] ? `${id}-opt-${active}` : undefined}
+          autoComplete="off"
+          spellCheck={false}
+          disabled={disabled}
+          placeholder={selected ? selected.village_name : placeholder}
+          value={open ? query : selected ? selected.village_name : ""}
+          onFocus={openList}
+          onChange={(e) => { setQuery(e.target.value); setActive(0); if (!open) setOpen(true); }}
+          onKeyDown={onKey}
+        />
+        {selected && !open && (
+          <span className={`combo-chip ${selected.survey ? "" : "muted"}`}>
+            {selected.survey ? "Survey data" : "No data yet"}{showCodes && <> · {selected.village_code}</>}
+          </span>
+        )}
+        {open && query ? (
+          <button type="button" className="combo-clear" aria-label="Clear search"
+            onMouseDown={(e) => e.preventDefault()} onClick={() => { setQuery(""); setActive(0); inputRef.current?.focus(); }}>
+            <X size={15} />
+          </button>
+        ) : (
+          <kbd className="combo-kbd" aria-hidden>/</kbd>
+        )}
         <ChevronDown size={16} className="combo-chevron" aria-hidden />
-      </button>
+      </div>
       {open && (
         <div className="combo-panel">
-          <ul className="combo-list" role="listbox" ref={listRef} aria-labelledby={`${id}-label`}>
-            {options.map((b, i) => {
-              const s = b === ALL_BLOCKS ? stats.total : stats.by.get(b);
-              return (
-                <li
-                  key={b}
+          <div className="combo-panel-head">
+            <span>
+              {query
+                ? `${rows.length.toLocaleString()} match${rows.length === 1 ? "" : "es"}`
+                : `${placeOptions.length.toLocaleString()} villages · ${surveyedCount.toLocaleString()} with survey data`}
+            </span>
+            {surveyedCount > 0 && <span className="combo-legend"><span className="legend-swatch" /> kg CO₂e per person</span>}
+          </div>
+          <ul className="combo-list" role="listbox" id={`${id}-list`} ref={listRef} aria-label="Village">
+            {shown.map((p, i) => (
+              <li key={p.village_code} role="presentation">
+                <div
                   id={`${id}-opt-${i}`}
                   data-index={i}
                   role="option"
-                  aria-selected={b === selectedBlock}
-                  className={`combo-option ${i === active ? "active" : ""} ${b === selectedBlock ? "selected" : ""}`}
+                  aria-selected={p.village_code === selectedCode}
+                  className={`combo-option ${i === active ? "active" : ""} ${p.village_code === selectedCode ? "selected" : ""} ${p.survey ? "" : "no-data"}`}
                   onMouseEnter={() => setActive(i)}
-                  onClick={() => choose(b)}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => choose(p)}
                 >
                   <span className="opt-main">
-                    <span className="opt-name">{b === ALL_BLOCKS ? "All blocks" : b}</span>
+                    <span className="opt-name"><Highlight text={p.village_name} query={query.trim()} /></span>
                     <span className="opt-meta">
-                      {s ? `${s.count.toLocaleString()} villages · ${fmt(s.co2)} t CO₂e/yr` : "—"}
+                      {p.survey ? (
+                        <><span className="opt-block">{p.survey.block_name}</span><span>{fmt(p.survey.total_residents)} residents</span></>
+                      ) : (
+                        <span>No survey data{p.population_2011 ? ` · ${p.population_2011.toLocaleString()} people (2011)` : ""}</span>
+                      )}
+                      {showCodes && <code className="opt-code"><Highlight text={p.village_code} query={query.trim()} /></code>}
                     </span>
                   </span>
-                  {b !== ALL_BLOCKS && s && (
-                    <span className="opt-metric" title={`${fmt(s.co2)} t CO₂e per year`}>
-                      <span className="opt-bar"><span style={{ width: `${(s.co2 / maxCo2) * 100}%`, background: "var(--green-700)" }} /></span>
+                  {p.survey && (
+                    <span className="opt-metric" title={`${fmt(p.survey.per_capita_co2e_kg_yr, 1)} kg CO₂e per person per year`}>
+                      <span className="opt-bar">
+                        <span style={{ width: `${Math.max(4, scale(p.survey) * 100)}%`, background: interpolate(SCALES.reds, scale(p.survey)) }} />
+                      </span>
+                      <span className="opt-value">{fmt(p.survey.per_capita_co2e_kg_yr)}</span>
                     </span>
                   )}
-                </li>
-              );
-            })}
+                </div>
+              </li>
+            ))}
+            {!rows.length && (
+              <li className="combo-empty" role="presentation">
+                {placesLoading ? "Loading villages…" : query ? <>No village matches “{query}”.</> : "No villages in this area."}
+              </li>
+            )}
           </ul>
+          {rows.length > MAX_ROWS && (
+            <div className="combo-foot">Showing {MAX_ROWS} of {rows.length.toLocaleString()} — keep typing to narrow down.</div>
+          )}
         </div>
       )}
     </div>
@@ -368,9 +442,12 @@ export function CensusCode({ code, tone = "light" }: { code: string; tone?: "lig
 
 // ---------- Toolbar ----------
 
-/** Block + village selection bar shown above the dashboard pages. */
+/** State > District > Sub-district > Village selection bar shown above the dashboard pages. */
 export function VillageToolbar() {
-  const { filteredVillages, selectedCode, setSelectedCode } = useDashboard();
+  const {
+    states, districts, subdistricts, stateCode, districtCode, subdistrictCode,
+    setStateCode, setDistrictCode, setSubdistrictCode,
+  } = useDashboard();
   const searchRef = useRef<HTMLInputElement>(null);
 
   // "/" jumps to the village search from anywhere on the page.
@@ -386,18 +463,19 @@ export function VillageToolbar() {
     return () => document.removeEventListener("keydown", onKey);
   }, []);
 
-  // Kept to block + village + compare: the map, report download and village figures are in the navbar and page hero.
   return (
-    <section className="toolbar" aria-label="Choose block and village">
-      <BlockPicker />
+    <section className="toolbar" aria-label="Choose state, district, sub-district and village">
+      <div className="toolbar-area">
+        <AreaSelect label="State" value={stateCode} placeholder="Select state…" onChange={setStateCode}
+          options={states.map((s) => ({ code: s.state_code, name: s.state_name }))} />
+        <AreaSelect label="District" value={districtCode} placeholder="Select district…" disabled={!stateCode}
+          onChange={setDistrictCode} options={districts.map((d) => ({ code: d.district_code, name: d.district_name }))} />
+        <AreaSelect label="Sub-district" value={subdistrictCode} placeholder="" allLabel="All sub-districts"
+          disabled={!districtCode} onChange={setSubdistrictCode}
+          options={subdistricts.map((s) => ({ code: s.subdistrict_code, name: s.subdistrict_name }))} />
+      </div>
       <div className="toolbar-village">
-        <VillageCombobox
-          villages={filteredVillages}
-          value={selectedCode}
-          onChange={setSelectedCode}
-          showCodes={false}
-          inputRef={searchRef}
-        />
+        <PlaceCombobox inputRef={searchRef} />
       </div>
       <div className="toolbar-actions">
         <Link href="/comparison" className="btn"><Scale size={16} /> Compare</Link>

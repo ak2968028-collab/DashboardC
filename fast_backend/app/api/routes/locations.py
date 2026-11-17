@@ -28,10 +28,11 @@ async def get_subdistricts(db: db_read, district_code: int = Query(..., descript
 async def get_villages(
     db: db_read,
     subdistrict_code: int | None = Query(None, description="Census sub-district code, e.g. 995 (Pindra)"),
-    search: str | None = Query(None, min_length=2, description="Village name contains (max 50 results without subdistrict_code)"),
+    district_code: int | None = Query(None, description="Census district code, e.g. 187 (Varanasi): all its villages"),
+    search: str | None = Query(None, min_length=2, description="Village name contains (max 50 results without an area)"),
 ):
-    """Census villages of a sub-district, or a name search across India."""
-    return await location_svc.get_villages(db, subdistrict_code, search)
+    """Census villages of a sub-district or district, or a name search across India."""
+    return await location_svc.get_villages(db, subdistrict_code, search, district_code)
 
 
 @router.get("/villages/{village_code}", response_model=Census_village_details)

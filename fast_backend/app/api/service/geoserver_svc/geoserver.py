@@ -1,6 +1,6 @@
 # ====================================================================
 # app/api/service/geoserver_svc/geoserver.py
-# Publishes PostGIS vector layers and GeoTIFF rasters to GeoServer (REST API)
+# Publishes PostGIS vector layers, GeoPackage/GeoJSON files and GeoTIFF rasters to GeoServer (REST API)
 # ====================================================================
 import base64
 import json
@@ -20,6 +20,21 @@ LAYERS = {
     'block_boundaries': ('Varanasi Block Boundaries', 'varanasi_block_outline'),
     'district_boundary': ('Varanasi District Boundary', 'varanasi_district_outline'),
 }
+
+# Files the API also reads straight from disk (3D view, raster statistics), published so the website's maps load
+# them from GeoServer. Each becomes its own GeoPackage datastore in WORKSPACE.
+# layer: (source file, layer name inside it or None for a GeoJSON file, title, style in media/geoserver)
+FILE_LAYERS = {
+    'villages_cadastral': (settings.CADASTRAL_BOUNDARIES_PATH, None,
+                           'Varanasi Village Boundaries (dissolved from khasra parcels)', 'villages_cadastral'),
+    'khasra_parcels': (settings.PARCELS_GPKG_PATH, 'varanasi', 'Varanasi Khasra (Cadastral) Parcels', 'khasra_parcels'),
+}
+
+# Coordinate decimals in WFS output (GeoServer's default of 4 is ~11 m; 6 is ~0.1 m, as in the source files).
+NUM_DECIMALS = 6
+
+# Elevation model, published in WORKSPACE (not the raster-factor workspaces: it is EPSG:3395, not lon/lat).
+DEM_LAYER = 'up_dem'
 
 
 class GeoServerError(RuntimeError):
@@ -109,12 +124,60 @@ def publish_layers():
         _ensure(
             f"/workspaces/{WORKSPACE}/datastores/{DATASTORE}/featuretypes/{name}",
             f"/workspaces/{WORKSPACE}/datastores/{DATASTORE}/featuretypes",
-            {'featureType': {'name': name, 'nativeName': name, 'title': title, 'srs': 'EPSG:4326'}},
+            {'featureType': {'name': name, 'nativeName': name, 'title': title, 'srs': 'EPSG:4326',
+                             'numDecimals': NUM_DECIMALS}},
         )
+        _request('PUT', f"/workspaces/{WORKSPACE}/datastores/{DATASTORE}/featuretypes/{name}",
+                 {'featureType': {'numDecimals': NUM_DECIMALS}})
         if style:
             _publish_style(style)
             _request('PUT', f"/layers/{WORKSPACE}:{name}",
                      {'layer': {'defaultStyle': {'name': style, 'workspace': WORKSPACE}}})
+
+
+def _geopackage_bytes(path, layer):
+    """The file as GeoPackage bytes: a .gpkg as-is, anything else (GeoJSON) converted into a layer named `layer`."""
+    if path.suffix == '.gpkg':
+        return path.read_bytes()
+    import tempfile
+    from pathlib import Path
+
+    import pyogrio
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp) / f"{layer}.gpkg"
+        pyogrio.write_dataframe(pyogrio.read_dataframe(path), out, layer=layer, driver='GPKG')
+        return out.read_bytes()
+
+
+def publish_file_layer(name, replace=False):
+    """
+    Uploads one FILE_LAYERS entry as a GeoPackage datastore + layer named `name`, then applies its style.
+    Existing stores are kept unless replace=True. Returns True when the file was uploaded.
+    """
+    path, native, title, style = FILE_LAYERS[name]
+    if not path.exists():
+        raise FileNotFoundError(path)
+    store = f"/workspaces/{WORKSPACE}/datastores/{name}"
+    _ensure_workspace(WORKSPACE)
+    exists = _request('GET', store) != 404
+    if exists and replace:
+        _request('DELETE', f"{store}?recurse=true")
+    uploaded = replace or not exists
+    if uploaded:
+        _request('PUT', f"{store}/file.gpkg?configure=none", _geopackage_bytes(path, name),
+                 content_type='application/geopackage+sqlite3', timeout=900)
+    _ensure(f"{store}/featuretypes/{name}", f"{store}/featuretypes",
+            {'featureType': {'name': name, 'nativeName': native or name, 'title': title, 'numDecimals': NUM_DECIMALS}})
+    _request('PUT', f"{store}/featuretypes/{name}", {'featureType': {'numDecimals': NUM_DECIMALS}})
+    _publish_style(style)
+    _request('PUT', f"/layers/{WORKSPACE}:{name}", {'layer': {'defaultStyle': {'name': style, 'workspace': WORKSPACE}}})
+    return uploaded
+
+
+def publish_dem(replace=False):
+    """Uploads the DEM GeoTIFF as WORKSPACE:up_dem with media/geoserver/up_dem.sld. True when uploaded."""
+    return publish_raster(settings.DEM_TIF_PATH, settings.SLD_DIR / f"{DEM_LAYER}.sld", replace=replace,
+                          workspace=WORKSPACE, name=DEM_LAYER)
 
 
 ACRONYMS = {'lulc', 'gwpz', 'mar', 'ndvi', 'tpi', 'stp'}
@@ -136,14 +199,14 @@ def find_rasters():
     return rasters
 
 
-def publish_raster(tif_path, sld_path=None, replace=False):
+def publish_raster(tif_path, sld_path=None, replace=False, workspace=RASTER_WORKSPACE, name=None):
     """
-    Uploads a GeoTIFF as a coverage store + layer named after the file, then applies its SLD style.
-    Existing rasters are kept unless replace=True. Returns True when the file was uploaded.
+    Uploads a GeoTIFF as a coverage store + layer (named after the file unless `name` is given), then applies its
+    SLD style. Existing rasters are kept unless replace=True. Returns True when the file was uploaded.
     """
-    name = tif_path.stem
-    store = f"/workspaces/{RASTER_WORKSPACE}/coveragestores/{name}"
-    _ensure_workspace(RASTER_WORKSPACE)
+    name = name or tif_path.stem
+    store = f"/workspaces/{workspace}/coveragestores/{name}"
+    _ensure_workspace(workspace)
     exists = _request('GET', store) != 404
     if exists and replace:
         _request('DELETE', f"{store}?recurse=true&purge=all")
@@ -152,7 +215,7 @@ def publish_raster(tif_path, sld_path=None, replace=False):
         _request('PUT', f"{store}/file.geotiff?configure=first&coverageName={name}",
                  tif_path.read_bytes(), content_type='image/tiff', timeout=300)
     if sld_path:
-        _publish_style(name, sld_path, workspace=RASTER_WORKSPACE)
-        _request('PUT', f"/layers/{RASTER_WORKSPACE}:{name}",
-                 {'layer': {'defaultStyle': {'name': name, 'workspace': RASTER_WORKSPACE}}})
+        _publish_style(name, sld_path, workspace=workspace)
+        _request('PUT', f"/layers/{workspace}:{name}",
+                 {'layer': {'defaultStyle': {'name': name, 'workspace': workspace}}})
     return uploaded

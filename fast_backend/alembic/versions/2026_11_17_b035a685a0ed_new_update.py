@@ -1,8 +1,8 @@
 """new update
 
-Revision ID: caa9d0d7e239
+Revision ID: b035a685a0ed
 Revises: 
-Create Date: 2026-11-04 10:59:43.837207
+Create Date: 2026-11-17 04:39:34.359015
 
 """
 from typing import Sequence, Union
@@ -14,7 +14,7 @@ from geoalchemy2 import Geometry
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = 'caa9d0d7e239'
+revision: str = 'b035a685a0ed'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

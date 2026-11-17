@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ALL_BLOCKS, useDashboard } from "@/components/DashboardContext";
+import { useDashboard } from "@/components/DashboardContext";
 import type { RankBand } from "@/components/RankingMap";
 import { PageTitle } from "@/components/ui";
 import { fmt } from "@/lib/format";
@@ -47,7 +47,7 @@ function rankBands(n: number, ramp: string[]): RankBand[] {
 }
 
 export default function RankingPage() {
-  const { allVillages, selectedBlock, selectedCode, setSelectedCode, showCodes } = useDashboard();
+  const { filteredVillages, areaLabel, selectedCode, setSelectedCode, showCodes } = useDashboard();
   const [metricIdx, setMetricIdx] = useState(0);
   const [ascending, setAscending] = useState(false);
   const [tableRows, setTableRows] = useState(50);
@@ -56,13 +56,13 @@ export default function RankingPage() {
 
   // Villages without a value for the metric are left unranked ("No data").
   const ranked = useMemo<Ranked[]>(() => {
-    const pool = selectedBlock === ALL_BLOCKS ? allVillages : allVillages.filter((v) => v.block_name === selectedBlock);
-    return pool
+    // Surveyed villages of the district / sub-district chosen in the toolbar.
+    return filteredVillages
       .filter((v) => v[metric.col] != null)
       .map((v) => ({ ...v, value: Number(v[metric.col]), rank: 0 }))
       .sort((a, b) => (ascending ? a.value - b.value : b.value - a.value) || a.village_name.localeCompare(b.village_name))
       .map((v, i) => ({ ...v, rank: i + 1 }));
-  }, [allVillages, selectedBlock, metric, ascending]);
+  }, [filteredVillages, metric, ascending]);
 
   const bands = useMemo(() => rankBands(ranked.length, RAMPS[metric.ramp]), [ranked.length, metric.ramp]);
   const ranks = useMemo(
@@ -133,14 +133,14 @@ export default function RankingPage() {
           decimals={metric.decimals}
           selectedCode={selectedCode}
           onSelect={setSelectedCode}
-          styleKey={`${metric.col}|${ascending}|${selectedBlock}|${ranked.length}`}
+          styleKey={`${metric.col}|${ascending}|${areaLabel}|${ranked.length}`}
         />
 
         <section className="rank-table-card" aria-label="Village ranking table">
           <header>
             <b>{metric.label}</b>
             <small>
-              {ranked.length.toLocaleString()} villages{selectedBlock !== ALL_BLOCKS ? ` in ${selectedBlock}` : ""} ·
+              {ranked.length.toLocaleString()} villages{areaLabel ? ` in ${areaLabel}` : ""} ·
               rank 1 = {ascending ? "lowest" : "highest"} · click a row to show it on the map
             </small>
           </header>

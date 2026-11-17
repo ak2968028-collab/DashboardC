@@ -35,14 +35,15 @@ const DISTRICT_CENTER: [number, number] = [25.37, 82.93];
 interface Props {
   villages: Village[];
   selectedCode: string | null;
-  blockFilter: string | null;
+  /** Only these villages are drawn (the selected sub-district); null draws every village. */
+  areaFilter: { label: string; codes: Set<string> } | null;
   metric: ThematicMetric;
   onSelect: (code: string) => void;
 }
 
 const featureCode = (f: Feature) => String(f.properties?.village_code ?? "").trim();
 
-export default function VillageMap({ villages, selectedCode, blockFilter, metric, onSelect }: Props) {
+export default function VillageMap({ villages, selectedCode, areaFilter, metric, onSelect }: Props) {
   const { data: villageGeo } = useGeoJson("villages");
   const { data: blockGeo } = useGeoJson("blocks");
   const { data: districtGeo } = useGeoJson("district");
@@ -91,14 +92,14 @@ export default function VillageMap({ villages, selectedCode, blockFilter, metric
   const { showCodes } = useDashboard();
   const byCode = useMemo(() => new Map(villages.map((v) => [v.village_code, v])), [villages]);
 
-  // Village polygons limited to the block filter.
+  // Village polygons limited to the selected area.
   const displayGeo = useMemo<FeatureCollection | null>(() => {
     if (!villageGeo) return null;
-    const features = blockFilter
-      ? villageGeo.features.filter((f) => byCode.get(featureCode(f))?.block_name === blockFilter)
+    const features = areaFilter
+      ? villageGeo.features.filter((f) => areaFilter.codes.has(featureCode(f)))
       : villageGeo.features;
     return { ...villageGeo, features: features.length ? features : villageGeo.features };
-  }, [villageGeo, byCode, blockFilter]);
+  }, [villageGeo, areaFilter]);
 
   const [min, max] = useMemo(() => {
     if (!displayGeo) return [0, 0];
@@ -148,7 +149,7 @@ export default function VillageMap({ villages, selectedCode, blockFilter, metric
           {displayGeo && (
             <LayersControl.Overlay checked name="Varanasi Villages">
               {/* Remount when styling inputs change so every polygon is restyled. */}
-              <GeoJSON key={`${metric.col}|${blockFilter}|${selectedCode}|${villages.length}|${showCodes}`} data={displayGeo} style={style} onEachFeature={onEachFeature} />
+              <GeoJSON key={`${metric.col}|${areaFilter?.label ?? ""}|${selectedCode}|${villages.length}|${showCodes}`} data={displayGeo} style={style} onEachFeature={onEachFeature} />
             </LayersControl.Overlay>
           )}
           {rasters.map((r) => (
@@ -179,7 +180,7 @@ export default function VillageMap({ villages, selectedCode, blockFilter, metric
         )}
         <ScaleControl position="bottomleft" />
         <ActiveOverlayTracker onChange={setActiveRasters} />
-        <FlyToSelection village={selected} blockFilter={blockFilter} />
+        <FlyToSelection village={selected} zoomed={!!areaFilter} />
         <MapResizeOnFullscreen isFullscreen={isFullscreen} />
       </MapContainer>
 
@@ -224,15 +225,15 @@ function ActiveOverlayTracker({ onChange }: { onChange: (update: (names: string[
   return null;
 }
 
-function FlyToSelection({ village, blockFilter }: { village?: Village; blockFilter: string | null }) {
+function FlyToSelection({ village, zoomed }: { village?: Village; zoomed: boolean }) {
   const map = useMap();
   useEffect(() => {
     if (village?.latitude != null && village.longitude != null) {
       map.flyTo([village.latitude, village.longitude], 13, { duration: 0.6 });
     } else {
-      map.setView(DISTRICT_CENTER, blockFilter ? 11 : 10);
+      map.setView(DISTRICT_CENTER, zoomed ? 11 : 10);
     }
-  }, [map, village?.village_code, village?.latitude, village?.longitude, blockFilter]);
+  }, [map, village?.village_code, village?.latitude, village?.longitude, zoomed]);
   return null;
 }
 

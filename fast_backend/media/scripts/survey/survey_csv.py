@@ -8,9 +8,9 @@ from db_connection import engine  # noqa: E402
 from app.api.service.import_svc.excel_import import parse_village_row  # noqa: E402
 
 
-def read_survey(excel_file):
+def read_survey(survey_file):
     """Validated survey rows: (village core, {table name: record}) per village (same rules as the API import)."""
-    df = pd.read_excel(excel_file)
+    df = pd.read_csv(survey_file, dtype={"village_code": str})
     parsed = []
     for _, row in df.iterrows():
         village, records, _ = parse_village_row(row)
@@ -18,8 +18,8 @@ def read_survey(excel_file):
     return parsed
 
 
-def survey_table(excel_file, table_name):
-    """One village parameter table from the survey Excel, linked to villages.id by census code."""
-    rows = [{"village_code": v["village_code"], **records[table_name]} for v, records in read_survey(excel_file)]
+def survey_table(survey_file, table_name):
+    """One village parameter table from the survey CSV, linked to villages.id by census code."""
+    rows = [{"village_code": v["village_code"], **records[table_name]} for v, records in read_survey(survey_file)]
     village_ids = pd.read_sql("SELECT id AS village_id, village_code FROM villages", engine)
     return pd.DataFrame(rows).merge(village_ids, on="village_code").drop(columns="village_code")

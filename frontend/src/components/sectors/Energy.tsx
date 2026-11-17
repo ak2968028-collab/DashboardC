@@ -8,7 +8,9 @@ export default function EnergyPage() {
   return (
     <WithVillage>
       {(v) => {
-        const blockAvg = mean(allVillages.filter((x) => x.block_name === v.block_name).map((x) => x.electricity_monthly_kwh));
+        // Benchmark: mean of the surveyed villages in the same sub-district.
+        const area = v.subdistrict ?? v.district;
+        const areaAvg = mean(allVillages.filter((x) => (x.subdistrict ?? x.district) === area).map((x) => x.electricity_monthly_kwh));
         return (
           <>
             <PageTitle>⚡ Household &amp; Agricultural Energy Consumption</PageTitle>
@@ -34,11 +36,11 @@ export default function EnergyPage() {
                   height={320}
                 />
               </Card>
-              <Card title="Electricity Demand vs Block Benchmark (kWh/month)">
+              <Card title="Electricity Demand vs Sub-district Benchmark (kWh/month)">
                 <SimpleBarChart
                   data={[
                     { scope: v.village_name, value: num(v.electricity_monthly_kwh) },
-                    { scope: `${v.block_name} Mean`, value: Math.round(blockAvg * 10) / 10 },
+                    { scope: `${area} Mean`, value: Math.round(areaAvg * 10) / 10 },
                   ]}
                   category="scope"
                   series={[{ key: "value", name: "kWh/month" }]}

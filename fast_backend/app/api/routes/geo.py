@@ -1,22 +1,27 @@
-from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, File, Form, Query, UploadFile, status
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse
 
 from app.api.schema.geo_schema import Emission_raster_report, Raster_factor, Raster_layer, Village_factor_stats
 from app.api.service.auth_svc.dependencies import admin_user, current_user
 from app.api.service.geoserver_svc import emission_rasters, factors
 from app.database.config.dependency import db_read
-from app.api.service.geoserver_svc.geoserver import RASTER_WORKSPACE, find_rasters, raster_title
+from app.api.service.geoserver_svc.geoserver import DEM_LAYER, RASTER_WORKSPACE, WORKSPACE, find_rasters, raster_title
 from app.database.models.user import ROLE_ADMIN
-from app.conf.settings import settings
 
 router = APIRouter()
 
 
+# Base data overlays on the Village Map (published by script/geoserver_raster.py and script/geoserver_publish.py).
+BASE_OVERLAYS = [
+    {'name': DEM_LAYER, 'title': 'Elevation (DEM)', 'group': 'terrain'},
+    {'name': 'khasra_parcels', 'title': 'Khasra Parcels (zoom in)', 'group': 'cadastral'},
+]
+
+
 @router.get("/rasters", response_model=list[Raster_layer])
 async def get_raster_layers():
-    """Raster layers published on GeoServer (WMS), as uploaded by script/geoserver_raster.py."""
-    return [
+    """Map overlays published on GeoServer (WMS): the condition rasters, the DEM and the khasra parcels."""
+    rasters = [
         {
             'name': tif.stem,
             'title': raster_title(tif.stem),
@@ -26,6 +31,8 @@ async def get_raster_layers():
         }
         for tif, _ in find_rasters()
     ]
+    base = [{**o, 'workspace': WORKSPACE, 'layer': f"{WORKSPACE}:{o['name']}"} for o in BASE_OVERLAYS]
+    return rasters + base
 
 
 @router.post("/emission-rasters", response_model=Emission_raster_report)
@@ -77,11 +84,3 @@ async def get_village_factor_stats(layer: str = Query(..., description="workspac
     """Raster values inside one village boundary: min / max / mean and the share of each legend class."""
     return await run_in_threadpool(factors.village_stats, layer, village)
 
-
-@router.get("/{layer}")
-async def get_geojson_layer(layer: str):
-    """Boundary GeoJSON: district, blocks, villages (census) or villages_cadastral (dissolved khasra parcels)."""
-    path = settings.GEOJSON_LAYERS.get(layer)
-    if not path or not path.exists():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Unknown layer '{layer}'")
-    return FileResponse(path, media_type="application/geo+json", headers={"Cache-Control": "public, max-age=3600"})

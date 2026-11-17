@@ -15,11 +15,12 @@ class location_svc:
     async def get_subdistricts(db: AsyncSession, district_code: int):
         return await Location_crud(db).get_subdistricts(district_code)
 
-    async def get_villages(db: AsyncSession, subdistrict_code: int | None, search: str | None):
-        if subdistrict_code is None and not search:
+    async def get_villages(db: AsyncSession, subdistrict_code: int | None, search: str | None,
+                           district_code: int | None = None):
+        if subdistrict_code is None and district_code is None and not search:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                                detail="Pass subdistrict_code or search (village name)")
-        return await Location_crud(db).get_villages(subdistrict_code, search)
+                                detail="Pass subdistrict_code, district_code or search (village name)")
+        return await Location_crud(db).get_villages(subdistrict_code, search, district_code)
 
     async def get_village(db: AsyncSession, village_code: str):
         village = await Location_crud(db).get_village(village_code)

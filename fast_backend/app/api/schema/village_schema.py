@@ -11,6 +11,8 @@ class Village_record(BaseModel):
     village_name: str
     block_name: str
     subdistrict: Optional[str] = None
+    district: str
+    state: str
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     total_residents: Optional[int] = None
@@ -42,8 +44,6 @@ class Village_record(BaseModel):
 
 class Village_details(Village_record):
     """Complete record of all 12 parameters for one village."""
-    district: str
-    state: str
     data_status: str
     created_at: datetime
     modified_at: datetime

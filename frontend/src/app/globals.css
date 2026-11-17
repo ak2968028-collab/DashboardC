@@ -548,7 +548,18 @@ button.nav-link { background: none; border: none; font: inherit; cursor: pointer
   display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-bottom: 16px; padding: 12px 14px;
   background: var(--card); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
-.toolbar .block-picker { flex: 0 1 230px; min-width: 190px; }
+.toolbar-area { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; flex: 2 1 520px; min-width: 0; }
+.toolbar-area .area-select { flex: 1 1 150px; min-width: 140px; }
+.area-select .combo-control { position: relative; cursor: pointer; }
+.area-select select {
+  flex: 1; min-width: 0; height: 38px; border: none; outline: none; background: transparent; padding: 0 18px 0 0;
+  font: inherit; font-weight: 600; color: var(--text); cursor: pointer; appearance: none; -webkit-appearance: none;
+  text-overflow: ellipsis;
+}
+.area-select select:disabled { cursor: not-allowed; color: var(--faint); }
+.area-select .combo-chevron { position: absolute; right: 10px; pointer-events: none; }
+.combo-chip.muted { color: #8d6e63; background: #efebe9; }
+.combo-option.no-data .opt-name { color: var(--muted); font-weight: 500; }
 .toolbar-village { display: flex; align-items: flex-end; gap: 8px; flex: 1 1 380px; min-width: 0; }
 .toolbar-village .combo { flex: 1; min-width: 0; }
 .toolbar-actions { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -595,7 +606,6 @@ button.nav-link { background: none; border: none; font: inherit; cursor: pointer
   background: var(--card); border: 1px solid var(--border); border-radius: 10px;
   box-shadow: 0 12px 32px rgba(27, 94, 32, 0.16); overflow: hidden; animation: nav-drop 0.12s ease-out;
 }
-.block-picker .combo-panel { min-width: 300px; }
 .combo-panel-head {
   display: flex; justify-content: space-between; gap: 10px; padding: 8px 12px; font-size: 12px; color: var(--muted);
   border-bottom: 1px solid #eef1f3; background: #fafcfa;
@@ -654,7 +664,8 @@ button.nav-link { background: none; border: none; font: inherit; cursor: pointer
 
 @media (max-width: 800px) {
   .toolbar { padding: 10px; gap: 10px; }
-  .toolbar .block-picker, .toolbar-village { flex: 1 1 100%; }
+  .toolbar-area, .toolbar-village { flex: 1 1 100%; }
+  .toolbar-area .area-select { flex: 1 1 calc(50% - 5px); }
   .toolbar-village { flex-wrap: wrap; }
   .toolbar-village .combo { flex: 1 1 100%; }
   .stepper { flex: 1 1 100%; justify-content: space-between; }
