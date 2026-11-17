@@ -54,7 +54,9 @@ services:
       - varanasi_pgdata:/var/lib/postgresql/data
       - ./database/init-databases.sql:/docker-entrypoint-initdb.d/zz-init-databases.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      # Over TCP: during first-time initialisation Postgres only listens on its Unix socket and then restarts,
+      # so a socket check reports healthy too early.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 10

@@ -18,6 +18,18 @@ if ! docker compose ps --status running --services | grep -qx fast_backend; then
     exit 1
 fi
 
+# Wait until the database accepts connections (a first start initialises, restarts and may run recovery).
+echo "==> Waiting for the database"
+tries=0
+until docker compose exec -T database sh -c 'pg_isready -q -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' </dev/null >/dev/null 2>&1; do
+    tries=$((tries + 1))
+    if [ "$tries" -ge 90 ]; then
+        echo "Database is not accepting connections after 3 minutes; check: docker compose logs database"
+        exit 1
+    fi
+    sleep 2
+done
+
 echo "Running backend setup commands..."
 echo "==> Deleting existing migrations"
 rm -rf fast_backend/alembic/versions/*.py fast_backend/alembic/versions/__pycache__
