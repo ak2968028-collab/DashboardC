@@ -1,6 +1,7 @@
 import {
   BarChart3,
   Beef,
+  Bot,
   Bike,
   ClipboardEdit,
   Database,
@@ -115,6 +116,17 @@ export const PAGES: readonly NavPage[] = [
     hint: "Interactive GIS satellite boundaries & spatial overlays",
     accentColor: "#0284c7",
     keywords: ["gis", "map", "satellite", "boundaries", "spatial", "spatial data", "location"],
+  },
+  {
+    href: "/assistant",
+    label: "AI Assistant",
+    icon: Bot,
+    needsVillage: false,
+    hint: "Ask questions in plain language; answers come with maps, emission rasters and charts",
+    badge: "AI",
+    badgeVariant: "info",
+    accentColor: "#4f46e5",
+    keywords: ["ai", "assistant", "chat", "ask", "question", "llm", "rag", "llama"],
   },
   {
     href: "/blog",

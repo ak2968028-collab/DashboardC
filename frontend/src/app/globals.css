@@ -1616,3 +1616,53 @@ button.home-kpi:hover > svg { color: #0b4a8b; transform: translate(1px, -1px); }
 @media (max-width: 860px) {
   .sector-tab { flex: 0 0 auto; padding: 8px 12px; font-size: 13px; }
 }
+
+/* ---------- AI Assistant ---------- */
+.assistant-layout { display: grid; grid-template-columns: minmax(340px, 1fr) minmax(0, 1.35fr); gap: 18px; align-items: stretch; }
+.assistant-map { height: min(80vh, 760px); min-height: 520px; }
+.chat-panel { display: flex; flex-direction: column; background: var(--card); border-radius: 10px; box-shadow: 0 1px 4px rgba(16, 38, 64, 0.08);
+  height: min(80vh, 760px); min-height: 520px; min-width: 0; }
+.chat-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); color: #4f46e5; }
+.chat-head b { color: var(--text); display: block; font-size: 14px; }
+.chat-model { color: var(--faint); font-size: 12px; }
+.chat-model.on::before, .chat-model.off::before { content: "●"; margin-right: 5px; }
+.chat-model.on::before { color: #2e7d32; }
+.chat-model.off { color: #b71c1c; }
+.chat-model.off::before { color: #b71c1c; }
+.chat-clear { margin-left: auto; padding: 6px; border-radius: 6px; color: var(--muted); }
+.chat-list { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 14px 16px; display: flex; flex-direction: column; gap: 14px; }
+.chat-empty { color: var(--muted); }
+.chat-examples { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.chat-examples .btn { font-size: 12.5px; text-align: left; }
+.chat-msg { display: flex; gap: 10px; align-items: flex-start; }
+.chat-msg.user { flex-direction: row-reverse; }
+.chat-avatar { flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: #ede9fe; color: #4f46e5; }
+.chat-msg.user .chat-avatar { background: var(--green-50); color: var(--green-900); }
+.chat-bubble { min-width: 0; max-width: 100%; flex: 1; display: flex; flex-direction: column; gap: 8px; }
+.chat-msg.user .chat-bubble { flex: 0 1 auto; align-items: flex-end; }
+.chat-text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.55; }
+.chat-msg.user .chat-text { background: var(--green-700); color: #fff; padding: 8px 12px; border-radius: 12px 12px 2px 12px; }
+.chat-tools { display: flex; flex-wrap: wrap; gap: 6px; }
+.chat-tools span { font-size: 11px; background: #f1f5f9; color: #475569; border-radius: 999px; padding: 2px 8px; display: inline-flex; align-items: center; gap: 4px; }
+.chat-status { color: var(--muted); font-size: 13px; display: flex; align-items: center; gap: 8px; }
+.chat-dots { width: 8px; height: 8px; border-radius: 50%; background: #4f46e5; animation: chat-pulse 1s ease-in-out infinite; }
+@keyframes chat-pulse { 50% { opacity: 0.25; transform: scale(0.7); } }
+.chat-visual { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; min-width: 0; }
+.chat-visual-title { font-weight: 600; font-size: 12.5px; color: var(--text); cursor: default; }
+details.chat-visual summary { cursor: pointer; }
+details.chat-visual .table-wrap { max-height: 280px; overflow: auto; margin-top: 8px; }
+.chat-map-chip { align-self: flex-start; max-width: 100%; white-space: normal; display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; text-align: left; }
+.chat-map-chip.on { background: #ede9fe; border-color: #4f46e5; color: #3730a3; }
+.chat-sources { font-size: 11.5px; color: var(--faint); }
+.chat-input { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--border); }
+.chat-input textarea { flex: 1; resize: none; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font: inherit; }
+.chat-input textarea:focus { outline: 2px solid #c7d2fe; border-color: #4f46e5; }
+.chat-input .btn { align-self: stretch; display: grid; place-items: center; padding: 0 14px; }
+.assistant-legend { max-width: 300px; }
+.assistant-legend img { display: block; max-width: 100%; margin-top: 4px; }
+.assistant-raster-stats { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
+@media (max-width: 1000px) {
+  .assistant-layout { grid-template-columns: 1fr; }
+  .chat-panel { height: 70vh; min-height: 440px; }
+  .assistant-map { height: 60vh; min-height: 360px; }
+}

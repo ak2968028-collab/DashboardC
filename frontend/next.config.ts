@@ -8,6 +8,8 @@ const GEOSERVER_URL = process.env.GEOSERVER_URL || tunnel.GEOSERVER_URL || "http
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // The AI assistant streams answers from a local LLM; allow slow responses through the /api proxy.
+  experimental: { proxyTimeout: 300_000 },
   // The six sector pages were merged into /sectors (one tab each); keep old links and bookmarks working.
   async redirects() {
     return ["demography", "land-water", "energy", "transport", "waste", "livestock"].map((s) => ({
