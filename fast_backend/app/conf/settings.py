@@ -42,6 +42,14 @@ class Settings(BaseSettings):
 
     CORS_ORIGINS: list[str] = ["http://localhost:3000"]
 
+    # AI assistant (local LLM served by Ollama; the model must support tool calling, e.g. llama3.1:8b)
+    OLLAMA_URL: str = "http://localhost:11434"
+    OLLAMA_MODEL: str = "llama3.1:8b"
+    # Optional embedding model for the knowledge base (e.g. nomic-embed-text); keyword search (BM25) only when unset.
+    OLLAMA_EMBED_MODEL: str | None = None
+    OLLAMA_NUM_CTX: int = 8192
+    OLLAMA_TIMEOUT: float = 300.0
+
     # auth (set SECRET_KEY in .fastdb.env / the environment for any shared deployment)
     SECRET_KEY: str = "change-me-varanasi-dashboard-dev-secret"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 12 * 60

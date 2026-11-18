@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.routes import admin, auth, blog, data_io, district, emissions, geo, locations, supervisor, villages
+from app.api.routes import admin, auth, blog, chat, data_io, district, emissions, geo, locations, supervisor, villages
 
 app_router = APIRouter()
 
@@ -50,4 +50,9 @@ app_router.include_router(
     blog.router,
     prefix="/blog",
     tags=["Blog"]
+)
+app_router.include_router(
+    chat.router,
+    prefix="/chat",
+    tags=["AI Assistant"]
 )

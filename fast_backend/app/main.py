@@ -29,7 +29,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.add_middleware(GZipMiddleware, minimum_size=1000)
+# Streams (the assistant's NDJSON events) are left uncompressed so each event reaches the browser at once.
+app.add_middleware(GZipMiddleware, minimum_size=1000, exclude_content_types=("text/event-stream", "application/x-ndjson"))
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
