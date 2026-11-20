@@ -24,12 +24,22 @@ const RAMPS: Record<string, string[]> = {
   greys: ["#f7f7f7", "#cccccc", "#969696", "#636363", "#252525"],
 };
 const NO_DATA = "#cfd8dc";
-const CENTER: [number, number] = [25.37, 82.93];
+// Opens on all of India; results zoom in to their villages or area.
+const INDIA_CENTER: [number, number] = [22.6, 80.0];
+const INDIA_ZOOM = 5;
+// All-India GeoServer layers (media/scripts/boundaries/india_layers.py); village outlines draw from ~1:2M inwards.
+const INDIA_LAYERS = [
+  { layer: "varanasi:india_villages", name: "India villages – Census 2011 (zoom in)", checked: true },
+  { layer: "varanasi:india_rivers", name: "India rivers", checked: true },
+  { layer: "varanasi:india_catchments", name: "India river catchments", checked: false },
+];
 
-/** Zooms to the focused villages, else an uploaded area, else the whole district, whenever a new visual is shown. */
+/** Zooms to the focused villages, else an uploaded area, else the dashboard villages, whenever a new visual is
+ *  shown. Before any result the map stays on all of India. */
 function Fit({ geo, focus, area, visualKey }: { geo: FeatureCollection | null; focus: string[]; area?: GeoJsonObject | null; visualKey: string }) {
   const map = useMap();
   useEffect(() => {
+    if (visualKey === "none") return;
     if (area && !focus.length) {
       map.flyToBounds(geoJSON(area).getBounds(), { padding: [40, 40], maxZoom: 14, duration: 0.6 });
       return;
@@ -172,7 +182,7 @@ export default function AssistantMap({ visual, visualKey, onDraw, clearDrawKey =
   return (
     <div className="map-wrap assistant-map-wrap">
       {/* pmIgnore={false}: with Geoman's opt-in mode the map itself must opt in to get the drawing toolbar. */}
-      <MapContainer center={CENTER} zoom={10} preferCanvas className="map assistant-map" pmIgnore={false}>
+      <MapContainer center={INDIA_CENTER} zoom={INDIA_ZOOM} preferCanvas className="map assistant-map" pmIgnore={false}>
         <LayersControl position="topright">
           <LayersControl.BaseLayer checked name="OpenStreetMap">
             <TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -182,8 +192,13 @@ export default function AssistantMap({ visual, visualKey, onDraw, clearDrawKey =
             <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
               attribution="Esri World Imagery" />
           </LayersControl.BaseLayer>
+          {INDIA_LAYERS.map((l) => (
+            <LayersControl.Overlay key={l.layer} checked={l.checked} name={l.name}>
+              <WMSTileLayer url={wmsUrl("varanasi")} params={{ layers: l.layer, format: "image/png", transparent: true }} />
+            </LayersControl.Overlay>
+          ))}
           {blockGeo && (
-            <LayersControl.Overlay checked name="Block boundaries">
+            <LayersControl.Overlay checked name="Varanasi block boundaries">
               <GeoJSON data={blockGeo} interactive={false}
                 style={{ fill: false, color: "#d84315", weight: 1.5, dashArray: "3, 4" }} />
             </LayersControl.Overlay>

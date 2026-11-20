@@ -131,3 +131,38 @@ def village_shares(geom) -> dict[str, float]:
         if share > 0.001:
             out[code] = min(1.0, share)
     return out
+
+
+async def india_census(db, geom, limit: int = 20000) -> dict:
+    """Census 2011 villages of all India (india_villages) overlapping the area: counts and share-weighted totals.
+    Shares come from the overlap area (geography), so a village half inside counts half."""
+    from sqlalchemy import text
+
+    rows = (await db.execute(text("""
+        WITH a AS (SELECT ST_GeomFromText(:wkt, 4326) AS g)
+        SELECT v.village_code, v.village_name, v.subdistrict_name, v.district_name, v.state_name, v.rural_urban,
+               coalesce(v.population, 0) AS population, coalesce(v.households, 0) AS households,
+               coalesce(v.geographic_area_ha, 0) AS area_ha,
+               CASE WHEN ST_Within(v.geom, a.g) THEN 1.0
+                    ELSE ST_Area(ST_Intersection(ST_MakeValid(v.geom), a.g)::geography)
+                         / NULLIF(ST_Area(v.geom::geography), 0) END AS share
+        FROM india_villages v, a
+        WHERE v.geom && a.g AND ST_Intersects(v.geom, a.g)
+        LIMIT :limit
+    """), {"wkt": shapely.to_wkt(geom), "limit": limit})).mappings().all()
+    rows = [dict(r) for r in rows if (r["share"] or 0) > 0.001]
+    if not rows:
+        return {"villages_overlapping": 0}
+    est = lambda key: sum(float(r[key] or 0) * float(r["share"]) for r in rows)  # noqa: E731
+    by = lambda key: sorted({r[key] for r in rows if r[key]})  # noqa: E731
+    top = sorted(rows, key=lambda r: -float(r["population"] or 0))[:10]
+    return {
+        "villages_overlapping": len(rows), "truncated": len(rows) >= limit,
+        "villages_fully_inside": sum(1 for r in rows if float(r["share"]) >= 0.95),
+        "estimated_population": round(est("population")), "estimated_households": round(est("households")),
+        "urban_villages": sum(1 for r in rows if (r["rural_urban"] or "").lower().startswith("urban")),
+        "states": by("state_name")[:10], "districts": by("district_name")[:20],
+        "largest_villages": [{"name": r["village_name"], "district": r["district_name"], "state": r["state_name"],
+                              "population": round(float(r["population"] or 0)), "share_inside_pct": round(100 * float(r["share"]))}
+                             for r in top],
+    }

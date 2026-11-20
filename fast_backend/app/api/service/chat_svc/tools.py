@@ -319,6 +319,15 @@ class Toolbox:
                         "villages_fully_inside": sum(1 for _, s in inside if s >= 0.95)}
         if meta.get("buffered_m"):
             result["note"] = f"Points/lines in the file were buffered by {meta['buffered_m']} m to make an area."
+        # Census 2011 villages of all India inside the area (population etc.); emissions only exist for surveyed villages.
+        try:
+            result["census_2011_all_india"] = await areas.india_census(self.db, geom)
+        except Exception as e:  # india_villages not loaded
+            result["census_2011_all_india"] = {"error": f"India census layer unavailable: {type(e).__name__}"}
+        if not inside:
+            result["emission_data"] = ("No surveyed dashboard village lies in this area: emission estimates exist only "
+                                       "for the 1,334 surveyed villages of Varanasi district. Census figures above "
+                                       "cover all of India.")
 
         if inside:
             # Village totals scaled by the share of the village inside the area (assumes an even spread).
@@ -448,6 +457,11 @@ class Toolbox:
                      ("Estimated emissions", f"{est.get('total_co2e_t_yr') or 0:,.1f} t CO2e/yr"),
                      ("Per capita", f"{est.get('per_capita_co2e_kg_yr') or 0:,.1f} kg CO2e/person/yr")]
             stats += [(f"  {k}", f"{v:,.1f} t CO2e/yr") for k, v in (est.get("by_source_t_co2e_yr") or {}).items()]
+            census = result.get("census_2011_all_india") or {}
+            if census.get("villages_overlapping"):
+                stats += [("Census 2011 villages (all India)", f"{census['villages_overlapping']:,}"),
+                          ("Census population (estimated inside)", f"{census['estimated_population']:,}"),
+                          ("Districts", ", ".join(census.get("districts", [])[:6]) or "-")]
             raster_total = (result.get("clipped_raster") or {}).get("raster_total_inside_area (t CO2e/yr)")
             if raster_total is not None:
                 stats.append((f"{rtitle} - total inside area", f"{raster_total:,.1f} t CO2e/yr"))

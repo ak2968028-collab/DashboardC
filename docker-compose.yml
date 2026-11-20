@@ -116,7 +116,8 @@ services:
 
   # AI assistant model server. Ollama (qwen2.5:7b chat + nomic-embed-text embeddings) runs on the HP GPU PC
   # (RTX 2000 Ada) as a Windows startup task; this service keeps the SSH tunnel to it open, so fast_backend reaches
-  # it at host.docker.internal:11435 (OLLAMA_URL). Needs the public key of OLLAMA_SSH_KEY installed on that PC.
+  # it at host.docker.internal:11435 (OLLAMA_URL). Login: the public key of OLLAMA_SSH_KEY installed on that PC, or
+  # the PC's password in OLLAMA_SSH_PASSWORD (.env).
   ollama:
     image: alpine:3.20
     # Host network: the GPU PC's reverse tunnel listens on this host's 127.0.0.1:2222.
@@ -125,6 +126,7 @@ services:
     environment:
       SSH_TARGET: ${OLLAMA_SSH_TARGET:-hp@localhost}
       SSH_PORT: ${OLLAMA_SSH_PORT:-2222}
+      SSH_PASSWORD: ${OLLAMA_SSH_PASSWORD:-}
       # Docker bridge address: reachable from the containers, not from the LAN.
       LISTEN: ${OLLAMA_TUNNEL_LISTEN:-172.17.0.1:11435}
       MODELS: ${OLLAMA_MODEL:-qwen2.5:7b} ${OLLAMA_EMBED_MODEL:-nomic-embed-text}

@@ -34,6 +34,9 @@ BARE_FAKE_URL = re.compile(r"(data:[\w/+.-]+;base64,\S*|https?://\S+)")
 CONTEXT_MIN_SCORE = 2.0  # BM25 score a passage needs to be put in the prompt up front
 # How / why / advice questions: the model tends to answer these from general knowledge instead of searching, so the
 # best knowledge passages (keyword + embedding search) are put in the prompt even without a strong keyword match.
+# Questions about an attached area: analyze_area runs before the model answers (it often answers without calling it).
+AREA_QUESTION = re.compile(r"\b(my|this|the|uploaded|drawn|selected|attached)\s+(area|region|boundary|polygon|shape|file|"
+                           r"zone|aoi)\b|\b(inside|within|in it|in there|clip\w*)\b", re.I)
 ADVICE_QUESTION = re.compile(r"\b(how|why|what can|what should|reduce|lower|cut|improve|greener|green|tips?|advice|"
                              r"suggest|mitigat\w*|sustainab\w*|net.?zero|source|methodolog\w*)\b", re.I)
 
@@ -201,7 +204,9 @@ class Agent:
                            "For any question about this area, my area, the uploaded file/boundary, clipping, or what lies "
                            "inside it, call analyze_area (with metric for a thematic map and raster to clip a raster). "
                            "Its results cover ONLY the area; rank_villages, map_metric and district_overview cover the "
-                           "whole district, so never use them for questions about villages in the area.\n")
+                           "whole district, so never use them for questions about villages in the area. The area may "
+                           "be anywhere in India: census population figures cover all of India, but emission data "
+                           "exists only for the surveyed Varanasi villages - say so when the area is elsewhere.\n")
             if passages:
                 system += "\nReference passages (cite them when relevant):\n" + "\n".join(
                     f"[{i + 1}] {p['title']}: {p['text']}" for i, p in enumerate(passages))
@@ -215,6 +220,24 @@ class Agent:
 
             tools = tool_specs(has_area=area is not None)
             done_calls: dict[tuple[str, str], dict] = {}
+            if area and AREA_QUESTION.search(question):
+                # Ground the answer: run analyze_area first and hand the model its result as an earlier tool call.
+                call = {"function": {"name": "analyze_area", "arguments": {}}}
+                await self.emit({"type": "tool", "name": "analyze_area", "args": {}})
+                await self.emit({"type": "status", "text": "Analysing your area…"})
+                try:
+                    result, visuals = await toolbox.run("analyze_area", {})
+                except Exception as e:
+                    logger.exception("Assistant: analyze_area failed")
+                    result, visuals = {"error": f"{type(e).__name__}: {e}"}, []
+                for v in visuals:
+                    await self.emit({"type": "visual", "visual": v})
+                    if v.get("kind") in ("map", "chart"):
+                        self._save_image(v)
+                done_calls[("analyze_area", "{}")] = result
+                messages += [{"role": "assistant", "content": "", "tool_calls": [call]},
+                             {"role": "tool", "tool_name": "analyze_area",
+                              "content": json.dumps(result, ensure_ascii=False, default=str)[:6000]}]
             async with httpx.AsyncClient(timeout=httpx.Timeout(settings.OLLAMA_TIMEOUT, connect=10)) as client:
                 for round_no in range(MAX_TOOL_ROUNDS + 1):
                     await self.emit({"type": "status", "text": "Thinking…" if round_no == 0 else "Writing the answer…"})
