@@ -28,10 +28,10 @@ services:
       GEOSERVER_URL: http://geoserver:8080/geoserver
       GEOSERVER_USERNAME: ${GEOSERVER_ADMIN_USER:-admin}
       GEOSERVER_PASSWORD: ${GEOSERVER_ADMIN_PASSWORD:-geoserver}
-      # AI assistant: Ollama with a tool-calling model (e.g. on the GIS lab PC; set OLLAMA_URL in .env).
-      OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.1:8b}
-      OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL:-}
+      # AI assistant: Ollama on the HP GPU PC, through the "ollama" service's tunnel.
+      OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11435}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:7b}
+      OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL:-nomic-embed-text}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -42,6 +42,9 @@ services:
     depends_on:
       database:
         condition: service_healthy
+      # Started first but not waited on: the dashboard works (assistant offline) when the GPU PC is off.
+      ollama:
+        condition: service_started
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
       interval: 10s
@@ -111,13 +114,38 @@ services:
       start_period: 60s
     restart: unless-stopped
 
+  # AI assistant model server. Ollama (qwen2.5:7b chat + nomic-embed-text embeddings) runs on the HP GPU PC
+  # (RTX 2000 Ada) as a Windows startup task; this service keeps the SSH tunnel to it open, so fast_backend reaches
+  # it at host.docker.internal:11435 (OLLAMA_URL). Needs the public key of OLLAMA_SSH_KEY installed on that PC.
+  ollama:
+    image: alpine:3.20
+    # Host network: the GPU PC's reverse tunnel listens on this host's 127.0.0.1:2222.
+    network_mode: host
+    entrypoint: ["sh", "/ollama/tunnel.sh"]
+    environment:
+      SSH_TARGET: ${OLLAMA_SSH_TARGET:-hp@localhost}
+      SSH_PORT: ${OLLAMA_SSH_PORT:-2222}
+      # Docker bridge address: reachable from the containers, not from the LAN.
+      LISTEN: ${OLLAMA_TUNNEL_LISTEN:-172.17.0.1:11435}
+      MODELS: ${OLLAMA_MODEL:-qwen2.5:7b} ${OLLAMA_EMBED_MODEL:-nomic-embed-text}
+    volumes:
+      - ./ollama/tunnel.sh:/ollama/tunnel.sh:ro
+      - ${OLLAMA_SSH_KEY:-${HOME}/.ssh/ollama_hp_ed25519}:/run/secrets/ollama_key:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -T 5 -O /dev/null http://$${LISTEN}/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
   # Writes every service's output to ./logs/<service>.log and ./logs/all.log
   # (rotated at 10 MB, 5 old copies kept). See logs/collect-logs.sh.
   log_collector:
     image: docker:27-cli
     entrypoint: ["sh", "/logs/collect-logs.sh"]
     environment:
-      LOG_SERVICES: fast_backend database geoserver cloudflared
+      LOG_SERVICES: fast_backend database geoserver cloudflared ollama
       LOG_MAX_BYTES: 10485760
       LOG_KEEP: 5
       # Host user that should own the log files.

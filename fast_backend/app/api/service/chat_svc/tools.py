@@ -56,6 +56,8 @@ ALIASES = {
 }
 SECTORS = [("LPG", "lpg_co2e_t_yr"), ("Firewood", "firewood_co2e_t_yr"), ("Electricity", "electricity_co2e_t_yr"),
            ("Transport", "transport_co2e_t_yr"), ("Waste", "waste_co2e_t_yr"), ("Livestock", "livestock_co2e_t_yr")]
+ANIMATION_SOURCES = {name: (f"{name.lower()}_emissions", f"emission_{name.lower()}")
+                     for name in ("LPG", "Firewood", "Electricity", "Transport", "Waste", "Livestock", "Total")}
 PROFILE_FIELDS = ["total_residents", "total_households", "total_area_ha", "agri_area_ha", "electricity_monthly_kwh",
                   "lpg_monthly_kg", "firewood_monthly_kg", "petrol_monthly_litres", "waste_monthly_kg",
                   "cows_count", "goats_count", "sheep_count", "total_co2e_t_yr", "per_capita_co2e_kg_yr",
@@ -98,9 +100,11 @@ def _as_list(value) -> list[str]:
 class Toolbox:
     """Executes tool calls against the dashboard database for one chat request."""
 
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, area: tuple[dict, object] | None = None):
         self.db = db
         self._villages: list[dict] | None = None
+        # Vector area the user uploaded in the chat: (metadata, WGS84 shapely geometry), see area.py.
+        self.area = area
 
     async def villages(self) -> list[dict]:
         if self._villages is None:
@@ -136,7 +140,7 @@ class Toolbox:
             raise ValueError(f"Unknown block '{block}'. Blocks: {', '.join(blocks)}")
         return exact[close[0]]
 
-    def _map(self, metric: str, villages: list[dict], title: str, highlight=(), focus=(), raster=None) -> dict:
+    def _map(self, metric: str, villages: list[dict], title: str, highlight=(), focus=(), raster=None, area=None) -> dict:
         col, label, unit, ramp = METRICS[metric]
         return {
             "kind": "map", "title": title,
@@ -144,6 +148,7 @@ class Toolbox:
             "values": {v["village_code"]: _r(v.get(col) or 0, 2) for v in villages},
             "names": {v["village_code"]: v["village_name"] for v in villages},
             "highlight": list(highlight), "focus": list(focus), "raster": raster,
+            "area": area,  # GeoJSON outline of an uploaded area, drawn on top
         }
 
     # ---------- tools ----------
@@ -285,6 +290,127 @@ class Toolbox:
         vis["values"] = {}  # draw the raster with outlines only, no choropleth underneath
         return result, [vis]
 
+    async def analyze_area(self, metric="total_emissions", raster=None, **_):
+        """Clips the village data (and optionally a raster) to the uploaded vector area; thematic map of the villages."""
+        from app.api.service.chat_svc import area as areas  # area imports geopandas; only load it when used
+
+        if not self.area:
+            return {"error": "No area uploaded. Ask the user to attach a vector file (GeoJSON, KML/KMZ, zipped "
+                             "shapefile or GeoPackage) with the paperclip button."}, []
+        meta, geom = self.area
+        key = _metric(metric)
+        col, label, unit, _ramp = METRICS[key]
+        shares = await run_in_threadpool(areas.village_shares, geom)
+        by_code = {v["village_code"]: v for v in await self.villages()}
+        inside = [(by_code[c], s) for c, s in shares.items() if c in by_code]
+        outline = areas.outline_geojson(geom)
+        result: dict = {"area": meta["name"], "area_ha": meta["area_ha"], "features": meta["features"],
+                        "share_inside_district_pct": meta["inside_district_pct"], "villages_overlapping": len(inside),
+                        "villages_fully_inside": sum(1 for _, s in inside if s >= 0.95)}
+        if meta.get("buffered_m"):
+            result["note"] = f"Points/lines in the file were buffered by {meta['buffered_m']} m to make an area."
+
+        if inside:
+            # Village totals scaled by the share of the village inside the area (assumes an even spread).
+            def est(column):
+                return sum(float(v.get(column) or 0) * s for v, s in inside)
+            pop, total = est("total_residents"), est("total_co2e_t_yr")
+            result["estimated_inside"] = {
+                "population": round(pop), "households": round(est("total_households")),
+                "total_co2e_t_yr": _r(total), "per_capita_co2e_kg_yr": _r(total * 1000 / pop) if pop else None,
+                "by_source_t_co2e_yr": {name: _r(est(c)) for name, c in SECTORS},
+                "livestock_head": round(est("total_livestock")), "agri_area_ha": _r(est("agri_area_ha")),
+            }
+            ranked = sorted(inside, key=lambda vs: -float(vs[0].get(col) or 0))
+            result[f"villages_by_{key}"] = [{"name": v["village_name"], "block": v["block_name"],
+                                            "share_inside_pct": round(100 * s), "value": _r(v.get(col), 2)}
+                                           for v, s in ranked[:10]]
+            # Highest villages INSIDE the area for the main indicators, so one call answers "which village in my area…".
+            result["highest_in_area"] = {
+                f"{METRICS[m][1]} ({METRICS[m][2]})": [
+                    f"{v['village_name']} {_r(v.get(METRICS[m][0]), 1)}"
+                    for v, _ in sorted(inside, key=lambda vs, c=METRICS[m][0]: -float(vs[0].get(c) or 0))[:3]]
+                for m in ("total_emissions", "per_capita_emissions", "energy_emissions", "transport_emissions",
+                          "waste_emissions", "livestock_emissions", "population") if m != key}
+
+        raster_vis = None
+        if raster:
+            catalog = raster_catalog()
+            rkey = str(raster).lower().split(":")[-1]
+            rkey = rkey if rkey in catalog else f"emission_{rkey}" if f"emission_{rkey}" in catalog else \
+                (difflib.get_close_matches(rkey, list(catalog), n=1, cutoff=0.4) or [None])[0]
+            if rkey:
+                info = catalog[rkey]
+                raster_vis = {"name": rkey, **info, "clip": areas.clip_wkt(geom)}
+                try:
+                    st = await run_in_threadpool(raster_factors.geometry_stats, info["layer"], geom)
+                    u = info["unit"] or "raster value"
+                    result["clipped_raster"] = {
+                        "layer": info["title"], "covered": st["covered"],
+                        f"mean_inside ({u})": _r(st["mean"], 3), f"max_inside ({u})": _r(st["max"], 3),
+                        **({"raster_total_inside_area (t CO2e/yr)": _r(st["total"], 1)} if st["total"] is not None else {}),
+                        "legend_class_share_pct": {c["label"]: c["share_pct"] for c in st["classes"][:6]},
+                    }
+                    raster_vis["stats"] = {"min": st["min"], "max": st["max"], "mean": st["mean"], "total": st["total"],
+                                           "covered": st["covered"], "classes": st["classes"][:6]}
+                except HTTPException as e:
+                    result["raster_error"] = e.detail
+                except Exception as e:  # GeoServer unreachable
+                    result["raster_error"] = str(e)[:200]
+            else:
+                result["raster_error"] = f"Unknown raster '{raster}'"
+
+        codes = [v["village_code"] for v, _ in inside]
+        title = f"{label} ({unit}) – villages in {meta['name']}" + (f" + {raster_vis['title']}" if raster_vis else "")
+        vis = self._map(key, [v for v, _ in inside], title, focus=codes, raster=raster_vis, area=outline)
+        visuals = [vis]
+        if inside and result["estimated_inside"]["total_co2e_t_yr"]:
+            visuals.append({"kind": "chart", "chart": "donut", "title": f"Estimated emissions inside {meta['name']} (t CO2e/yr)",
+                            "data": [{"name": n, "value": v} for n, v in result["estimated_inside"]["by_source_t_co2e_yr"].items() if v]})
+            visuals.append({"kind": "table", "title": f"Villages overlapping {meta['name']}", "columns": [
+                {"key": "name", "label": "Village"}, {"key": "block", "label": "Block"},
+                {"key": "share", "label": "% inside", "numeric": True}, {"key": "value", "label": f"{label} ({unit})", "numeric": True}],
+                "rows": [{"name": v["village_name"], "block": v["block_name"], "share": round(100 * s),
+                          "value": _r(v.get(col), 2)} for v, s in sorted(inside, key=lambda vs: -vs[1])]})
+        return result, visuals
+
+    async def make_animation(self, kind="emission_rasters", **_):
+        """Video (animated GIF, + MP4 when available) cycling through the emission sources, for the district or the
+        uploaded area: one frame per source raster, or one thematic map per sector."""
+        from app.api.service.chat_svc import media
+
+        catalog = raster_catalog()
+        area_outline, clip, focus, pool = None, None, [], await self.villages()
+        scope = "Varanasi district"
+        if self.area:
+            from app.api.service.chat_svc import area as areas
+            meta, geom = self.area
+            shares = await run_in_threadpool(areas.village_shares, geom)
+            focus = [c for c in shares]
+            pool = [v for v in pool if v["village_code"] in shares]
+            area_outline, clip, scope = areas.outline_geojson(geom), areas.clip_wkt(geom), meta["name"]
+        thematic = "thematic" in str(kind).lower() or "sector" in str(kind).lower()
+        frames = []
+        # source name -> (metric key for the thematic map, emission raster name)
+        for name, (metric_key, rkey) in ANIMATION_SOURCES.items():
+            if thematic:
+                v = self._map(metric_key, pool, "", focus=focus, area=area_outline)
+            elif rkey in catalog:
+                v = {"kind": "map", "values": {}, "highlight": [], "focus": focus, "area": area_outline,
+                     "raster": {"name": rkey, **catalog[rkey], "clip": clip}}
+            else:
+                continue
+            frames.append((v, f"{name} emissions – {scope}" + ("" if thematic else " (t CO2e/ha/yr)")))
+        out = await run_in_threadpool(media.animate, frames)
+        title = f"Emissions by source – {scope}"
+        # No URLs for the model: it would turn them into made-up links; the chat shows the player and download links.
+        return ({"video_created": True, "format": "MP4 + animated GIF" if out["mp4"] else "animated GIF",
+                 "frames": out["frames"], "frame_order": list(ANIMATION_SOURCES), "scope": scope,
+                 "note": "The video is already shown in the chat with Open / Download links. Do not write any URL or "
+                         "markdown link; just describe what the video shows."},
+                [{"kind": "media", "media": "video", "title": title, "url": out["mp4"] or out["gif"],
+                  "gif": out["gif"], "mp4": out["mp4"]}])
+
     async def search_knowledge(self, query="", **_):
         hits = await knowledge_base.search(self.db, str(query), k=4)
         return {"passages": [{"title": h["title"], "text": h["text"], "source": h["source"]} for h in hits]
@@ -297,6 +423,10 @@ class Toolbox:
         # Small models fill optional arguments with placeholders ("null", "none", "") instead of leaving them out.
         args = {k: v for k, v in (args or {}).items()
                 if v is not None and not (isinstance(v, str) and v.strip().lower() in {"", "null", "none", "n/a", "all"})}
+        # Named villages passed to a district-wide tool (e.g. rank_villages to "compare A and B") mean a comparison.
+        if name in ("rank_villages", "map_metric", "district_overview") and (args.get("villages") or args.get("village")):
+            fn = self.get_village_profile
+            args = {"villages": args.get("villages") or args.get("village")}
         try:
             return await fn(**args)
         except ValueError as e:
@@ -306,7 +436,7 @@ class Toolbox:
 METRIC_ENUM = sorted(METRICS)
 
 
-def tool_specs() -> list[dict]:
+def tool_specs(has_area: bool = False) -> list[dict]:
     rasters = raster_catalog()
 
     def spec(name, description, props=None, required=()):
@@ -346,8 +476,22 @@ def tool_specs() -> list[dict]:
              "Search the methodology, emission factors, formulas, data sources, mitigation options and project blog. "
              "Use for 'how is ... calculated', 'what is the emission factor of ...', 'how to reduce ...'.",
              {"query": {"type": "string"}}, ["query"]),
-    ]
+        spec("make_animation",
+             "Make a video / animation (saved as a file with a download link) that cycles through the emission sources: "
+             "kind 'emission_rasters' (one emission density raster per source) or 'thematic_sectors' (villages coloured "
+             "by each sector's emissions). Uses the uploaded area if there is one, else the whole district.",
+             {"kind": {"type": "string", "enum": ["emission_rasters", "thematic_sectors"]}}),
+    ] + ([
+        spec("analyze_area",
+             "Clip the dashboard data to the vector area the user uploaded: overlapping villages, estimated population "
+             "and emissions inside it, a thematic map of those villages coloured by an indicator, and optionally a raster "
+             "clipped to the area with its statistics (raster total inside the area). Use for any question about the "
+             "uploaded area / 'my area' / 'this boundary' / 'inside' / 'clip'.",
+             {"metric": {**metric, "description": "Indicator for the thematic map (default total_emissions)"},
+              "raster": {"type": "string", "enum": list(rasters),
+                         "description": "Optional raster to clip to the area and summarise"}}),
+    ] if has_area else [])
 
 
 TOOL_NAMES = ["get_village_profile", "find_villages", "rank_villages", "map_metric", "district_overview",
-              "show_raster", "search_knowledge"]
+              "show_raster", "search_knowledge", "analyze_area", "make_animation"]

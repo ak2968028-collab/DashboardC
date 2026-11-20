@@ -2,8 +2,8 @@
 
 import "leaflet/dist/leaflet.css";
 import { useEffect, useMemo } from "react";
-import type { Feature, FeatureCollection } from "geojson";
-import { geoJSON, type Layer, type PathOptions } from "leaflet";
+import type { Feature, FeatureCollection, GeoJsonObject } from "geojson";
+import { geoJSON, type Layer, type PathOptions, type WMSParams } from "leaflet";
 import { GeoJSON, LayersControl, MapContainer, Pane, ScaleControl, TileLayer, WMSTileLayer, useMap } from "react-leaflet";
 import { useGeoJson, wmsUrl } from "@/lib/api";
 import type { MapVisual } from "@/lib/chat";
@@ -23,10 +23,14 @@ const RAMPS: Record<string, string[]> = {
 const NO_DATA = "#cfd8dc";
 const CENTER: [number, number] = [25.37, 82.93];
 
-/** Zooms to the focused villages (or the whole district) whenever a new visual is shown. */
-function Fit({ geo, focus, visualKey }: { geo: FeatureCollection | null; focus: string[]; visualKey: string }) {
+/** Zooms to the focused villages, else an uploaded area, else the whole district, whenever a new visual is shown. */
+function Fit({ geo, focus, area, visualKey }: { geo: FeatureCollection | null; focus: string[]; area?: GeoJsonObject | null; visualKey: string }) {
   const map = useMap();
   useEffect(() => {
+    if (area && !focus.length) {
+      map.flyToBounds(geoJSON(area).getBounds(), { padding: [40, 40], maxZoom: 14, duration: 0.6 });
+      return;
+    }
     if (!geo?.features.length) return;
     const set = new Set(focus);
     const features = set.size ? geo.features.filter((f) => set.has(featureCode(f))) : geo.features;
@@ -104,22 +108,38 @@ export default function AssistantMap({ visual, visualKey }: { visual: MapVisual 
           )}
         </LayersControl>
         {raster && (
-          // Own pane under the village outlines, so tooltips still work.
-          <Pane name="assistant-raster" style={{ zIndex: 390 }}>
-            <WMSTileLayer key={raster.layer} url={wmsUrl(raster.workspace)}
-              params={{ layers: raster.layer, format: "image/png", transparent: true }} opacity={0.8} />
+          // With a thematic map as well, the raster goes on top (half transparent, clicks pass through to the
+          // villages); alone, it sits under the village outlines.
+          <Pane name={hasValues ? "assistant-raster-top" : "assistant-raster"}
+            style={hasValues ? { zIndex: 450, pointerEvents: "none" } : { zIndex: 390 }}>
+            <WMSTileLayer key={`${raster.layer}|${raster.clip ?? ""}`} url={wmsUrl(raster.workspace)}
+              // "clip": GeoServer cuts the raster to the uploaded area.
+              params={{ layers: raster.layer, format: "image/png", transparent: true, ...(raster.clip ? { clip: raster.clip } : {}) } as WMSParams}
+              opacity={hasValues ? 0.7 : 0.8} />
           </Pane>
         )}
         {geo && <GeoJSON key={visualKey + (boundaries?.features.length ?? 0)} data={geo} style={style} onEachFeature={onEach} />}
-        <Fit geo={boundaries} focus={visual?.focus ?? []} visualKey={visualKey} />
+        {visual?.area && (
+          <GeoJSON key={`area|${visualKey}`} data={visual.area} interactive={false}
+            style={{ fill: false, color: "#1a237e", weight: 3, dashArray: "8 6" }} />
+        )}
+        <Fit geo={boundaries} focus={visual?.focus ?? []} area={visual?.area} visualKey={visualKey} />
         <ScaleControl position="bottomleft" imperial={false} />
       </MapContainer>
 
       {visual && (
         <div className="map-legend assistant-legend">
           <div className="legend-title">{visual.title}</div>
-          {raster ? (
+          {hasValues && max > min && (
             <>
+              {raster && <div className="legend-sub">{visual.metric.label}</div>}
+              <div className="legend-bar" style={{ background: `linear-gradient(to right, ${ramp.join(",")})` }} />
+              <div className="legend-range"><span>{fmt(min, 1)}</span><span>{visual.metric.unit}</span><span>{fmt(max, 1)}</span></div>
+            </>
+          )}
+          {raster && (
+            <>
+              {hasValues && <div className="legend-sub">{raster.title}</div>}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img alt={`${raster.title} legend`}
                 src={`${wmsUrl(raster.workspace)}?service=WMS&request=GetLegendGraphic&format=image/png&layer=${encodeURIComponent(raster.layer)}`} />
@@ -127,16 +147,11 @@ export default function AssistantMap({ visual, visualKey }: { visual: MapVisual 
               {stats?.covered && (
                 <div className="assistant-raster-stats">
                   mean {fmt(stats.mean, 3)} · max {fmt(stats.max, 3)}
-                  {stats.total != null && <> · village total {fmt(stats.total, 1)} t CO₂e/yr</>}
+                  {stats.total != null && <> · {visual.area ? "total inside area" : "village total"} {fmt(stats.total, 1)} t CO₂e/yr</>}
                 </div>
               )}
             </>
-          ) : hasValues && max > min ? (
-            <>
-              <div className="legend-bar" style={{ background: `linear-gradient(to right, ${ramp.join(",")})` }} />
-              <div className="legend-range"><span>{fmt(min, 1)}</span><span>{visual.metric.unit}</span><span>{fmt(max, 1)}</span></div>
-            </>
-          ) : null}
+          )}
         </div>
       )}
     </div>

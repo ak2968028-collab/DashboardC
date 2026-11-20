@@ -2,11 +2,13 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Bot, Layers, Map as MapIcon, Send, Square, Trash2, User, Wrench } from "lucide-react";
+import { Bot, Download, ExternalLink, Layers, Loader2, Map as MapIcon, Paperclip, Send, Square, Trash2, User, Wrench, X } from "lucide-react";
 import { DonutChart, SimpleBarChart } from "@/components/charts";
 import { DataTable, PageTitle } from "@/components/ui";
 import { errorText } from "@/lib/api";
-import { askAssistant, useModelStatus, type ChatTurn, type MapVisual, type TableVisual, type Visual } from "@/lib/chat";
+import {
+  AREA_FILE_TYPES, askAssistant, uploadArea, useModelStatus, type AreaInfo, type ChatTurn, type MapVisual, type TableVisual, type Visual,
+} from "@/lib/chat";
 import { fmt } from "@/lib/format";
 
 // Leaflet needs the browser window, so the map is client-only.
@@ -34,11 +36,48 @@ const EXAMPLES = [
   "How are livestock emissions calculated?",
   "Give me an overview of Varanasi district",
   "Compare emissions of Chakadhiya and Dhanejpattee",
+  "Attach a boundary file (📎), then ask: total emissions inside my area?",
 ];
 
 let nextId = 1;
 
+/** Generated image (map / chart PNG) or video (MP4, or animated GIF) with open and download links. */
+function MediaView({ v }: { v: Extract<Visual, { kind: "media" }> }) {
+  const file = v.url.split("/").pop() ?? "file";
+  const links = (url: string, label: string) => (
+    <span className="chat-media-links">
+      <a href={url} target="_blank" rel="noreferrer"><ExternalLink size={12} /> Open</a>
+      <a href={url} download={url.split("/").pop()}><Download size={12} /> {label}</a>
+    </span>
+  );
+  if (v.media === "video") {
+    return (
+      <div className="chat-media">
+        <div className="chat-visual-title">🎬 {v.title}</div>
+        {v.mp4
+          ? <video src={v.mp4} controls loop muted playsInline />
+          // eslint-disable-next-line @next/next/no-img-element
+          : <img src={v.url} alt={v.title} />}
+        <div className="chat-media-row">
+          {v.mp4 && links(v.mp4, "MP4")}
+          {v.gif && links(v.gif, "GIF")}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="chat-media image">
+      <a href={v.url} target="_blank" rel="noreferrer" title="Open full size">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={v.url} alt={v.title} loading="lazy" />
+      </a>
+      <div className="chat-media-row"><span className="chat-media-name">🖼 {v.title.replace(/^Image: /, "")}</span>{links(v.url, file.endsWith(".png") ? "PNG" : "Download")}</div>
+    </div>
+  );
+}
+
 function VisualView({ v, onMap, active }: { v: Visual; onMap: (m: MapVisual) => void; active: boolean }) {
+  if (v.kind === "media") return <MediaView v={v} />;
   if (v.kind === "map") {
     return (
       <button type="button" className={`btn chat-map-chip ${active ? "on" : ""}`} onClick={() => onMap(v)}>
@@ -74,6 +113,10 @@ export default function AssistantPage() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [mapVisual, setMapVisual] = useState<MapVisual | null>(null);
+  // Vector area the user attached (GeoJSON, KML/KMZ, zipped shapefile, GeoPackage); sent with every question.
+  const [area, setArea] = useState<AreaInfo | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const { data: status } = useModelStatus();
@@ -105,7 +148,7 @@ export default function AssistantPage() {
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     try {
-      await askAssistant(question, history, (e) => {
+      await askAssistant(question, history, area?.id ?? null, (e) => {
         switch (e.type) {
           case "status": update(botId, (m) => ({ ...m, status: e.text })); break;
           case "token": update(botId, (m) => ({ ...m, text: m.text + e.text })); break;
@@ -126,6 +169,30 @@ export default function AssistantPage() {
       update(botId, (m) => ({ ...m, pending: false, status: undefined }));
       setBusy(false);
       abortRef.current = null;
+    }
+  }
+
+  async function attach(file: File) {
+    setUploading(true);
+    try {
+      const a = await uploadArea(file);
+      setArea(a);
+      // Show the outline right away.
+      setMapVisual({
+        kind: "map", title: `Uploaded area: ${a.name}`, metric: { key: "", label: "", unit: "", ramp: "reds" },
+        values: {}, names: {}, highlight: [], focus: [], raster: null, area: a.outline,
+      });
+      setMessages((ms) => [...ms, {
+        id: nextId++, role: "assistant", visuals: [], tools: [], sources: [],
+        text: `Area “${a.name}” attached: ${fmt(a.area_ha)} ha, ${a.features} feature${a.features === 1 ? "" : "s"}`
+          + `${a.buffered_m ? ` (points/lines buffered by ${a.buffered_m} m)` : ""}. Ask about it, for example “total emissions `
+          + `inside my area”, “thematic map of livestock emissions for my area” or “clip the population raster to my area”.`,
+      }]);
+    } catch (err) {
+      setMessages((ms) => [...ms, { id: nextId++, role: "assistant", text: "", visuals: [], tools: [], sources: [],
+        error: `Could not use ${file.name}: ${errorText(err)}` }]);
+    } finally {
+      setUploading(false);
     }
   }
 
@@ -190,12 +257,33 @@ export default function AssistantPage() {
             ))}
           </div>
 
+          {area && (
+            <div className="chat-area-chip">
+              <Paperclip size={13} />
+              <span>
+                <b>{area.name}</b> · {fmt(area.area_ha)} ha · {area.features} feature{area.features === 1 ? "" : "s"}
+                {area.buffered_m ? ` (points/lines buffered ${area.buffered_m} m)` : ""}
+                {area.inside_district_pct < 99 ? ` · ${fmt(area.inside_district_pct)}% inside district` : ""}
+              </span>
+              <button type="button" onClick={() => setArea(null)} title="Remove the area" disabled={busy}><X size={13} /></button>
+            </div>
+          )}
           <form className="chat-input" onSubmit={onSubmit}>
+            <input ref={fileRef} type="file" accept={AREA_FILE_TYPES} hidden onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = "";
+              if (f) attach(f);
+            }} />
+            <button type="button" className="btn chat-attach" onClick={() => fileRef.current?.click()} disabled={busy || uploading}
+              title="Attach a vector file to clip data and rasters to (GeoJSON, KML/KMZ, zipped shapefile, GeoPackage)">
+              {uploading ? <Loader2 size={16} className="spin" /> : <Paperclip size={16} />}
+            </button>
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); } }}
-              placeholder="e.g. Which villages in Pindra emit most from firewood?"
+              placeholder={area ? `Ask about ${area.name}, e.g. thematic map of per capita emissions, clip the population raster`
+                : "e.g. Which villages in Pindra emit most from firewood?"}
               rows={2}
               maxLength={2000}
             />

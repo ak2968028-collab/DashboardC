@@ -26,7 +26,13 @@ from app.database.config.session import AsyncSessionLocal
 MAX_TOOL_ROUNDS = 4
 HISTORY_TURNS = 6
 PING_SECONDS = 8
+# A short chunk repeated many times in a row at the end of the answer (e.g. "nBx1iF9kGhBnBx1iF9kGh...").
+REPETITION = re.compile(r"(.{6,60}?)\1{8,}$", re.S)
 CONTEXT_MIN_SCORE = 2.0  # BM25 score a passage needs to be put in the prompt up front
+# How / why / advice questions: the model tends to answer these from general knowledge instead of searching, so the
+# best knowledge passages (keyword + embedding search) are put in the prompt even without a strong keyword match.
+ADVICE_QUESTION = re.compile(r"\b(how|why|what can|what should|reduce|lower|cut|improve|greener|green|tips?|advice|"
+                             r"suggest|mitigat\w*|sustainab\w*|net.?zero|source|methodolog\w*)\b", re.I)
 
 SYSTEM_PROMPT = """You are the assistant of the Varanasi Village Environment & Carbon Dashboard (IIT BHU).
 You answer questions about villages of Varanasi district, Uttar Pradesh: population, land use, energy, transport,
@@ -38,7 +44,10 @@ Rules:
   instead of guessing. Leave optional tool arguments out instead of passing null.
 - Tools also draw maps, rasters and charts for the user, so call one whenever a map or chart would help
   (e.g. "show", "map", "where", "which villages", "compare", "raster").
-- Use search_knowledge for methodology, formulas, emission factors or mitigation questions.
+- To look at or compare specific named villages, use get_village_profile with their names.
+- ALWAYS call search_knowledge before answering how / why / advice questions (methodology, formulas, emission
+  factors, data sources, reducing emissions, mitigation, making villages greener) and base the answer on the
+  passages it returns, not on general knowledge.
 - For greetings or general chat, answer directly without tools.
 - After the tool results arrive, answer in plain language in 2-6 sentences or a short list, quoting the key numbers
   with units. Mention that the map/chart is shown when a tool produced one. Do not output JSON.
@@ -84,11 +93,30 @@ def _text_tool_call(content: str) -> list[dict] | None:
 class Agent:
     def __init__(self, emit):
         self.emit = emit  # async callable(event dict)
+        self.renders: list[asyncio.Task] = []  # images of maps / charts being saved to media/temp
+
+    def _save_image(self, visual: dict):
+        """Renders a map / chart visual to a PNG in media/temp in the background; emits its link when ready."""
+        from fastapi.concurrency import run_in_threadpool
+
+        from app.api.service.chat_svc import media
+
+        async def job():
+            try:
+                png = await run_in_threadpool(media.render_map if visual["kind"] == "map" else media.render_chart, visual)
+                url = await run_in_threadpool(media.save, png, "png")
+                await self.emit({"type": "visual", "visual": {"kind": "media", "media": "image", "url": url,
+                                                              "title": f"Image: {visual.get('title', '')}"}})
+            except Exception:
+                logger.exception("Assistant: saving the image of %s failed", visual.get("title"))
+        self.renders.append(asyncio.create_task(job()))
 
     async def _chat(self, client: httpx.AsyncClient, messages: list[dict], tools: list[dict] | None) -> tuple[str, list]:
         """One streamed model call; forwards answer tokens, returns (content, tool calls)."""
         body = {"model": settings.OLLAMA_MODEL, "messages": messages, "stream": True,
-                "options": {"num_ctx": settings.OLLAMA_NUM_CTX, "temperature": 0.2}}
+                # repeat_penalty / num_predict: small models occasionally fall into a repetition loop.
+                "options": {"num_ctx": settings.OLLAMA_NUM_CTX, "temperature": 0.2, "repeat_penalty": 1.1,
+                            "num_predict": 1500}}
         if tools:
             body["tools"] = tools
         content, calls, streaming = "", [], False
@@ -108,6 +136,15 @@ class Agent:
                 if not piece:
                     continue
                 content += piece
+                loop = REPETITION.search(content[-600:]) if len(content) > 120 else None
+                if loop:
+                    # Degenerate output: stop the model and keep the text before the loop.
+                    content = content[: len(content) - len(content[-600:]) + loop.start()].rstrip() + " …"
+                    logger.warning("Assistant: model output looped; answer cut at %d chars", len(content))
+                    if streaming:
+                        await self.emit({"type": "reset"})
+                        await self.emit({"type": "token", "text": content})
+                    break
                 if streaming:
                     await self.emit({"type": "token", "text": piece})
                 elif content.strip() and not content.lstrip().startswith(("{", "[", "<|", "```")):
@@ -123,16 +160,27 @@ class Agent:
             await self.emit({"type": "reset"})
         return content, calls
 
-    async def run(self, question: str, history: list[dict]):
+    async def run(self, question: str, history: list[dict], area: tuple[dict, object] | None = None):
         async with AsyncSessionLocal() as db:
-            toolbox = Toolbox(db)
+            toolbox = Toolbox(db, area=area)
             await self.emit({"type": "status", "text": "Searching the knowledge base…"})
             try:
-                passages = [p for p in await knowledge_base.search(db, question, k=3) if p["score"] >= CONTEXT_MIN_SCORE]
+                hits = await knowledge_base.search(db, question, k=3)
+                passages = [p for p in hits if p["score"] >= CONTEXT_MIN_SCORE]
+                if not passages and ADVICE_QUESTION.search(question):
+                    passages = hits[:2]
             except Exception:
                 logger.exception("Assistant: knowledge retrieval failed")
                 passages = []
             system = SYSTEM_PROMPT
+            if area:
+                meta = area[0]
+                system += (f"\nThe user has uploaded a vector area \"{meta['name']}\" ({meta['area_ha']:,.0f} ha, "
+                           f"{meta['features']} feature(s), {meta['inside_district_pct']:.0f}% inside Varanasi district). "
+                           "For any question about this area, my area, the uploaded file/boundary, clipping, or what lies "
+                           "inside it, call analyze_area (with metric for a thematic map and raster to clip a raster). "
+                           "Its results cover ONLY the area; rank_villages, map_metric and district_overview cover the "
+                           "whole district, so never use them for questions about villages in the area.\n")
             if passages:
                 system += "\nReference passages (cite them when relevant):\n" + "\n".join(
                     f"[{i + 1}] {p['title']}: {p['text']}" for i, p in enumerate(passages))
@@ -144,7 +192,7 @@ class Agent:
                     messages.append({"role": turn["role"], "content": str(turn["content"])[:2000]})
             messages.append({"role": "user", "content": question})
 
-            tools = tool_specs()
+            tools = tool_specs(has_area=area is not None)
             async with httpx.AsyncClient(timeout=httpx.Timeout(settings.OLLAMA_TIMEOUT, connect=10)) as client:
                 for round_no in range(MAX_TOOL_ROUNDS + 1):
                     await self.emit({"type": "status", "text": "Thinking…" if round_no == 0 else "Writing the answer…"})
@@ -170,11 +218,16 @@ class Agent:
                             result, visuals = {"error": f"{type(e).__name__}: {e}"}, []
                         for v in visuals:
                             await self.emit({"type": "visual", "visual": v})
+                            if v.get("kind") in ("map", "chart"):
+                                self._save_image(v)
                         messages.append({"role": "tool", "tool_name": name,
                                          "content": json.dumps(result, ensure_ascii=False, default=str)[:6000]})
+            if self.renders:
+                await self.emit({"type": "status", "text": "Saving images…"})
+                await asyncio.gather(*self.renders, return_exceptions=True)
 
 
-async def stream_answer(question: str, history: list[dict]) -> AsyncIterator[bytes]:
+async def stream_answer(question: str, history: list[dict], area: tuple[dict, object] | None = None) -> AsyncIterator[bytes]:
     """Runs the agent in the background and yields its events, with keep-alive pings so proxies don't time out."""
     queue: asyncio.Queue = asyncio.Queue()
 
@@ -183,7 +236,7 @@ async def stream_answer(question: str, history: list[dict]) -> AsyncIterator[byt
 
     async def runner():
         try:
-            await Agent(emit).run(question, history)
+            await Agent(emit).run(question, history, area)
         except httpx.ConnectError:
             await emit({"type": "error", "text": f"Cannot reach the language model at {settings.OLLAMA_URL}. "
                                                  "Is Ollama running and reachable from the backend?"})

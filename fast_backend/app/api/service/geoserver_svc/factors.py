@@ -313,11 +313,17 @@ def _read_cadastral_codes() -> frozenset[str]:
 
 @lru_cache(maxsize=512)
 def village_stats(layer: str, village_code: str) -> dict:
-    factor = get_factor(layer)
     geom = _village_shapes().get(village_code)
     if geom is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No boundary for village {village_code}")
-    result = {'layer': layer, 'village_code': village_code, 'covered': False, 'pixels': 0, 'valid_pixels': 0,
+    return {**geometry_stats(layer, geom), 'village_code': village_code}
+
+
+def geometry_stats(layer: str, geom) -> dict:
+    """Raster values inside any WGS84 (multi)polygon: min / max / mean, total for density rasters (unit per ha) and the
+    share of each legend class."""
+    factor = get_factor(layer)
+    result = {'layer': layer, 'covered': False, 'pixels': 0, 'valid_pixels': 0,
               'min': None, 'max': None, 'mean': None, 'total': None, 'classes': []}
     minx, miny, maxx, maxy = geom.bounds
     b = factor['bbox']

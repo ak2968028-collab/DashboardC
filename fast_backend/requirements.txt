@@ -15,3 +15,5 @@ openpyxl>=3.1.0
 reportlab>=4.0.0
 pyjwt>=2.8.0
 httpx>=0.27.0
+# MP4 videos from the AI assistant (bundles an ffmpeg binary)
+imageio[ffmpeg]>=2.34

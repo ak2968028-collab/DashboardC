@@ -1,5 +1,6 @@
 // Client for the AI assistant (POST /api/chat), which streams NDJSON events from the backend agent.
 import useSWR from "swr";
+import type { Feature } from "geojson";
 import { ApiError, errorMessage, fetcher } from "./api";
 
 export interface MapVisual {
@@ -14,9 +15,35 @@ export interface MapVisual {
   focus: string[];
   raster: null | {
     name: string; layer: string; workspace: string; title: string; unit: string | null;
+    /** WKT the raster is clipped to (GeoServer WMS "clip"), e.g. an uploaded area. */
+    clip?: string;
     stats?: { min: number | null; max: number | null; mean: number | null; total: number | null; covered: boolean;
       classes: { label: string; color: string; share_pct: number }[] };
   };
+  /** Outline of an uploaded vector area, drawn on top. */
+  area?: Feature | null;
+}
+
+/** A vector file uploaded for the assistant to clip data and rasters to. */
+export interface AreaInfo {
+  id: string;
+  name: string;
+  features: number;
+  geometry_types: string[];
+  buffered_m: number | null;
+  area_ha: number;
+  inside_district_pct: number;
+  outline: Feature;
+}
+
+export const AREA_FILE_TYPES = ".geojson,.json,.kml,.kmz,.zip,.gpkg,.gml";
+
+export async function uploadArea(file: File): Promise<AreaInfo> {
+  const body = new FormData();
+  body.append("file", file);
+  const res = await fetch("/api/chat/area", { method: "POST", body });
+  if (!res.ok) throw new ApiError(await errorMessage(res), res.status);
+  return res.json();
 }
 
 export interface ChartVisual {
@@ -36,7 +63,17 @@ export interface TableVisual {
   rows: Record<string, string | number | null>[];
 }
 
-export type Visual = MapVisual | ChartVisual | TableVisual;
+/** An image or video file the assistant generated (saved in media/temp on the server). */
+export interface MediaVisual {
+  kind: "media";
+  media: "image" | "video";
+  title: string;
+  url: string;
+  gif?: string | null;
+  mp4?: string | null;
+}
+
+export type Visual = MapVisual | ChartVisual | TableVisual | MediaVisual;
 
 export type ChatEvent =
   | { type: "status"; text: string }
@@ -63,11 +100,11 @@ export const useModelStatus = () =>
   useSWR<ModelStatus>("/api/chat/status", fetcher, { refreshInterval: 30000, revalidateOnFocus: false });
 
 /** Sends a question and calls onEvent for every streamed event until the answer is complete. */
-export async function askAssistant(message: string, history: ChatTurn[], onEvent: (e: ChatEvent) => void, signal?: AbortSignal) {
+export async function askAssistant(message: string, history: ChatTurn[], areaId: string | null, onEvent: (e: ChatEvent) => void, signal?: AbortSignal) {
   const res = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message, history }),
+    body: JSON.stringify({ message, history, area_id: areaId }),
     signal,
   });
   if (!res.ok || !res.body) throw new ApiError(await errorMessage(res), res.status);
