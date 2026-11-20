@@ -1,9 +1,12 @@
 "use client";
 
 import "leaflet/dist/leaflet.css";
-import { useEffect, useMemo } from "react";
+import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
+import "@/lib/leafletGlobal"; // must come before the plugin import
+import "@geoman-io/leaflet-geoman-free";
+import { useEffect, useMemo, useRef } from "react";
 import type { Feature, FeatureCollection, GeoJsonObject } from "geojson";
-import { geoJSON, type Layer, type PathOptions, type WMSParams } from "leaflet";
+import L, { geoJSON, type Layer, type PathOptions, type WMSParams } from "leaflet";
 import { GeoJSON, LayersControl, MapContainer, Pane, ScaleControl, TileLayer, WMSTileLayer, useMap } from "react-leaflet";
 import { useGeoJson, wmsUrl } from "@/lib/api";
 import type { MapVisual } from "@/lib/chat";
@@ -42,7 +45,85 @@ function Fit({ geo, focus, area, visualKey }: { geo: FeatureCollection | null; f
   return null;
 }
 
-export default function AssistantMap({ visual, visualKey }: { visual: MapVisual | null; visualKey: string }) {
+// Only shapes drawn with the toolbar can be edited / removed, never the village or raster layers.
+L.PM.setOptIn(true);
+
+const DRAW_STYLE = { color: "#6a1b9a", weight: 3, fillColor: "#ce93d8", fillOpacity: 0.15 };
+
+/** Circle as a 64-point polygon (GeoJSON has no circles). */
+function circleFeature(c: L.Circle): Feature {
+  const { lat, lng } = c.getLatLng();
+  const r = c.getRadius();
+  const ring = Array.from({ length: 65 }, (_, i) => {
+    const a = (i / 64) * 2 * Math.PI;
+    return [lng + (r * Math.sin(a)) / (111320 * Math.cos((lat * Math.PI) / 180)), lat + (r * Math.cos(a)) / 110574];
+  });
+  return { type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [ring] } };
+}
+
+/** Leaflet-Geoman toolbar: draw polygons, rectangles, circles, lines or points; reports the drawing as GeoJSON. */
+function DrawControl({ onChange, clearKey }: { onChange: (fc: FeatureCollection | null) => void; clearKey: number }) {
+  const map = useMap();
+  const drawn = useRef(new Set<L.Layer>());
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
+  useEffect(() => {
+    map.pm.addControls({
+      position: "topleft", drawMarker: true, drawCircleMarker: false, drawPolyline: true, drawRectangle: true,
+      drawPolygon: true, drawCircle: true, drawText: false, editMode: true, dragMode: true, cutPolygon: false,
+      removalMode: true, rotateMode: false,
+    });
+    map.pm.setGlobalOptions({ pathOptions: DRAW_STYLE, templineStyle: DRAW_STYLE, hintlineStyle: { ...DRAW_STYLE, dashArray: "5,5" } });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const report = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        const features = [...drawn.current].map((layer) =>
+          layer instanceof L.Circle ? circleFeature(layer) : (layer as L.Polygon).toGeoJSON() as Feature);
+        onChangeRef.current(features.length ? { type: "FeatureCollection", features } : null);
+      }, 400);
+    };
+    const onCreate = (e: { layer: L.Layer }) => {
+      (e.layer.options as { pmIgnore?: boolean }).pmIgnore = false;
+      L.PM.reInitLayer(e.layer);
+      drawn.current.add(e.layer);
+      e.layer.on("pm:edit pm:dragend", report);
+      report();
+    };
+    const onRemove = (e: { layer: L.Layer }) => {
+      drawn.current.delete(e.layer);
+      report();
+    };
+    map.on("pm:create", onCreate);
+    map.on("pm:remove", onRemove);
+    return () => {
+      clearTimeout(timer);
+      map.off("pm:create", onCreate);
+      map.off("pm:remove", onRemove);
+      map.pm.removeControls();
+    };
+  }, [map]);
+
+  // Clear the drawing when the page asks (area removed in the chat).
+  useEffect(() => {
+    if (!clearKey) return;
+    drawn.current.forEach((layer) => map.removeLayer(layer));
+    drawn.current.clear();
+  }, [clearKey, map]);
+  return null;
+}
+
+interface Props {
+  visual: MapVisual | null;
+  visualKey: string;
+  /** Called with the shapes drawn on the map (null when the drawing is cleared). */
+  onDraw?: (fc: FeatureCollection | null) => void;
+  /** Increment to remove everything drawn. */
+  clearDrawKey?: number;
+}
+
+export default function AssistantMap({ visual, visualKey, onDraw, clearDrawKey = 0 }: Props) {
   const boundaries = useBoundaries();
   const { data: blockGeo } = useGeoJson("blocks");
   const values = visual?.values ?? {};
@@ -90,7 +171,8 @@ export default function AssistantMap({ visual, visualKey }: { visual: MapVisual 
 
   return (
     <div className="map-wrap assistant-map-wrap">
-      <MapContainer center={CENTER} zoom={10} preferCanvas className="map assistant-map">
+      {/* pmIgnore={false}: with Geoman's opt-in mode the map itself must opt in to get the drawing toolbar. */}
+      <MapContainer center={CENTER} zoom={10} preferCanvas className="map assistant-map" pmIgnore={false}>
         <LayersControl position="topright">
           <LayersControl.BaseLayer checked name="OpenStreetMap">
             <TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -124,6 +206,7 @@ export default function AssistantMap({ visual, visualKey }: { visual: MapVisual 
             style={{ fill: false, color: "#1a237e", weight: 3, dashArray: "8 6" }} />
         )}
         <Fit geo={boundaries} focus={visual?.focus ?? []} area={visual?.area} visualKey={visualKey} />
+        {onDraw && <DrawControl onChange={onDraw} clearKey={clearDrawKey} />}
         <ScaleControl position="bottomleft" imperial={false} />
       </MapContainer>
 

@@ -311,10 +311,11 @@ def animate(frames: list[tuple[dict, str]], seconds_per_frame: float = 1.6) -> d
     with ThreadPoolExecutor(max_workers=4) as pool:  # frames render in parallel (same cached basemap)
         pngs = list(pool.map(lambda f: render_map(f[0], f[1], width=900), frames))
     images = [Image.open(io.BytesIO(p)).convert("RGB") for p in pngs]
+    frame_files = [{"title": title, "url": save(png, "png")} for (_v, title), png in zip(frames, pngs)]
     out = io.BytesIO()
     images[0].save(out, format="GIF", save_all=True, append_images=images[1:], duration=int(seconds_per_frame * 1000),
                    loop=0, optimize=True)
-    result = {"gif": save(out.getvalue(), "gif"), "mp4": None, "frames": len(images)}
+    result = {"gif": save(out.getvalue(), "gif"), "mp4": None, "frames": len(images), "frame_files": frame_files}
     try:
         import imageio.v3 as iio
         import numpy as np
@@ -325,3 +326,60 @@ def animate(frames: list[tuple[dict, str]], seconds_per_frame: float = 1.6) -> d
     except Exception as e:  # imageio[ffmpeg] not installed: GIF only
         logger.info("Assistant media: MP4 skipped (%s)", type(e).__name__)
     return result
+
+
+# ---------- PDF report ----------
+
+def report_pdf(title: str, subtitle: str, stats: list[tuple[str, str]], figures: list[tuple[str, bytes]],
+               table: tuple[list[str], list[list[str]]] | None, notes: list[str]) -> bytes:
+    """A4 PDF: title, key numbers, figures (PNG bytes with captions), a table and notes."""
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.units import mm
+    from reportlab.platypus import Image as RLImage
+    from reportlab.platypus import KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    styles = getSampleStyleSheet()
+    out = io.BytesIO()
+    doc = SimpleDocTemplate(out, pagesize=A4, leftMargin=16 * mm, rightMargin=16 * mm, topMargin=16 * mm,
+                            bottomMargin=16 * mm, title=title, author="Varanasi Carbon Dashboard - AI assistant")
+    width = A4[0] - 32 * mm
+    story = [Paragraph(title, styles["Title"]), Paragraph(subtitle, styles["Normal"]), Spacer(1, 6 * mm)]
+
+    grid = Table([[k, v] for k, v in stats], colWidths=[width * 0.55, width * 0.45])
+    grid.setStyle(TableStyle([
+        ("FONT", (0, 0), (-1, -1), "Helvetica", 10), ("FONT", (1, 0), (1, -1), "Helvetica-Bold", 10),
+        ("ROWBACKGROUNDS", (0, 0), (-1, -1), [colors.HexColor("#f1f8e9"), colors.white]),
+        ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#c5d1c8")), ("ALIGN", (1, 0), (1, -1), "RIGHT"),
+        ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    story += [Paragraph("Key figures", styles["Heading2"]), grid]
+
+    for caption, png in figures:
+        img = Image.open(io.BytesIO(png))
+        h = width * img.height / img.width
+        if h > 200 * mm:  # keep a figure on one page
+            h, w = 200 * mm, 200 * mm * img.width / img.height
+        else:
+            w = width
+        story += [PageBreak() if h > 120 * mm else Spacer(1, 6 * mm),
+                  KeepTogether([Paragraph(caption, styles["Heading2"]), RLImage(io.BytesIO(png), width=w, height=h)])]
+
+    if table:
+        header, rows = table
+        head_style = styles["BodyText"].clone("th", fontName="Helvetica-Bold", fontSize=9, leading=11, textColor=colors.white)
+        widths = [0.3, 0.3, 0.15, 0.25] if len(header) == 4 else [1 / len(header)] * len(header)
+        t = Table([[Paragraph(h, head_style) for h in header]] + rows, repeatRows=1, colWidths=[width * f for f in widths])
+        t.setStyle(TableStyle([
+            ("FONT", (0, 0), (-1, 0), "Helvetica-Bold", 9), ("FONT", (0, 1), (-1, -1), "Helvetica", 8.5),
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2e7d32")), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f6f8f7")]),
+            ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#c5d1c8")), ("ALIGN", (2, 1), (-1, -1), "RIGHT"),
+        ]))
+        story += [PageBreak(), Paragraph("Villages", styles["Heading2"]), t]
+
+    story += [Spacer(1, 6 * mm), Paragraph("Notes", styles["Heading2"])]
+    story += [Paragraph(n, styles["BodyText"]) for n in notes]
+    doc.build(story)
+    return out.getvalue()

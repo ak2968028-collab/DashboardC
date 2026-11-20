@@ -1,8 +1,9 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import type { FeatureCollection } from "geojson";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Bot, Download, ExternalLink, Layers, Loader2, Map as MapIcon, Paperclip, Send, Square, Trash2, User, Wrench, X } from "lucide-react";
+import { Bot, Download, ExternalLink, FileText, Layers, Loader2, Map as MapIcon, Paperclip, PenLine, Send, Square, Trash2, User, Wrench, X } from "lucide-react";
 import { DonutChart, SimpleBarChart } from "@/components/charts";
 import { DataTable, PageTitle } from "@/components/ui";
 import { errorText } from "@/lib/api";
@@ -36,7 +37,8 @@ const EXAMPLES = [
   "How are livestock emissions calculated?",
   "Give me an overview of Varanasi district",
   "Compare emissions of Chakadhiya and Dhanejpattee",
-  "Attach a boundary file (📎), then ask: total emissions inside my area?",
+  "Attach a boundary file (📎) or draw on the map, then ask: total emissions inside my area?",
+  "Make a PDF report of the district with a thematic map of per capita emissions",
 ];
 
 let nextId = 1;
@@ -50,6 +52,17 @@ function MediaView({ v }: { v: Extract<Visual, { kind: "media" }> }) {
       <a href={url} download={url.split("/").pop()}><Download size={12} /> {label}</a>
     </span>
   );
+  if (v.media === "file") {
+    return (
+      <div className="chat-media file">
+        <div className="chat-media-row">
+          <FileText size={22} className="chat-media-icon" />
+          <span className="chat-media-name"><b>{v.title}</b></span>
+          {links(v.url, file.endsWith(".pdf") ? "PDF" : "Download")}
+        </div>
+      </div>
+    );
+  }
   if (v.media === "video") {
     return (
       <div className="chat-media">
@@ -62,6 +75,16 @@ function MediaView({ v }: { v: Extract<Visual, { kind: "media" }> }) {
           {v.mp4 && links(v.mp4, "MP4")}
           {v.gif && links(v.gif, "GIF")}
         </div>
+        {!!v.frames?.length && (
+          <div className="chat-media-frames">
+            Frames as PNG:{" "}
+            {v.frames.map((f) => (
+              <a key={f.url} href={f.url} target="_blank" rel="noreferrer" download={f.url.split("/").pop()}>
+                {f.title.split(" emissions")[0]}
+              </a>
+            ))}
+          </div>
+        )}
       </div>
     );
   }
@@ -115,6 +138,9 @@ export default function AssistantPage() {
   const [mapVisual, setMapVisual] = useState<MapVisual | null>(null);
   // Vector area the user attached (GeoJSON, KML/KMZ, zipped shapefile, GeoPackage); sent with every question.
   const [area, setArea] = useState<AreaInfo | null>(null);
+  // The area came from shapes drawn on the map (not a file): removing it also clears the drawing.
+  const [areaFromDrawing, setAreaFromDrawing] = useState(false);
+  const [clearDrawKey, setClearDrawKey] = useState(0);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -172,10 +198,40 @@ export default function AssistantPage() {
     }
   }
 
+  function removeArea() {
+    if (areaFromDrawing) setClearDrawKey((k) => k + 1);
+    setArea(null);
+    setAreaFromDrawing(false);
+  }
+
+  /** Shapes drawn on the map become the area (sent like an uploaded GeoJSON file). */
+  async function onDraw(fc: FeatureCollection | null) {
+    if (!fc) {
+      if (areaFromDrawing) {
+        setArea(null);
+        setAreaFromDrawing(false);
+      }
+      return;
+    }
+    setUploading(true);
+    try {
+      const a = await uploadArea(new File([JSON.stringify(fc)], "drawn_area.geojson", { type: "application/geo+json" }));
+      setArea({ ...a, name: "Drawn area" });
+      setAreaFromDrawing(true);
+    } catch (err) {
+      setMessages((ms) => [...ms, { id: nextId++, role: "assistant", text: "", visuals: [], tools: [], sources: [],
+        error: `Could not use the drawing: ${errorText(err)}` }]);
+    } finally {
+      setUploading(false);
+    }
+  }
+
   async function attach(file: File) {
     setUploading(true);
     try {
       const a = await uploadArea(file);
+      if (areaFromDrawing) setClearDrawKey((k) => k + 1);
+      setAreaFromDrawing(false);
       setArea(a);
       // Show the outline right away.
       setMapVisual({
@@ -259,13 +315,13 @@ export default function AssistantPage() {
 
           {area && (
             <div className="chat-area-chip">
-              <Paperclip size={13} />
+              {areaFromDrawing ? <PenLine size={13} /> : <Paperclip size={13} />}
               <span>
                 <b>{area.name}</b> · {fmt(area.area_ha)} ha · {area.features} feature{area.features === 1 ? "" : "s"}
                 {area.buffered_m ? ` (points/lines buffered ${area.buffered_m} m)` : ""}
                 {area.inside_district_pct < 99 ? ` · ${fmt(area.inside_district_pct)}% inside district` : ""}
               </span>
-              <button type="button" onClick={() => setArea(null)} title="Remove the area" disabled={busy}><X size={13} /></button>
+              <button type="button" onClick={removeArea} title="Remove the area" disabled={busy}><X size={13} /></button>
             </div>
           )}
           <form className="chat-input" onSubmit={onSubmit}>
@@ -295,7 +351,8 @@ export default function AssistantPage() {
           </form>
         </section>
 
-        <AssistantMap visual={mapVisual} visualKey={mapVisual ? `${mapVisual.title}|${mapVisual.raster?.layer ?? ""}|${mapVisual.highlight.join(",")}` : "none"} />
+        <AssistantMap visual={mapVisual} onDraw={onDraw} clearDrawKey={clearDrawKey}
+          visualKey={mapVisual ? `${mapVisual.title}|${mapVisual.raster?.layer ?? ""}|${mapVisual.highlight.join(",")}` : "none"} />
       </div>
     </>
   );

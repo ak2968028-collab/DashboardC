@@ -1684,3 +1684,8 @@ details.chat-visual .table-wrap { max-height: 280px; overflow: auto; margin-top:
 .chat-media-links { display: inline-flex; gap: 10px; }
 .chat-media-links a { display: inline-flex; align-items: center; gap: 3px; color: #3730a3; text-decoration: none; font-weight: 600; }
 .chat-media-links a:hover { text-decoration: underline; }
+.chat-media.file { background: #fafafa; }
+.chat-media-icon { color: #c62828; flex: none; }
+.chat-media-frames { font-size: 12px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.chat-media-frames a { color: #3730a3; font-weight: 600; text-decoration: none; }
+.chat-media-frames a:hover { text-decoration: underline; }

@@ -28,6 +28,9 @@ HISTORY_TURNS = 6
 PING_SECONDS = 8
 # A short chunk repeated many times in a row at the end of the answer (e.g. "nBx1iF9kGhBnBx1iF9kGh...").
 REPETITION = re.compile(r"(.{6,60}?)\1{8,}$", re.S)
+# Links the model must not write: it never receives real file URLs, so any link in its answer is invented.
+MD_LINK = re.compile(r"!?\[([^\]]*)\]\(([^)]*)\)")
+BARE_FAKE_URL = re.compile(r"(data:[\w/+.-]+;base64,\S*|https?://\S+)")
 CONTEXT_MIN_SCORE = 2.0  # BM25 score a passage needs to be put in the prompt up front
 # How / why / advice questions: the model tends to answer these from general knowledge instead of searching, so the
 # best knowledge passages (keyword + embedding search) are put in the prompt even without a strong keyword match.
@@ -49,9 +52,20 @@ Rules:
   factors, data sources, reducing emissions, mitigation, making villages greener) and base the answer on the
   passages it returns, not on general knowledge.
 - For greetings or general chat, answer directly without tools.
+- NEVER say a report, PDF, file, image, video or download link was created unless a tool returned it in this turn;
+  if the user wants one, call the tool (make_report for a PDF report, make_animation for a video; map and chart images
+  are saved automatically). Never write URLs, markdown links or data: links: the chat shows real download links itself.
 - After the tool results arrive, answer in plain language in 2-6 sentences or a short list, quoting the key numbers
   with units. Mention that the map/chart is shown when a tool produced one. Do not output JSON.
 """
+
+
+def _strip_links(text: str) -> str:
+    """Removes links the model invented (markdown links / images, data: URIs, any URL); keeps their label."""
+    out = MD_LINK.sub(lambda m: m.group(1) or "", text)
+    out = BARE_FAKE_URL.sub("", out)
+    out = re.sub(r"\[?truncated for brevity\]?", "", out, flags=re.I)
+    return re.sub(r"[ \t]+\n", "\n", out).strip() if out != text else text
 
 
 def _ndjson(event: dict) -> bytes:
@@ -155,9 +169,16 @@ class Agent:
             parsed = _text_tool_call(content)
             if parsed:
                 return "", parsed
+            content = _strip_links(content)
             await self.emit({"type": "token", "text": content})
         elif streaming and calls:
             await self.emit({"type": "reset"})
+        elif streaming:
+            clean = _strip_links(content)
+            if clean != content:  # replace the streamed text with the cleaned answer
+                content = clean
+                await self.emit({"type": "reset"})
+                await self.emit({"type": "token", "text": content})
         return content, calls
 
     async def run(self, question: str, history: list[dict], area: tuple[dict, object] | None = None):
@@ -193,6 +214,7 @@ class Agent:
             messages.append({"role": "user", "content": question})
 
             tools = tool_specs(has_area=area is not None)
+            done_calls: dict[tuple[str, str], dict] = {}
             async with httpx.AsyncClient(timeout=httpx.Timeout(settings.OLLAMA_TIMEOUT, connect=10)) as client:
                 for round_no in range(MAX_TOOL_ROUNDS + 1):
                     await self.emit({"type": "status", "text": "Thinking…" if round_no == 0 else "Writing the answer…"})
@@ -209,6 +231,12 @@ class Agent:
                                 args = json.loads(args)
                             except json.JSONDecodeError:
                                 args = {}
+                        signature = (name, json.dumps(args, sort_keys=True, default=str))
+                        if signature in done_calls:
+                            # The model repeated an identical call: reuse the result instead of making it again.
+                            messages.append({"role": "tool", "tool_name": name, "content": json.dumps(
+                                {"already_done": True, "result": done_calls[signature]}, ensure_ascii=False, default=str)[:6000]})
+                            continue
                         await self.emit({"type": "tool", "name": name, "args": args})
                         await self.emit({"type": "status", "text": f"Running {name.replace('_', ' ')}…"})
                         try:
@@ -216,6 +244,7 @@ class Agent:
                         except Exception as e:
                             logger.exception("Assistant tool %s failed", name)
                             result, visuals = {"error": f"{type(e).__name__}: {e}"}, []
+                        done_calls[signature] = result
                         for v in visuals:
                             await self.emit({"type": "visual", "visual": v})
                             if v.get("kind") in ("map", "chart"):

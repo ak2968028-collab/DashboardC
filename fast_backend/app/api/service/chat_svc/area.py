@@ -75,7 +75,7 @@ def save_upload(filename: str, data: bytes) -> dict:
     district = shapely.union_all(list(factors._village_shapes().values()))
     meta = {
         "id": uuid.uuid4().hex[:12],
-        "name": Path(filename).stem[:80],
+        "name": Path(filename).stem.replace("_", " ").strip()[:80] or "area",
         "features": int(len(gdf)),
         "geometry_types": kinds,
         "buffered_m": BUFFER_M if not others.empty else None,

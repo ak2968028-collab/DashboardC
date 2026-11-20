@@ -66,11 +66,13 @@ export interface TableVisual {
 /** An image or video file the assistant generated (saved in media/temp on the server). */
 export interface MediaVisual {
   kind: "media";
-  media: "image" | "video";
+  media: "image" | "video" | "file";
   title: string;
   url: string;
   gif?: string | null;
   mp4?: string | null;
+  /** Each video frame saved as a PNG. */
+  frames?: { title: string; url: string }[];
 }
 
 export type Visual = MapVisual | ChartVisual | TableVisual | MediaVisual;

@@ -89,6 +89,16 @@ def _metric(name: str | None) -> str:
     return ALIASES.get(close[0], close[0]) if close else "total_emissions"
 
 
+def _raster_name(value, catalog: dict) -> str | None:
+    """Catalog key for a raster name the model gave ("emission_total", "total", "varanasi_raster:population", ...)."""
+    key = str(value or "").lower().split(":")[-1].strip().replace(" ", "_")
+    if key in catalog:
+        return key
+    if f"emission_{key}" in catalog:
+        return f"emission_{key}"
+    return (difflib.get_close_matches(key, list(catalog), n=1, cutoff=0.4) or [None])[0]
+
+
 def _as_list(value) -> list[str]:
     if value is None:
         return []
@@ -336,9 +346,7 @@ class Toolbox:
         raster_vis = None
         if raster:
             catalog = raster_catalog()
-            rkey = str(raster).lower().split(":")[-1]
-            rkey = rkey if rkey in catalog else f"emission_{rkey}" if f"emission_{rkey}" in catalog else \
-                (difflib.get_close_matches(rkey, list(catalog), n=1, cutoff=0.4) or [None])[0]
+            rkey = _raster_name(raster, catalog)
             if rkey:
                 info = catalog[rkey]
                 raster_vis = {"name": rkey, **info, "clip": areas.clip_wkt(geom)}
@@ -406,10 +414,100 @@ class Toolbox:
         # No URLs for the model: it would turn them into made-up links; the chat shows the player and download links.
         return ({"video_created": True, "format": "MP4 + animated GIF" if out["mp4"] else "animated GIF",
                  "frames": out["frames"], "frame_order": list(ANIMATION_SOURCES), "scope": scope,
-                 "note": "The video is already shown in the chat with Open / Download links. Do not write any URL or "
-                         "markdown link; just describe what the video shows."},
+                 "frame_png_images_saved": len(out["frame_files"]),
+                 "note": "The video is already shown in the chat with Open / Download links, and every frame (one per "
+                         "source raster) is saved as a PNG image linked under it, so no other tool is needed for raster "
+                         "PNGs. Do not write any URL or markdown link; just describe what the video shows."},
                 [{"kind": "media", "media": "video", "title": title, "url": out["mp4"] or out["gif"],
-                  "gif": out["gif"], "mp4": out["mp4"]}])
+                  "gif": out["gif"], "mp4": out["mp4"], "frames": out["frame_files"]}])
+
+    async def make_report(self, metric="total_emissions", raster="emission_total", **_):
+        """PDF report (saved to media/temp) for the uploaded / drawn area, or the whole district: key figures, a
+        thematic map, a raster map, charts and a village table. Its two maps are also saved as PNG images."""
+        from datetime import date
+
+        from app.api.service.chat_svc import media
+
+        key = _metric(metric)
+        col, label, unit, _ramp = METRICS[key]
+        catalog = raster_catalog()
+        rkey = _raster_name(raster, catalog) or "emission_total"
+        rtitle = catalog[rkey]["title"]
+
+        if self.area:
+            meta = self.area[0]
+            result, vis = await self.analyze_area(metric=key, raster=rkey)
+            if "error" in result:
+                return result, []
+            est = result.get("estimated_inside") or {}
+            scope = meta["name"]
+            subtitle = (f"Area '{meta['name']}': {meta['area_ha']:,.0f} ha, {result['villages_overlapping']} overlapping "
+                        f"villages ({result['villages_fully_inside']} fully inside). Generated {date.today():%d %b %Y}.")
+            stats = [("Area", f"{meta['area_ha']:,.0f} ha"), ("Villages overlapping", str(result["villages_overlapping"])),
+                     ("Estimated population", f"{est.get('population', 0):,}"),
+                     ("Estimated emissions", f"{est.get('total_co2e_t_yr') or 0:,.1f} t CO2e/yr"),
+                     ("Per capita", f"{est.get('per_capita_co2e_kg_yr') or 0:,.1f} kg CO2e/person/yr")]
+            stats += [(f"  {k}", f"{v:,.1f} t CO2e/yr") for k, v in (est.get("by_source_t_co2e_yr") or {}).items()]
+            raster_total = (result.get("clipped_raster") or {}).get("raster_total_inside_area (t CO2e/yr)")
+            if raster_total is not None:
+                stats.append((f"{rtitle} - total inside area", f"{raster_total:,.1f} t CO2e/yr"))
+            base = vis[0]
+            thematic = {**base, "raster": None}
+            raster_map = {**base, "values": {}, "highlight": []}
+            donut = next((v for v in vis if v["kind"] == "chart"), None)
+            table_vis = next((v for v in vis if v["kind"] == "table"), None)
+            rows = sorted(table_vis["rows"] if table_vis else [], key=lambda r: -(r.get("value") or 0))[:25]
+            table = (["Village", "Block", "% inside", f"{label} ({unit})"],
+                     [[r["name"], r["block"], f"{r['share']}%", f"{r['value'] or 0:,.1f}"] for r in rows])
+            top10 = [(r["name"], r["value"] or 0) for r in rows[:10]]
+            notes = ["Area figures scale each village's survey totals by the share of its boundary inside the area, "
+                     "assuming activity is spread evenly over the village."]
+        else:
+            overview, ov_vis = await self.district_overview()
+            t = overview["totals"]
+            scope = "Varanasi district"
+            subtitle = f"All {t.get('total_villages', 0):,.0f} surveyed villages. Generated {date.today():%d %b %Y}."
+            stats = [("Villages", f"{t.get('total_villages', 0):,.0f}"), ("Population", f"{t.get('total_population', 0):,.0f}"),
+                     ("Total emissions", f"{t.get('total_co2e_t_yr', 0):,.1f} t CO2e/yr"),
+                     ("Mean per capita", f"{t.get('mean_per_capita_co2e_kg_yr', 0):,.1f} kg CO2e/person/yr")]
+            stats += [(f"  {x['sector']}", f"{x['t_co2e_yr']:,.1f} t CO2e/yr") for x in overview["sectors"]]
+            villages = await self.villages()
+            thematic = self._map(key, villages, f"{label} ({unit}) - Varanasi district")
+            raster_map = {"kind": "map", "values": {}, "highlight": [], "focus": [], "area": None,
+                          "raster": {"name": rkey, **catalog[rkey]}}
+            donut = next((v for v in ov_vis if v.get("chart") == "donut"), None)
+            ranked = sorted(villages, key=lambda v: -float(v.get(col) or 0))[:25]
+            table = (["Village", "Block", f"{label} ({unit})", "Population"],
+                     [[v["village_name"], v["block_name"], f"{float(v.get(col) or 0):,.1f}", f"{v.get('total_residents') or 0:,}"]
+                      for v in ranked])
+            top10 = [(v["village_name"], float(v.get(col) or 0)) for v in ranked[:10]]
+            notes = []
+        bar = {"kind": "chart", "chart": "bar", "title": f"Top 10 villages - {label} ({unit})", "category": "name",
+               "series": [{"key": "value"}], "data": [{"name": n, "value": v} for n, v in top10]}
+        notes += ["Emissions follow the IPCC 2006 Tier-1 method with the dashboard's emission factors (Settings / "
+                  "Methodology page), from the village baseline survey.",
+                  f"{rtitle}: village emissions spread over ~90 m cells by land cover (t CO2e/ha/yr).",
+                  "Generated by the AI assistant of the Varanasi Village Environment & Carbon Dashboard (IIT BHU)."]
+
+        def build():
+            thematic_png = media.render_map(thematic, f"{label} ({unit}) - {scope}")
+            raster_png = media.render_map(raster_map, f"{rtitle} - {scope}")
+            figures = [(f"Thematic map: {label}", thematic_png), (f"Raster map: {rtitle}", raster_png)]
+            if donut and donut.get("data"):
+                figures.append(("Emissions by source", media.render_chart(donut)))
+            if top10:
+                figures.append((bar["title"], media.render_chart(bar)))
+            pdf = media.report_pdf(f"Carbon emission report - {scope}", subtitle, stats, figures, table, notes)
+            return media.save(pdf, "pdf"), media.save(thematic_png, "png"), media.save(raster_png, "png"), len(figures)
+
+        pdf_url, thematic_url, raster_url, n_fig = await run_in_threadpool(build)
+        return ({"report_created": True, "scope": scope, "contents": ["key figures", f"thematic map of {label}",
+                 f"raster map of {rtitle}", "emissions by source chart", "top 10 villages chart", "village table"],
+                 "note": "The PDF and the two map images are already shown in the chat with Open / Download links. "
+                         "Do not write any URL or markdown link."},
+                [{"kind": "media", "media": "file", "title": f"PDF report - {scope}", "url": pdf_url},
+                 {"kind": "media", "media": "image", "title": f"Image: {label} ({unit}) - {scope}", "url": thematic_url},
+                 {"kind": "media", "media": "image", "title": f"Image: {rtitle} - {scope}", "url": raster_url}])
 
     async def search_knowledge(self, query="", **_):
         hits = await knowledge_base.search(self.db, str(query), k=4)
@@ -476,6 +574,11 @@ def tool_specs(has_area: bool = False) -> list[dict]:
              "Search the methodology, emission factors, formulas, data sources, mitigation options and project blog. "
              "Use for 'how is ... calculated', 'what is the emission factor of ...', 'how to reduce ...'.",
              {"query": {"type": "string"}}, ["query"]),
+        spec("make_report",
+             "Create a downloadable PDF report (with key figures, a thematic map, a raster map, charts and a village "
+             "table) for the uploaded/drawn area if there is one, else the whole district. Also saves the maps as PNG.",
+             {"metric": {**metric, "description": "Indicator for the thematic map and rankings (default total_emissions)"},
+              "raster": {"type": "string", "enum": list(rasters), "description": "Raster for the raster map (default emission_total)"}}),
         spec("make_animation",
              "Make a video / animation (saved as a file with a download link) that cycles through the emission sources: "
              "kind 'emission_rasters' (one emission density raster per source) or 'thematic_sectors' (villages coloured "
@@ -494,4 +597,4 @@ def tool_specs(has_area: bool = False) -> list[dict]:
 
 
 TOOL_NAMES = ["get_village_profile", "find_villages", "rank_villages", "map_metric", "district_overview",
-              "show_raster", "search_knowledge", "analyze_area", "make_animation"]
+              "show_raster", "search_knowledge", "analyze_area", "make_animation", "make_report"]
