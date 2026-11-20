@@ -10,7 +10,12 @@ from app.api.service.import_svc.excel_import import parse_village_row  # noqa: E
 
 def read_survey(survey_file):
     """Validated survey rows: (village core, {table name: record}) per village (same rules as the API import)."""
-    df = pd.read_csv(survey_file, dtype={"village_code": str})
+    # skipinitialspace + strip: tolerate a CSV saved with aligned (space-padded) columns, e.g. by an editor's
+    # "align columns" feature: " village_name   " -> "village_name", "  645608" -> "645608".
+    df = pd.read_csv(survey_file, dtype=str, skipinitialspace=True, keep_default_na=False)
+    df.columns = df.columns.str.strip()
+    df = df.apply(lambda col: col.str.strip())
+    df = df.replace("", None)
     parsed = []
     for _, row in df.iterrows():
         village, records, _ = parse_village_row(row)

@@ -27,10 +27,15 @@ _POSTGIS_TABLES = frozenset({
     'place', 'state', 'tabblock', 'tabblock20', 'tract', 'zcta5',
 })
 _EXCLUDED_SCHEMAS = frozenset({'tiger', 'tiger_data', 'topology'})
+# Tables loaded by scripts, not defined as models (media/scripts/boundaries/india_layers.py): never drop them.
+_SCRIPT_TABLE_PREFIXES = ('india_',)
 
 
 def include_object(object, name, type_, reflected, compare_to):
-    if type_ == "table" and (getattr(object, 'schema', None) in _EXCLUDED_SCHEMAS or name in _POSTGIS_TABLES):
+    if type_ == "table" and (getattr(object, 'schema', None) in _EXCLUDED_SCHEMAS or name in _POSTGIS_TABLES
+                             or name.startswith(_SCRIPT_TABLE_PREFIXES)):
+        return False
+    if type_ == "index" and name.startswith(_SCRIPT_TABLE_PREFIXES):
         return False
     return alembic_helpers.include_object(object, name, type_, reflected, compare_to)
 

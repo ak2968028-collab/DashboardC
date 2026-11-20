@@ -313,8 +313,8 @@ export default function OverviewPage() {
               <Info size={14} /> Method
               <span role="tooltip">
                 Emissions follow IPCC 2006 Tier-1 factors applied to surveyed activity data.
-                {colorBy !== "dominant" && " Levels split all district villages into thirds."} Village boundaries come from cadastral
-                (khasra) maps where available and census boundaries elsewhere.
+                {colorBy !== "dominant" && " Levels split all district villages into thirds."} Village boundaries are the Census 2011
+                (Survey of India) village polygons.
               </span>
             </span>
           </div>

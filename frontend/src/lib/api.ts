@@ -97,8 +97,6 @@ const GEO_LAYERS = {
   blocks: { typeName: "block_boundaries" },
   // Census village boundaries, with the names from the village table.
   villages: { typeName: "villages_carbon", properties: "village_code,village_name,block_name,subdistrict,geom" },
-  // Village boundaries dissolved from the khasra parcels.
-  villages_cadastral: { typeName: "villages_cadastral" },
 } as const;
 
 export const geoJsonUrl = (layer: keyof typeof GEO_LAYERS) => {

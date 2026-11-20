@@ -19,14 +19,17 @@ LAYERS = {
     'village_boundaries': ('Varanasi Village Boundaries', None),
     'block_boundaries': ('Varanasi Block Boundaries', 'varanasi_block_outline'),
     'district_boundary': ('Varanasi District Boundary', 'varanasi_district_outline'),
+    # All-India layers loaded by media/scripts/boundaries/india_layers.py
+    'india_villages': ('India Villages (Census 2011, Survey of India) - zoom in', 'india_villages'),
+    'india_rivers': ('India Rivers', 'india_rivers'),
+    'india_catchments': ('India River Catchments', 'india_catchments'),
 }
 
 # Files the API also reads straight from disk (3D view, raster statistics), published so the website's maps load
 # them from GeoServer. Each becomes its own GeoPackage datastore in WORKSPACE.
 # layer: (source file, layer name inside it or None for a GeoJSON file, title, style in media/geoserver)
+# (Cadastral village boundaries are no longer published: census boundaries are used everywhere.)
 FILE_LAYERS = {
-    'villages_cadastral': (settings.CADASTRAL_BOUNDARIES_PATH, None,
-                           'Varanasi Village Boundaries (dissolved from khasra parcels)', 'villages_cadastral'),
     'khasra_parcels': (settings.PARCELS_GPKG_PATH, 'varanasi', 'Varanasi Khasra (Cadastral) Parcels', 'khasra_parcels'),
 }
 

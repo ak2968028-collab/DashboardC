@@ -27,18 +27,10 @@ export const featureCode = (f: Feature) => String(f.properties?.village_code ?? 
 
 export const bandOf = (bands: RankBand[], rank: number) => bands.find((b) => rank >= b.from && rank <= b.to);
 
-/** Village boundaries: dissolved khasra parcels where available, census boundaries for the rest. */
+/** Village boundaries: the census (Survey of India) polygons. */
 export function useBoundaries(): FeatureCollection | null {
   const { data: census } = useGeoJson("villages");
-  const { data: cadastral } = useGeoJson("villages_cadastral");
-  return useMemo(() => {
-    if (!census) return null;
-    const own = new Map((cadastral?.features ?? []).map((f) => [featureCode(f), f]));
-    return {
-      type: "FeatureCollection",
-      features: census.features.map((f) => own.get(featureCode(f)) ?? f),
-    };
-  }, [census, cadastral]);
+  return census ?? null;
 }
 
 /** Shows the whole pool on load and when the pool changes; flies to a village only once the viewer picks one. */
@@ -46,7 +38,7 @@ function Fit({ geo, selected }: { geo: FeatureCollection | null; selected: Featu
   const map = useMap();
   const poolKey = geo?.features.length;
   const code = selected ? featureCode(selected) : null;
-  // Village selected when the page opened (by code: the cadastral shape replaces the census one once it loads).
+  // Village selected when the page opened.
   const firstCode = useRef<string | null | undefined>(undefined);
   useEffect(() => {
     if (geo?.features.length) map.fitBounds(geoJSON(geo).getBounds(), { padding: [12, 12] });
@@ -84,9 +76,8 @@ export default function RankingMap({ ranks, bands, metricLabel, decimals, select
 
   const onEach = (f: Feature, layer: Layer) => {
     const r = ranks.get(featureCode(f));
-    const boundary = f.properties?.source === "cadastral" ? "cadastral" : "census";
     layer.bindTooltip(
-      r ? `<b>#${r.rank} ${r.name}</b><br>${r.block}<br>${metricLabel}: <b>${fmt(r.value, decimals)}</b><br><small>${boundary} boundary</small>`
+      r ? `<b>#${r.rank} ${r.name}</b><br>${r.block}<br>${metricLabel}: <b>${fmt(r.value, decimals)}</b>`
         : `${f.properties?.village_name ?? "Village"}<br>No data`,
       { sticky: true },
     );

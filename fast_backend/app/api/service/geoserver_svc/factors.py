@@ -295,20 +295,12 @@ def _read_boundaries(path) -> dict[str, object]:
 
 @lru_cache(maxsize=1)
 def _village_shapes() -> dict[str, object]:
-    """Village boundaries: dissolved from the khasra parcels where available, else the census boundary.
-    Census-only villages come first so that, where the two overlap, later (cadastral) shapes win."""
-    cadastral = _read_boundaries(settings.CADASTRAL_BOUNDARIES_PATH)
-    census = _read_boundaries(settings.CENSUS_BOUNDARIES_PATH)
-    return {**{c: g for c, g in census.items() if c not in cadastral}, **cadastral}
+    """Census village boundaries (the cadastral boundaries dissolved from khasra parcels are no longer used)."""
+    return _read_boundaries(settings.CENSUS_BOUNDARIES_PATH)
 
 
 def boundary_source(village_code: str) -> str:
-    return 'cadastral' if village_code in _read_cadastral_codes() else 'census'
-
-
-@lru_cache(maxsize=1)
-def _read_cadastral_codes() -> frozenset[str]:
-    return frozenset(_read_boundaries(settings.CADASTRAL_BOUNDARIES_PATH))
+    return 'census'
 
 
 @lru_cache(maxsize=512)

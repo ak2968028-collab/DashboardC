@@ -54,6 +54,8 @@ if __name__ == "__main__":
         "boundaries/district_boundary.py",
         "boundaries/block_boundaries.py",
         "boundaries/village_boundaries.py",
+        # All-India census villages, rivers and catchments (several minutes the first time)
+        "boundaries/india_layers.py",
     ]
 
     run_scripts_in_sequence(scripts_to_run)

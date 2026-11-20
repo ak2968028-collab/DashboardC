@@ -6,7 +6,8 @@
 # 1. deletes the existing migration files and autogenerates a fresh one from the models
 # 2. applies it (alembic upgrade head) and creates the database views
 # 3. pushes data into empty tables (media/run_all.py)
-# 4. publishes vector layers (PostGIS, khasra parcels, cadastral boundaries), rasters and the DEM to GeoServer
+# 4. publishes vector layers (PostGIS incl. the all-India census villages, rivers and catchments; khasra parcels),
+#    rasters and the DEM to GeoServer
 set -e
 
 cd "$(dirname "$0")/.."   # project root (docker-compose.yml)
@@ -45,8 +46,7 @@ echo "==> Pushing data into the database"
 $BACKEND python media/run_all.py
 
 echo "==> Publishing layers to GeoServer"
-# Cadastral boundaries first: geoserver_publish uploads the GeoJSON it writes.
-$BACKEND python -m script.cadastral_boundaries
+# Census boundaries are used everywhere (cadastral boundaries are no longer generated or published).
 $BACKEND python -m script.geoserver_publish
 $BACKEND python -m script.geoserver_raster
 $BACKEND python -m script.emission_rasters

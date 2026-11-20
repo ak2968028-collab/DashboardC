@@ -67,8 +67,8 @@ METHODOLOGY = [
      "Basic Report (free PDF) and Advanced Report (login) for Pradhans. Settings / Methodology: emission factors."),
     ("Data sources",
      "Village list, codes and population: Census of India 2011. Activity data: field baseline survey entered by village "
-     "supervisors and approved by admins, or imported from Excel. Boundaries: census village boundaries, replaced by "
-     "boundaries dissolved from cadastral khasra parcels where available. Rasters: LULC, population, groundwater "
+     "supervisors and approved by admins, or imported from Excel. Boundaries: Census 2011 village polygons (Survey "
+     "of India), available for all of India on GeoServer, with Indian rivers and river catchments. Rasters: LULC, population, groundwater "
      "potential and recharge suitability layers, the DEM and the emission rasters, all served by GeoServer."),
 ]
 
