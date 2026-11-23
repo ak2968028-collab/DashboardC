@@ -17,7 +17,9 @@ DB_NAME = os.getenv("POSTGRES_DB", "varanasi")
 
 # The source data: loaders only read from media/ and write to the database.
 MEDIA_DIR = os.path.join(BACKEND_DIR, "media")
-SURVEY_FILE = os.path.join(MEDIA_DIR, "data", "raw", "village_data.csv")
+RAW_DATA_DIR = os.path.join(MEDIA_DIR, "data", "raw")
+VILLAGE_FILE = os.path.join(RAW_DATA_DIR, "village_locations.csv")
+SURVEY_FILE = os.path.join(RAW_DATA_DIR, "village_survey.csv")
 
 # Create the database engine
 engine = create_engine(f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}")

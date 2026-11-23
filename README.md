@@ -68,7 +68,7 @@ mtech-thesis/
 │   │   │   ├── masters/           # emission_factors.py
 │   │   │   ├── locations/         # Census 2011 states, districts, sub-districts, villages
 │   │   │   ├── users/             # users.py (media/user/users.csv)
-│   │   │   ├── survey/            # villages.py, demographics.py, land_use.py, ... (village_data.csv)
+│   │   │   ├── survey/            # villages.py, demographics.py, land_use.py, ... (split village CSVs)
 │   │   │   ├── emissions/         # village_emissions.py (IPCC Tier-1 model)
 │   │   │   └── boundaries/        # district / block / village polygons, all-India census villages -> PostGIS
 │   │   ├── geoserver_publish.py   # PostGIS layers, khasra parcels (GeoPackage) and the India state base map
@@ -77,7 +77,7 @@ mtech-thesis/
 │   │   └── emission_rasters.py    # Builds the emission rasters from the database and publishes them
 │   ├── media/                     # Source data only (loaded by script/); plus the API's own files: temp/
 │   │                              # (assistant images & videos), chat_areas/ (uploaded areas), user/users.csv
-│   │   ├── data/raw/              # village_data.csv (1,334 villages, survey)
+│   │   ├── data/raw/              # village_locations.csv + village_survey.csv (1,334 villages, keyed by village_code)
 │   │   ├── data/processed/        # District, block & village GeoJSON
 │   │   ├── config/                # emission_factors.csv (IPCC & CEA)
 │   │   ├── geoserver/             # SLD styles for the vector layers and the DEM
@@ -137,7 +137,7 @@ This starts four services:
    tables and data are kept), then autogenerates a fresh migration from the models (`alembic revision --autogenerate`),
 2. applies it (`alembic upgrade head`) and creates the views in `database/views.sql`,
 3. loads the data with `python -m script.load_database` — each loader in `script/database/` fills its table from a
-   file in `media/` (`data/raw/village_data.csv`, `config/emission_factors.csv`, the boundary GeoJSON, the India
+   file in `media/` (`data/raw/village_locations.csv` + `village_survey.csv`, `config/emission_factors.csv`, the boundary GeoJSON, the India
    village shapefile, ...); tables that already have data are skipped,
 4. publishes the data to GeoServer: the vector layers, khasra parcels and the India state base map
    (`script.geoserver_publish`, workspace `varanasi`), the rasters and the DEM (`script.geoserver_raster`,

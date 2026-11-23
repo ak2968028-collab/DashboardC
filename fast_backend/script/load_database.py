@@ -39,7 +39,7 @@ if __name__ == "__main__":
         "locations/villages.py",
         # Login accounts (media/user/users.csv)
         "users/users.py",
-        # Survey data (data/raw/village_data.csv)
+        # Split village/location and survey inputs (data/raw/village_locations.csv + village_survey.csv)
         "survey/villages.py",
         "survey/demographics.py",
         "survey/land_use.py",

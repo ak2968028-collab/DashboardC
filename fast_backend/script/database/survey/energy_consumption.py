@@ -2,7 +2,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from db_connection import SURVEY_FILE, engine, table_has_rows  # noqa: E402
+from db_connection import SURVEY_FILE, VILLAGE_FILE, engine, table_has_rows  # noqa: E402
 from survey_csv import survey_table  # noqa: E402
 
 # Table name and survey file
@@ -15,7 +15,7 @@ def load_survey_to_db():
             print(f"{TABLE_NAME} already has data, skipping.")
             return
         # Read the survey CSV columns for this table (validated, linked to villages.id)
-        df = survey_table(SURVEY_FILE, TABLE_NAME)
+        df = survey_table(VILLAGE_FILE, SURVEY_FILE, TABLE_NAME)
 
         # Store data in the database
         df.to_sql(TABLE_NAME, engine, if_exists='append', index=False)

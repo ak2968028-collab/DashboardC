@@ -1,4 +1,5 @@
-# Village master table and its one-to-one survey parameter tables (Census 2011 & field survey).
+# Village master table and one-to-one survey topic tables. Raw village/location and survey data are kept in
+# separate CSVs and joined on village_code before populating these models.
 from typing import Optional
 
 from sqlalchemy import Float, ForeignKey, Integer, String, text
@@ -17,6 +18,7 @@ def _count():
 
 
 class Village(Base):
+    """Village identity, administrative location, coordinates, and survey status."""
     __tablename__ = "villages"
 
     village_code: Mapped[str] = mapped_column(String, unique=True, nullable=False)
@@ -45,6 +47,7 @@ class VillageRecord:
 
 
 class Demographics(VillageRecord, Base):
+    """Population and household fields from the village survey dataset."""
     __tablename__ = "demographics"
 
     total_residents: Mapped[int] = _count()
@@ -56,6 +59,7 @@ class Demographics(VillageRecord, Base):
 
 
 class LandUse(VillageRecord, Base):
+    """Village area split by land-use category."""
     __tablename__ = "land_use"
 
     total_area_ha: Mapped[float] = _amount()
@@ -71,6 +75,7 @@ class LandUse(VillageRecord, Base):
 
 
 class WaterResources(VillageRecord, Base):
+    """Village surface water and irrigation area measurements."""
     __tablename__ = "water_resources"
 
     pond_area_ha: Mapped[float] = _amount()

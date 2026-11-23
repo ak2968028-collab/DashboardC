@@ -4,7 +4,7 @@ import sys
 import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from db_connection import SURVEY_FILE, engine, table_has_rows  # noqa: E402
+from db_connection import SURVEY_FILE, VILLAGE_FILE, engine, table_has_rows  # noqa: E402
 from survey_csv import read_survey  # noqa: E402
 
 # Table name and survey file
@@ -17,11 +17,11 @@ def load_survey_to_db():
             print(f"{TABLE_NAME} already has data, skipping.")
             return
         # Read the survey CSV (validated)
-        df = pd.DataFrame([village for village, _ in read_survey(SURVEY_FILE)])
+        df = pd.DataFrame([village for village, _ in read_survey(VILLAGE_FILE, SURVEY_FILE)])
 
         # Store data in the database
         df.to_sql(TABLE_NAME, engine, if_exists='append', index=False)
-        print(f"{len(df)} villages from {SURVEY_FILE} have been successfully inserted into {TABLE_NAME}.")
+        print(f"{len(df)} villages from {VILLAGE_FILE} and {SURVEY_FILE} inserted into {TABLE_NAME}.")
 
     except Exception as e:
         print("An error occurred:", e)

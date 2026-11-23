@@ -25,6 +25,9 @@ def parse_village_row(row) -> tuple[dict, dict, str | None]:
         'village_name': vname,
         'block_name': str(row['block_name']).strip(),
         'subdistrict': str(row.get('subdistrict', 'Varanasi')).strip(),
+        'district': str(row.get('district', 'Varanasi')).strip(),
+        'state': str(row.get('state', 'Uttar Pradesh')).strip(),
+        'data_status': str(row.get('data_status', 'BASELINE_SURVEY_DATA')).strip(),
         'latitude': float(row.get('latitude', 25.3)),
         'longitude': float(row.get('longitude', 82.9)),
     }
