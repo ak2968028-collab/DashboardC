@@ -1689,3 +1689,10 @@ details.chat-visual .table-wrap { max-height: 280px; overflow: auto; margin-top:
 .chat-media-frames { font-size: 12px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 10px; }
 .chat-media-frames a { color: #3730a3; font-weight: 600; text-decoration: none; }
 .chat-media-frames a:hover { text-decoration: underline; }
+
+/* India state names (IndiaStatesLayer), drawn on every map */
+.india-state-label { pointer-events: none; }
+.india-state-label span {
+  position: absolute; transform: translate(-50%, -50%); white-space: nowrap; font: 700 10.5px/1.1 system-ui, sans-serif;
+  letter-spacing: 0.03em; color: #4e342e; text-shadow: 0 0 2px #fff, 0 0 3px #fff, 0 0 4px #fff;
+}

@@ -1,4 +1,5 @@
 from fastapi import APIRouter, File, Form, Query, UploadFile, status
+from sqlalchemy import text
 from fastapi.concurrency import run_in_threadpool
 
 from app.api.schema.geo_schema import Emission_raster_report, Raster_factor, Raster_layer, Village_factor_stats
@@ -84,3 +85,15 @@ async def get_village_factor_stats(layer: str = Query(..., description="workspac
     """Raster values inside one village boundary: min / max / mean and the share of each legend class."""
     return await run_in_threadpool(factors.village_stats, layer, village)
 
+
+
+@router.get("/india-states/labels")
+async def get_india_state_labels(db: db_read):
+    """One label point inside each India state (india_states), for the state names drawn on every map."""
+    try:
+        rows = await db.execute(text(
+            "SELECT state_name, ST_X(p) AS lon, ST_Y(p) AS lat "
+            "FROM (SELECT state_name, ST_PointOnSurface(ST_MakeValid(geom)) AS p FROM india_states) s ORDER BY state_name"))
+    except Exception:  # india_states not loaded yet
+        return []
+    return [{"name": r.state_name, "lon": r.lon, "lat": r.lat} for r in rows]

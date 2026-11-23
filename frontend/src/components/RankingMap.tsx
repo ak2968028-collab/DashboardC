@@ -7,6 +7,7 @@ import { geoJSON, type Layer, type PathOptions } from "leaflet";
 import { GeoJSON, MapContainer, ScaleControl, TileLayer, useMap } from "react-leaflet";
 import { useGeoJson } from "@/lib/api";
 import { fmt } from "@/lib/format";
+import IndiaStatesLayer from "./IndiaStatesLayer";
 
 export interface RankBand { from: number; to: number; color: string; label: string }
 
@@ -87,6 +88,7 @@ export default function RankingMap({ ranks, bands, metricLabel, decimals, select
   return (
     <div className="map-wrap rank-map-wrap">
       <MapContainer center={[25.37, 82.93]} zoom={10} preferCanvas className="map rank-map">
+        <IndiaStatesLayer />
         <TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' />
         {pool && (

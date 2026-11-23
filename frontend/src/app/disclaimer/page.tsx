@@ -18,7 +18,7 @@ export default function DisclaimerPage() {
       <h2>Data sources</h2>
       <ul>
         <li>Village survey and Excel imports, and data entered by supervisors after approval.</li>
-        <li>Census 2011 village boundaries (Survey of India), with Indian rivers and river catchments.</li>
+        <li>Census 2011 village boundaries (Survey of India).</li>
         <li>A land-use / land-cover (LULC) raster, used to place emissions within villages.</li>
         <li>Base maps from OpenStreetMap and Esri.</li>
       </ul>

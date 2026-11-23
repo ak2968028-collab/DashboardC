@@ -11,6 +11,7 @@ import { paint, scenarioRaster } from "@/lib/emissionGrid";
 import { fmt, num } from "@/lib/format";
 import type { EmissionGrid, Village } from "@/lib/types";
 import { USE_FILLS } from "./CarbonLabScene";
+import IndiaStatesLayer from "./IndiaStatesLayer";
 
 export type SwipeLayer = "total" | "lpg" | "firewood" | "electricity" | "transport" | "waste" | "livestock" | "landcover" | "none";
 export type Basemap = "streets" | "satellite";
@@ -148,11 +149,13 @@ export default function SwipeMap({ left, right, layer, basemap }: { left: Villag
   return (
     <div className="swipe-wrap" ref={wrap}>
       <MapContainer ref={bind("a")} center={[25.32, 82.97]} zoom={13} className="swipe-map" zoomControl={false} attributionControl={false}>
+        <IndiaStatesLayer />
         {a && <Layers side={a} layer={layer} basemap={basemap} />}
         <ScaleControl position="bottomleft" imperial={false} />
       </MapContainer>
       <div className="swipe-top" style={{ clipPath: `inset(0 0 0 ${split}%)` }}>
         <MapContainer ref={bind("b")} center={[25.32, 82.97]} zoom={13} className="swipe-map" zoomControl>
+          <IndiaStatesLayer />
           {b && <Layers side={b} layer={layer} basemap={basemap} />}
         </MapContainer>
       </div>

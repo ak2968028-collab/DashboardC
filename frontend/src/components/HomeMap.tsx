@@ -6,6 +6,7 @@ import type { Feature, FeatureCollection } from "geojson";
 import { geoJSON, type Layer, type PathOptions } from "leaflet";
 import { GeoJSON, MapContainer, ScaleControl, TileLayer, useMap } from "react-leaflet";
 import { featureCode, useBoundaries } from "./RankingMap";
+import IndiaStatesLayer from "./IndiaStatesLayer";
 
 export interface MapClass { key: string; label: string; color: string }
 
@@ -57,6 +58,7 @@ export default function HomeMap({ classes, legend, onSelect, picked, focus, styl
   return (
     <div className="home-map-wrap">
       <MapContainer center={[25.37, 82.93]} zoom={10} preferCanvas className="home-map">
+        <IndiaStatesLayer />
         <TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' />
         {pool && <GeoJSON key={`${styleKey}|${picked}`} data={pool} style={style} onEachFeature={onEach} />}

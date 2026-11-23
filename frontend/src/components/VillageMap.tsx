@@ -13,6 +13,7 @@ import { interpolate } from "@/lib/colors";
 import { fmt, num } from "@/lib/format";
 import type { NumericKey, RasterLayer, Village } from "@/lib/types";
 import { useDashboard } from "./DashboardContext";
+import IndiaStatesLayer from "./IndiaStatesLayer";
 
 export interface ThematicMetric {
   label: string;
@@ -133,6 +134,7 @@ export default function VillageMap({ villages, selectedCode, areaFilter, metric,
   return (
     <div className={`map-wrap ${isFullscreen ? "is-fullscreen" : ""}`} ref={containerRef}>
       <MapContainer center={DISTRICT_CENTER} zoom={10} preferCanvas className="map">
+        <IndiaStatesLayer />
         <LayersControl position="topright">
           <LayersControl.BaseLayer checked name="OpenStreetMap">
             <TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' />

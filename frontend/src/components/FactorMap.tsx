@@ -8,6 +8,7 @@ import { GeoJSON, ImageOverlay, MapContainer, Popup, ScaleControl, TileLayer, WM
 import { useGeoJson, useVillageCadastral, wmsUrl } from "@/lib/api";
 import { fmt } from "@/lib/format";
 import type { RasterFactor } from "@/lib/types";
+import IndiaStatesLayer from "./IndiaStatesLayer";
 
 export interface GridOverlay {
   /** PNG data URL of the scenario raster, one pixel per cell. */
@@ -142,6 +143,7 @@ export default function FactorMap({ villageCode, overlay, factor, opacity, parce
 
   return (
     <MapContainer center={[25.32, 82.97]} zoom={11} className="factor-map" zoomControl>
+      <IndiaStatesLayer />
       <TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' />
       {factor ? (

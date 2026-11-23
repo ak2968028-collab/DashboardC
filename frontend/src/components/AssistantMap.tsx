@@ -13,6 +13,7 @@ import type { MapVisual } from "@/lib/chat";
 import { interpolate } from "@/lib/colors";
 import { fmt } from "@/lib/format";
 import { featureCode, useBoundaries } from "./RankingMap";
+import IndiaStatesLayer from "./IndiaStatesLayer";
 
 const RAMPS: Record<string, string[]> = {
   reds: ["#ffffb2", "#fecc5c", "#fd8d3c", "#f03b20", "#bd0026"],
@@ -30,8 +31,6 @@ const INDIA_ZOOM = 5;
 // All-India GeoServer layers (media/scripts/boundaries/india_layers.py); village outlines draw from ~1:2M inwards.
 const INDIA_LAYERS = [
   { layer: "varanasi:india_villages", name: "India villages – Census 2011 (zoom in)", checked: true },
-  { layer: "varanasi:india_rivers", name: "India rivers", checked: true },
-  { layer: "varanasi:india_catchments", name: "India river catchments", checked: false },
 ];
 
 /** Zooms to the focused villages, else an uploaded area, else the dashboard villages, whenever a new visual is
@@ -183,6 +182,7 @@ export default function AssistantMap({ visual, visualKey, onDraw, clearDrawKey =
     <div className="map-wrap assistant-map-wrap">
       {/* pmIgnore={false}: with Geoman's opt-in mode the map itself must opt in to get the drawing toolbar. */}
       <MapContainer center={INDIA_CENTER} zoom={INDIA_ZOOM} preferCanvas className="map assistant-map" pmIgnore={false}>
+        <IndiaStatesLayer />
         <LayersControl position="topright">
           <LayersControl.BaseLayer checked name="OpenStreetMap">
             <TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"

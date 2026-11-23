@@ -1,5 +1,5 @@
 # Waits for GeoServer to come up, then publishes the PostGIS layers (Varanasi villages, blocks and district, and the
-# all-India census villages, rivers and catchments) and the khasra parcels (varanasi.gpkg), with their styles.
+# all-India census villages) and the khasra parcels (varanasi.gpkg), with their styles.
 # Usage (from fast_backend/): python -m script.geoserver_publish [--replace]   (--replace re-uploads the files)
 import sys
 import time

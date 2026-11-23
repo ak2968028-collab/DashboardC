@@ -19,10 +19,10 @@ LAYERS = {
     'village_boundaries': ('Varanasi Village Boundaries', None),
     'block_boundaries': ('Varanasi Block Boundaries', 'varanasi_block_outline'),
     'district_boundary': ('Varanasi District Boundary', 'varanasi_district_outline'),
-    # All-India layers loaded by media/scripts/boundaries/india_layers.py
+    # All-India census villages, loaded by media/scripts/boundaries/india_layers.py
     'india_villages': ('India Villages (Census 2011, Survey of India) - zoom in', 'india_villages'),
-    'india_rivers': ('India Rivers', 'india_rivers'),
-    'india_catchments': ('India River Catchments', 'india_catchments'),
+    # India state boundaries (media/basemap/State.shp), always shown over the base map on every dashboard map
+    'india_states': ('India State Boundaries', 'india_states'),
 }
 
 # Files the API also reads straight from disk (3D view, raster statistics), published so the website's maps load
