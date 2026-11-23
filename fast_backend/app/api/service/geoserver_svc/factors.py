@@ -4,7 +4,6 @@ Curated rasters live in the raster workspace (published by script/geoserver_rast
 dashboard are pushed to a separate temporary workspace. Both are listed straight from GeoServer, with legends parsed
 from each layer's SLD, and per-village statistics come from the raster cut out of WCS for the village's bounds."""
 import io
-import json
 import re
 import threading
 import time
@@ -18,15 +17,14 @@ from fastapi import HTTPException, status
 from PIL import Image
 
 from app.api.service.geoserver_svc.geoserver import (
-    RASTER_WORKSPACE, _ensure_workspace, _publish_style, _request, find_rasters, ows_get, raster_title, rest_get,
+    RASTER_WORKSPACE, _ensure_workspace, _publish_style, _request, ows_get, rest_get,
 )
 from app.conf.settings import settings
 
 TEMP_WORKSPACE = settings.GEOSERVER_TEMP_WORKSPACE
-EMISSION_WORKSPACE = settings.GEOSERVER_EMISSION_WORKSPACE
-WORKSPACES = (EMISSION_WORKSPACE, RASTER_WORKSPACE, TEMP_WORKSPACE)
-KINDS = {EMISSION_WORKSPACE: 'emission', RASTER_WORKSPACE: 'condition', TEMP_WORKSPACE: 'upload'}
-GROUPS = {EMISSION_WORKSPACE: 'Carbon emission', TEMP_WORKSPACE: 'Added factors'}
+WORKSPACES = (RASTER_WORKSPACE, TEMP_WORKSPACE)
+KINDS = {RASTER_WORKSPACE: 'condition', TEMP_WORKSPACE: 'upload'}
+GROUPS = {TEMP_WORKSPACE: 'Added factors'}
 CACHE_SECONDS = 60
 MAX_UPLOAD_MB = 150
 
@@ -101,7 +99,7 @@ def _keywords(cov: dict) -> dict[str, str]:
     return dict(k.split('=', 1) for k in raw if isinstance(k, str) and '=' in k)
 
 
-def _factor(workspace: str, name: str, groups: dict[str, str]) -> dict | None:
+def _factor(workspace: str, name: str) -> dict | None:
     cov = (rest_get(f"/workspaces/{workspace}/coverages/{name}.json") or {}).get('coverage')
     if not cov:
         return None
@@ -116,15 +114,15 @@ def _factor(workspace: str, name: str, groups: dict[str, str]) -> dict | None:
     meta = _keywords(cov)
     bbox = cov.get('latLonBoundingBox') or {}
     temporary = workspace == TEMP_WORKSPACE
-    title = cov.get('title') or name
     return {
         'name': name,
-        'title': raster_title(name) if title == name else title,
+        # Title and group are set on the coverage by script/geoserver_raster.py (group = its media/Rasters folder).
+        'title': cov.get('title') or name.replace('_', ' ').title(),
         'workspace': workspace,
         'layer': f"{workspace}:{name}",
         'kind': meta.get('kind') or KINDS[workspace],
         'source': meta.get('source'),
-        'group': GROUPS.get(workspace) or groups.get(name, 'Base factors').replace('_', ' ').title(),
+        'group': GROUPS.get(workspace) or meta.get('group', 'Base factors').replace('_', ' ').title(),
         'temporary': temporary,
         'description': cov.get('abstract'),
         'unit': meta.get('unit'),
@@ -137,13 +135,12 @@ def _factor(workspace: str, name: str, groups: dict[str, str]) -> dict | None:
 
 
 def _load_factors() -> list[dict]:
-    groups = {tif.stem: tif.parent.name for tif, _ in find_rasters()}
     factors = []
     for ws in WORKSPACES:
         listing = rest_get(f"/workspaces/{ws}/coverages.json") or {}
         coverages = (listing.get('coverages') or {}).get('coverage', []) if isinstance(listing, dict) else []
         for c in coverages:
-            f = _factor(ws, c['name'], groups)
+            f = _factor(ws, c['name'])
             if f:
                 factors.append(f)
     return factors
@@ -283,20 +280,18 @@ def delete_factor(name: str, username: str, is_admin: bool):
 
 # ---------- per-village statistics ----------
 
-def _read_boundaries(path) -> dict[str, object]:
-    if not path.exists():
-        return {}
-    geo = json.loads(path.read_text())
-    return {
-        str(f['properties'].get('village_code', '')).strip(): shapely.from_geojson(json.dumps(f['geometry']))
-        for f in geo['features'] if f.get('geometry')
-    }
-
-
 @lru_cache(maxsize=1)
 def _village_shapes() -> dict[str, object]:
-    """Census village boundaries (the cadastral boundaries dissolved from khasra parcels are no longer used)."""
-    return _read_boundaries(settings.CENSUS_BOUNDARIES_PATH)
+    """Census village boundaries from the village_boundaries table (filled by script/load_database.py)."""
+    from sqlalchemy import create_engine, text
+
+    engine = create_engine(settings.DATABASE_SYNC_URL)
+    try:
+        with engine.connect() as con:
+            rows = con.execute(text("SELECT village_code, ST_AsBinary(geom) FROM village_boundaries WHERE geom IS NOT NULL"))
+            return {str(code).strip(): shapely.from_wkb(bytes(wkb)) for code, wkb in rows}
+    finally:
+        engine.dispose()
 
 
 def boundary_source(village_code: str) -> str:

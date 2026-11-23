@@ -27,7 +27,7 @@ _POSTGIS_TABLES = frozenset({
     'place', 'state', 'tabblock', 'tabblock20', 'tract', 'zcta5',
 })
 _EXCLUDED_SCHEMAS = frozenset({'tiger', 'tiger_data', 'topology'})
-# Tables loaded by scripts, not defined as models (media/scripts/boundaries/india_layers.py): never drop them.
+# Tables loaded by scripts, not defined as models (script/database/boundaries/india_layers.py): never drop them.
 _SCRIPT_TABLE_PREFIXES = ('india_',)
 
 

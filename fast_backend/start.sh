@@ -5,9 +5,9 @@
 #
 # 1. deletes the existing migration files and autogenerates a fresh one from the models
 # 2. applies it (alembic upgrade head) and creates the database views
-# 3. pushes data into empty tables (media/run_all.py)
-# 4. publishes vector layers (PostGIS incl. the all-India census villages; khasra parcels),
-#    rasters and the DEM to GeoServer
+# 3. loads the source data from media/ into empty tables (script/load_database.py -> script/database/*)
+# 4. publishes media/ data to GeoServer: vector layers (script/geoserver_publish.py: PostGIS layers, khasra parcels,
+#    the India state base map), rasters and the DEM (script/geoserver_raster.py), then the emission rasters
 set -e
 
 cd "$(dirname "$0")/.."   # project root (docker-compose.yml)
@@ -43,12 +43,11 @@ $BACKEND alembic upgrade head
 eval "$PSQL" < database/views.sql
 
 echo "==> Pushing data into the database"
-$BACKEND python media/run_all.py
+$BACKEND python -m script.load_database
 
 echo "==> Publishing layers to GeoServer"
 # Census boundaries are used everywhere (cadastral boundaries are no longer generated or published).
 $BACKEND python -m script.geoserver_publish
 $BACKEND python -m script.geoserver_raster
-$BACKEND python -m script.emission_rasters
 
 echo "All tasks completed successfully."

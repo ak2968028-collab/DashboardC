@@ -1,4 +1,5 @@
-"""Village layout for the Carbon Lab 3D view, built from the cadastral (khasra) parcels in varanasi.gpkg.
+"""Village layout for the Carbon Lab 3D view, built from the cadastral (khasra) parcels (GeoServer layer
+khasra_parcels, published from media by script/geoserver_publish.py).
 
 Land use comes from the LULC raster: every parcel takes the LULC pixels whose centres fall inside it and is
 classed by the dominant cover. Houses are placed on the built-up pixels themselves, so hamlets show where they
@@ -6,10 +7,12 @@ really are; pasture goes to rangeland (else nearby cropland), the dump to bare g
 Villages outside the LULC extent fall back to an estimate: the parcels closest to the densest cluster of small
 parcels are taken as built-up until they cover the village's surveyed built-up area."""
 import json
+import re
+import urllib.parse
 from functools import lru_cache
 
+import geopandas as gpd
 import numpy as np
-import pyogrio
 import shapely
 from fastapi import HTTPException, status
 from fastapi.concurrency import run_in_threadpool
@@ -17,10 +20,10 @@ from pyproj import Transformer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.service.geoserver_svc import emission_rasters, factors
+from app.api.service.geoserver_svc.geoserver import DEM_LAYER, WORKSPACE, ows_get
 from app.api.service.village_svc import village_svc
-from app.conf.settings import settings
 
-PARCEL_LAYER = "varanasi"
+PARCEL_LAYER = "khasra_parcels"
 SIMPLIFY_M = 1.0
 NEIGHBOUR_M = 100.0     # radius for the parcel-density count that locates the settlement core (fallback)
 MAX_HOUSES = 150        # house markers drawn; each stands for several households in big villages
@@ -41,18 +44,12 @@ _TO_DEM = Transformer.from_crs(32644, 3395, always_xy=True)
 
 @lru_cache(maxsize=1)
 def _dem_data():
-    """Loads and caches UP_DEM.tif raster (Pillow/numpy) and transform parameters."""
-    path = settings.DEM_TIF_PATH
-    if not path.exists():
-        return None
+    """The DEM from GeoServer (WCS; published by script/geoserver_raster.py): (grid, x0, y0, pixel size), EPSG:3395."""
     try:
-        from PIL import Image
-        im = Image.open(path)
-        grid = np.array(im)
-        x0 = 8580661.667853888
-        y0 = 3535154.69304102
-        px_size = 1000.0
-        return grid, x0, y0, px_size
+        tif = ows_get(f"/wcs?service=WCS&version=2.0.1&request=GetCoverage&coverageId={WORKSPACE}__{DEM_LAYER}"
+                      "&format=image/tiff", timeout=120)
+        grid, _nodata, (x0, dx, y0, _dy) = factors._read_geotiff(tif)
+        return grid, x0, y0, abs(dx)
     except Exception:
         return None
 
@@ -64,8 +61,8 @@ def sample_elevation(ux: float, uy: float) -> float:
         return 80.0
     grid, x0, y0, px_size = data
     dx, dy = _TO_DEM.transform(ux, uy)
-    c_f = (dx - (x0 + 500.0)) / px_size
-    r_f = ((y0 - 500.0) - dy) / px_size
+    c_f = (dx - (x0 + px_size / 2)) / px_size
+    r_f = ((y0 - px_size / 2) - dy) / px_size
     h, w = grid.shape
     c0 = max(0, min(w - 1, int(np.floor(c_f))))
     r0 = max(0, min(h - 1, int(np.floor(r_f))))
@@ -83,10 +80,21 @@ def sample_elevation(ux: float, uy: float) -> float:
 
 @lru_cache(maxsize=32)
 def _read_parcels(village_code: str):
-    path = settings.PARCELS_GPKG_PATH
-    if not path.exists():
+    """Khasra parcels of one village from GeoServer (WFS), in UTM 44N; None when GeoServer is unreachable."""
+    if not re.fullmatch(r"\d{1,10}", str(village_code)):  # codes are digits; also keeps the filter safe
         return None
-    return pyogrio.read_dataframe(path, layer=PARCEL_LAYER, where=f"vill_code = '{village_code}'", columns=["khasra", "area_m2"])
+    q = urllib.parse.urlencode({
+        "service": "WFS", "version": "2.0.0", "request": "GetFeature", "typeNames": f"{WORKSPACE}:{PARCEL_LAYER}",
+        "outputFormat": "application/json", "srsName": "EPSG:32644", "propertyName": "khasra,area_m2,geom",
+        "CQL_FILTER": f"vill_code='{village_code}'",
+    })
+    try:
+        features = json.loads(ows_get(f"/{WORKSPACE}/ows?{q}", timeout=120)).get("features") or []
+    except Exception:
+        return None
+    if not features:
+        return gpd.GeoDataFrame({"khasra": [], "area_m2": []}, geometry=[], crs=32644)
+    return gpd.GeoDataFrame.from_features(features, crs=32644)[["khasra", "area_m2", "geometry"]]
 
 
 @lru_cache(maxsize=1)

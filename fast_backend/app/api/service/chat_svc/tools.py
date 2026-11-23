@@ -5,6 +5,7 @@ Visuals are plain dicts the frontend renders:
   chart - bar or donut chart rows
   table - columns + rows
 Results for the model are kept short (top rows, rounded numbers): llama3.1:8b runs with a small context window."""
+import asyncio
 import difflib
 import re
 from typing import Any
@@ -15,8 +16,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.service.chat_svc.knowledge import knowledge_base
 from app.api.service.geoserver_svc import factors as raster_factors
-from app.api.service.geoserver_svc.emission_rasters import ALLOCATION, EMISSION_WORKSPACE, UNIT as RASTER_UNIT
-from app.api.service.geoserver_svc.geoserver import RASTER_WORKSPACE, find_rasters, raster_title
+from app.api.service.geoserver_svc import emission_rasters
+from app.api.service.geoserver_svc.emission_rasters import ALLOCATION, UNIT as RASTER_UNIT
+from app.api.service.geoserver_svc.geoserver import RASTER_WORKSPACE
 from app.api.service.village_svc import village_svc
 from app.conf.settings import settings
 from app.database.crud.village.async_crud import Village_crud
@@ -66,12 +68,15 @@ PROFILE_FIELDS = ["total_residents", "total_households", "total_area_ha", "agri_
 
 def raster_catalog() -> dict[str, dict]:
     """Raster layers the assistant can show: emission rasters plus the curated condition rasters."""
-    out = {f"emission_{k}": {"layer": f"{EMISSION_WORKSPACE}:emission_{k}", "workspace": EMISSION_WORKSPACE,
-                             "title": f"Emission raster – {title}", "unit": RASTER_UNIT}
+    out = {f"emission_{k}": {"title": f"Emission raster – {title}", "unit": RASTER_UNIT, "derived": True}
            for k, (title, _, _) in ALLOCATION.items()}
-    for tif, _ in find_rasters():
-        out[tif.stem] = {"layer": f"{RASTER_WORKSPACE}:{tif.stem}", "workspace": RASTER_WORKSPACE,
-                         "title": raster_title(tif.stem), "unit": None}
+    # Condition rasters as published on GeoServer (cached listing; empty when GeoServer is down).
+    try:
+        for f in raster_factors.list_factors():
+            if f["workspace"] == RASTER_WORKSPACE:
+                out[f["name"]] = {"layer": f["layer"], "workspace": RASTER_WORKSPACE, "title": f["title"], "unit": f["unit"]}
+    except Exception:
+        pass
     return out
 
 
@@ -272,17 +277,35 @@ class Toolbox:
                     return {"error": f"Unknown raster '{layer}'", "available": list(catalog)}, []
                 key = close[0]
         info = catalog[key]
-        raster = {"name": key, **info}
-        result: dict = {"raster": info["title"], "layer": info["layer"], "unit": info["unit"]}
-        if not settings.GEOSERVER_URL:
-            result["note"] = "GeoServer is not configured; the layer may not draw."
         found = []
         if village:
             found, missing = await self._resolve(_as_list(village)[:1])
             if missing:
-                result["not_found"] = missing
+                result_not_found = missing
+            else:
+                result_not_found = []
+        else:
+            result_not_found = []
+        if info.get("derived"):
+            try:
+                temporary = await run_in_threadpool(emission_rasters.publish_region, key.removeprefix("emission_"),
+                                                    self.area[1] if self.area else None,
+                                                    [v["village_code"] for v in found] if found else None)
+                info = {**info, **temporary}
+            except Exception as e:
+                return {"error": f"Could not create temporary raster: {str(e)[:200]}"}, []
+        raster = {"name": key, **info}
+        result: dict = {"raster": info["title"], "layer": info.get("layer"), "unit": info["unit"]}
+        if info.get("derived"):
+            result["statistics"] = info["stats"]
+            if found:
+                result["village"] = found[0]["village_name"]
+        if result_not_found:
+            result["not_found"] = result_not_found
+        if not settings.GEOSERVER_URL:
+            result["note"] = "GeoServer is not configured; the layer may not draw."
         focus = [v["village_code"] for v in found]
-        if found:
+        if found and not info.get("derived"):
             v = found[0]
             try:
                 stats = await run_in_threadpool(raster_factors.village_stats, info["layer"], v["village_code"])
@@ -298,6 +321,8 @@ class Toolbox:
         title = info["title"] + (f" – {found[0]['village_name']}" if found else "")
         vis = self._map("total_emissions", await self.villages(), title, highlight=focus, focus=focus, raster=raster)
         vis["values"] = {}  # draw the raster with outlines only, no choropleth underneath
+        if info.get("derived"):
+            vis["cleanup_layer"] = info["name"]
         return result, [vis]
 
     async def analyze_area(self, metric="total_emissions", raster=None, **_):
@@ -358,18 +383,29 @@ class Toolbox:
             rkey = _raster_name(raster, catalog)
             if rkey:
                 info = catalog[rkey]
-                raster_vis = {"name": rkey, **info, "clip": areas.clip_wkt(geom)}
+                if info.get("derived"):
+                    try:
+                        temp = await run_in_threadpool(emission_rasters.publish_region, rkey.removeprefix("emission_"), geom)
+                        info = {**info, **temp}
+                    except Exception as e:
+                        result["raster_error"] = f"Could not create temporary raster: {str(e)[:200]}"
+                        info = None
+                raster_vis = {"name": rkey, **info, "clip": areas.clip_wkt(geom)} if info else None
+                if info and info.get("derived"):
+                    raster_vis["cleanup_layer"] = info["name"]
                 try:
-                    st = await run_in_threadpool(raster_factors.geometry_stats, info["layer"], geom)
+                    if not info:
+                        raise HTTPException(status_code=404, detail=result["raster_error"])
+                    st = info["stats"] if info.get("derived") else await run_in_threadpool(raster_factors.geometry_stats, info["layer"], geom)
                     u = info["unit"] or "raster value"
                     result["clipped_raster"] = {
                         "layer": info["title"], "covered": st["covered"],
                         f"mean_inside ({u})": _r(st["mean"], 3), f"max_inside ({u})": _r(st["max"], 3),
-                        **({"raster_total_inside_area (t CO2e/yr)": _r(st["total"], 1)} if st["total"] is not None else {}),
-                        "legend_class_share_pct": {c["label"]: c["share_pct"] for c in st["classes"][:6]},
+                        **({"raster_total_inside_area (t CO2e/yr)": _r(st["total"], 1)} if st.get("total") is not None else {}),
+                        "legend_class_share_pct": {c["label"]: c["share_pct"] for c in st.get("classes", [])[:6]},
                     }
-                    raster_vis["stats"] = {"min": st["min"], "max": st["max"], "mean": st["mean"], "total": st["total"],
-                                           "covered": st["covered"], "classes": st["classes"][:6]}
+                    raster_vis["stats"] = {"min": st["min"], "max": st["max"], "mean": st["mean"], "total": st.get("total"),
+                                           "covered": st["covered"], "classes": st.get("classes", [])[:6]}
                 except HTTPException as e:
                     result["raster_error"] = e.detail
                 except Exception as e:  # GeoServer unreachable
@@ -407,18 +443,33 @@ class Toolbox:
             pool = [v for v in pool if v["village_code"] in shares]
             area_outline, clip, scope = areas.outline_geojson(geom), areas.clip_wkt(geom), meta["name"]
         thematic = "thematic" in str(kind).lower() or "sector" in str(kind).lower()
-        frames = []
+        frames, temporary_names = [], []
         # source name -> (metric key for the thematic map, emission raster name)
         for name, (metric_key, rkey) in ANIMATION_SOURCES.items():
             if thematic:
                 v = self._map(metric_key, pool, "", focus=focus, area=area_outline)
             elif rkey in catalog:
+                raster = catalog[rkey]
+                if raster.get("derived"):
+                    try:
+                        temp = await run_in_threadpool(emission_rasters.publish_region, rkey.removeprefix("emission_"),
+                                                       self.area[1] if self.area else None)
+                    except Exception as e:
+                        await asyncio.gather(*(run_in_threadpool(emission_rasters.delete_temporary, n)
+                                               for n in temporary_names), return_exceptions=True)
+                        return {"error": f"Could not create temporary raster: {str(e)[:200]}"}, []
+                    raster = {**raster, **temp}
+                    temporary_names.append(raster["name"])
                 v = {"kind": "map", "values": {}, "highlight": [], "focus": focus, "area": area_outline,
-                     "raster": {"name": rkey, **catalog[rkey], "clip": clip}}
+                     "raster": {"name": rkey, **raster, "clip": clip}}
             else:
                 continue
             frames.append((v, f"{name} emissions – {scope}" + ("" if thematic else " (t CO2e/ha/yr)")))
-        out = await run_in_threadpool(media.animate, frames)
+        try:
+            out = await run_in_threadpool(media.animate, frames)
+        finally:
+            await asyncio.gather(*(run_in_threadpool(emission_rasters.delete_temporary, n)
+                                   for n in temporary_names), return_exceptions=True)
         title = f"Emissions by source – {scope}"
         # No URLs for the model: it would turn them into made-up links; the chat shows the player and download links.
         return ({"video_created": True, "format": "MP4 + animated GIF" if out["mp4"] else "animated GIF",
@@ -442,6 +493,7 @@ class Toolbox:
         catalog = raster_catalog()
         rkey = _raster_name(raster, catalog) or "emission_total"
         rtitle = catalog[rkey]["title"]
+        temporary_names = []
 
         if self.area:
             meta = self.area[0]
@@ -466,6 +518,8 @@ class Toolbox:
             if raster_total is not None:
                 stats.append((f"{rtitle} - total inside area", f"{raster_total:,.1f} t CO2e/yr"))
             base = vis[0]
+            if base.get("cleanup_layer"):
+                temporary_names.append(base["cleanup_layer"])
             thematic = {**base, "raster": None}
             raster_map = {**base, "values": {}, "highlight": []}
             donut = next((v for v in vis if v["kind"] == "chart"), None)
@@ -487,8 +541,16 @@ class Toolbox:
             stats += [(f"  {x['sector']}", f"{x['t_co2e_yr']:,.1f} t CO2e/yr") for x in overview["sectors"]]
             villages = await self.villages()
             thematic = self._map(key, villages, f"{label} ({unit}) - Varanasi district")
+            raster_info = catalog[rkey]
+            if raster_info.get("derived"):
+                try:
+                    temp = await run_in_threadpool(emission_rasters.publish_region, rkey.removeprefix("emission_"))
+                except Exception as e:
+                    return {"error": f"Could not create temporary raster: {str(e)[:200]}"}, []
+                raster_info = {**raster_info, **temp}
+                temporary_names.append(raster_info["name"])
             raster_map = {"kind": "map", "values": {}, "highlight": [], "focus": [], "area": None,
-                          "raster": {"name": rkey, **catalog[rkey]}}
+                          "raster": {"name": rkey, **raster_info}}
             donut = next((v for v in ov_vis if v.get("chart") == "donut"), None)
             ranked = sorted(villages, key=lambda v: -float(v.get(col) or 0))[:25]
             table = (["Village", "Block", f"{label} ({unit})", "Population"],
@@ -514,7 +576,11 @@ class Toolbox:
             pdf = media.report_pdf(f"Carbon emission report - {scope}", subtitle, stats, figures, table, notes)
             return media.save(pdf, "pdf"), media.save(thematic_png, "png"), media.save(raster_png, "png"), len(figures)
 
-        pdf_url, thematic_url, raster_url, n_fig = await run_in_threadpool(build)
+        try:
+            pdf_url, thematic_url, raster_url, n_fig = await run_in_threadpool(build)
+        finally:
+            await asyncio.gather(*(run_in_threadpool(emission_rasters.delete_temporary, name)
+                                   for name in temporary_names), return_exceptions=True)
         return ({"report_created": True, "scope": scope, "contents": ["key figures", f"thematic map of {label}",
                  f"raster map of {rtitle}", "emissions by source chart", "top 10 villages chart", "village table"],
                  "note": "The PDF and the two map images are already shown in the chat with Open / Download links. "
@@ -577,9 +643,9 @@ def tool_specs(has_area: bool = False) -> list[dict]:
         spec("district_overview",
              "Varanasi district totals: villages, population, total and per capita emissions, emissions by block and by sector."),
         spec("show_raster",
-             "Display a GeoServer raster layer on the map (emission density rasters in t CO2e/ha/yr, land use LULC, "
-             "population, groundwater suitability ...). If a village is given, zoom to it and return the raster statistics "
-             "inside its boundary.",
+             "Display a raster on the map (emission density rasters in t CO2e/ha/yr, land use LULC, population, "
+             "groundwater suitability ...). Emission rasters are calculated for this request and temporarily published "
+             "to GeoServer. If a village is given, zoom to it and return the raster statistics inside its boundary.",
              {"layer": {"type": "string", "enum": list(rasters),
                         "description": "; ".join(f"{k}: {v['title']}" for k, v in rasters.items())},
               "village": {"type": "string", "description": "Optional village name or code"}},

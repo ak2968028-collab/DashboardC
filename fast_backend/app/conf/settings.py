@@ -37,8 +37,8 @@ class Settings(BaseSettings):
     GEOSERVER_RASTER_WORKSPACE: str = "varanasi_raster"
     # factor rasters uploaded from the dashboard (Carbon Lab), kept apart from the curated layers
     GEOSERVER_TEMP_WORKSPACE: str = "varanasi_temp"
-    # carbon emission rasters generated from the village inventory + LULC
-    GEOSERVER_EMISSION_WORKSPACE: str = "varanasi_emission"
+    # assistant-created rasters are short-lived and never appear in the user-upload workspace
+    GEOSERVER_ASSISTANT_TEMP_WORKSPACE: str = "assistant_temp"
 
     CORS_ORIGINS: list[str] = ["http://localhost:3000"]
 
@@ -54,7 +54,8 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "change-me-varanasi-dashboard-dev-secret"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 12 * 60
 
-    # media paths
+    # media/: the source data is loaded into the database / GeoServer by the scripts in script/; the API itself only
+    # keeps its own files here (assistant images in temp/, uploaded areas in chat_areas/, the users.csv backup).
     MEDIA_DIR: Path = BASE_DIR / "media"
 
     @property
@@ -69,46 +70,8 @@ class Settings(BaseSettings):
 
     @property
     def USERS_CSV_PATH(self) -> Path:
-        """Login accounts loaded by media/scripts/users/users.py; rewritten on every account change."""
+        """Login accounts loaded by script/database/users/users.py; rewritten by the API on every account change."""
         return self.MEDIA_DIR / "user" / "users.csv"
-
-    @property
-    def SURVEY_CSV_PATH(self) -> Path:
-        """Village survey loaded by media/scripts/survey/*.py (Excel uploads on the website still work)."""
-        return self.MEDIA_DIR / "data" / "raw" / "village_data.csv"
-
-    @property
-    def EMISSION_FACTORS_PATH(self) -> Path:
-        return self.MEDIA_DIR / "config" / "emission_factors.csv"
-
-    @property
-    def CENSUS_BOUNDARIES_PATH(self) -> Path:
-        """Census village boundaries, WGS84 (also loaded into PostGIS; the maps get them from GeoServer)."""
-        return self.MEDIA_DIR / "data" / "processed" / "varanasi_villages_optimized.geojson"
-
-    @property
-    def PARCELS_GPKG_PATH(self) -> Path:
-        """Cadastral khasra parcels (UTM 44N) used to lay out each village in the Carbon Lab 3D view."""
-        return self.MEDIA_DIR / "Smulation data" / "varanasi.gpkg"
-
-    @property
-    def DEM_TIF_PATH(self) -> Path:
-        """Digital Elevation Model (DEM) GeoTIFF for Uttar Pradesh / Varanasi."""
-        return self.MEDIA_DIR / "DEM" / "UP_DEM.tif"
-
-    @property
-    def CADASTRAL_BOUNDARIES_PATH(self) -> Path:
-        """Village boundaries dissolved from the khasra parcels (script/cadastral_boundaries.py), WGS84."""
-        return self.MEDIA_DIR / "data" / "processed" / "varanasi_villages_cadastral.geojson"
-
-    @property
-    def SLD_DIR(self) -> Path:
-        return self.MEDIA_DIR / "geoserver"
-
-    @property
-    def RASTER_DIR(self) -> Path:
-        """GeoTIFFs in Rasters/files/<group>/, styled by Rasters/SLD/<group>/<same name>.sld"""
-        return self.MEDIA_DIR / "Rasters"
 
 
 @lru_cache

@@ -1,7 +1,7 @@
 # ====================================================================
 # app/api/service/auth_svc/user_csv.py
 # Keeps media/user/users.csv in step with the users table, so accounts made or changed on the
-# website come back after the database is rebuilt (docker compose down -v + media/run_all.py).
+# website come back after the database is rebuilt (docker compose down -v + script/load_database.py).
 # ====================================================================
 import csv
 import fcntl

@@ -3,9 +3,9 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useMemo, useState, type FormEvent } from "react";
-import { Layers, Plus, RefreshCw, Trash2, Upload } from "lucide-react";
+import { Layers, Plus, Trash2, Upload } from "lucide-react";
 import { mutate } from "swr";
-import { errorText, refreshAll, sendApi, useEmissionGrid, useFactorStats, useRasterFactors, useVillageCadastral, wmsUrl } from "@/lib/api";
+import { errorText, sendApi, useEmissionGrid, useFactorStats, useRasterFactors, useVillageCadastral, wmsUrl } from "@/lib/api";
 import { fmt } from "@/lib/format";
 import { RASTER_GROUPS, classOf, paint, scenarioRaster, type GridEntry } from "@/lib/emissionGrid";
 import type { RasterFactor, VillageFactorStats } from "@/lib/types";
@@ -56,7 +56,6 @@ export default function FactorPanel({ villageCode, villageName, focus, emissions
   const [extra, setExtra] = useState<string | null>(null);
   const [opacity, setOpacity] = useState(0.8);
   const [showParcels, setShowParcels] = useState(true);
-  const [rebuilding, setRebuilding] = useState(false);
   const { data: cadastral } = useVillageCadastral(villageCode);
   const cadastralBoundary = !!cadastral?.features.some((f) => f.properties?.kind === "boundary");
   const extraFactor = uploads.find((f) => f.layer === extra) ?? null;
@@ -106,18 +105,6 @@ export default function FactorPanel({ villageCode, villageName, focus, emissions
       return v > 0 ? `${num(v)} t CO₂e/ha/yr` : "No emission from this source here";
     },
   } : null, [grid, url, values, title]);
-
-  const rebuild = async () => {
-    setRebuilding(true);
-    try {
-      await sendApi("POST", "/api/geo/emission-rasters");
-      await refreshAll();
-    } catch (err) {
-      alert(errorText(err));
-    } finally {
-      setRebuilding(false);
-    }
-  };
 
   const remove = async (f: RasterFactor) => {
     if (!confirm(`Remove "${f.title}" from GeoServer?`)) return;
@@ -173,12 +160,8 @@ export default function FactorPanel({ villageCode, villageName, focus, emissions
               <input type="range" min={0.1} max={1} step={0.05} value={opacity} onChange={(e) => setOpacity(Number(e.target.value))} />
             </label>
           </div>
-          {isLoading && <p className="caption">Reading the emission rasters from GeoServer…</p>}
-          {gridError && (
-            <p className="factor-nodata">
-              {errorText(gridError)}.{user?.role === "admin" ? " Use “Rebuild from latest data” below." : ""}
-            </p>
-          )}
+          {isLoading && <p className="caption">Calculating emission cells from current data…</p>}
+          {gridError && <p className="factor-nodata">{errorText(gridError)}.</p>}
           {summary && (
             <>
               <p className="caption">
@@ -207,11 +190,6 @@ export default function FactorPanel({ villageCode, villageName, focus, emissions
                 {grid?.generated_at && <> (built {new Date(grid.generated_at).toLocaleDateString()})</>}, rescaled in the browser for the scenario.
               </p>
             </>
-          )}
-          {user?.role === "admin" && (
-            <button type="button" className="btn-ghost factor-rebuild" onClick={rebuild} disabled={rebuilding}>
-              <RefreshCw size={12} className={rebuilding ? "spin" : ""} /> {rebuilding ? "Rebuilding…" : "Rebuild from latest data"}
-            </button>
           )}
         </div>
       )}

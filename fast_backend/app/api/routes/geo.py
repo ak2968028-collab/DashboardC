@@ -1,12 +1,10 @@
 from fastapi import APIRouter, File, Form, Query, UploadFile, status
-from sqlalchemy import text
 from fastapi.concurrency import run_in_threadpool
 
-from app.api.schema.geo_schema import Emission_raster_report, Raster_factor, Raster_layer, Village_factor_stats
-from app.api.service.auth_svc.dependencies import admin_user, current_user
+from app.api.schema.geo_schema import Raster_factor, Raster_layer, Village_factor_stats
+from app.api.service.auth_svc.dependencies import current_user
 from app.api.service.geoserver_svc import emission_rasters, factors
-from app.database.config.dependency import db_read
-from app.api.service.geoserver_svc.geoserver import DEM_LAYER, RASTER_WORKSPACE, WORKSPACE, find_rasters, raster_title
+from app.api.service.geoserver_svc.geoserver import DEM_LAYER, RASTER_WORKSPACE, WORKSPACE
 from app.database.models.user import ROLE_ADMIN
 
 router = APIRouter()
@@ -21,26 +19,14 @@ BASE_OVERLAYS = [
 
 @router.get("/rasters", response_model=list[Raster_layer])
 async def get_raster_layers():
-    """Map overlays published on GeoServer (WMS): the condition rasters, the DEM and the khasra parcels."""
+    """Map overlays published on GeoServer (WMS): the condition rasters (listed from GeoServer), the DEM and the
+    khasra parcels."""
     rasters = [
-        {
-            'name': tif.stem,
-            'title': raster_title(tif.stem),
-            'group': tif.parent.name,
-            'workspace': RASTER_WORKSPACE,
-            'layer': f"{RASTER_WORKSPACE}:{tif.stem}",
-        }
-        for tif, _ in find_rasters()
+        {'name': f['name'], 'title': f['title'], 'group': f['group'].lower(), 'workspace': f['workspace'], 'layer': f['layer']}
+        for f in await run_in_threadpool(factors.list_factors) if f['workspace'] == RASTER_WORKSPACE
     ]
     base = [{**o, 'workspace': WORKSPACE, 'layer': f"{WORKSPACE}:{o['name']}"} for o in BASE_OVERLAYS]
     return rasters + base
-
-
-@router.post("/emission-rasters", response_model=Emission_raster_report)
-async def generate_emission_rasters(db: db_read, _: admin_user):
-    """Rebuilds the carbon emission rasters from the current village inventory (spread by LULC) and publishes
-    them to GeoServer. Also runs after every emissions recompute."""
-    return await emission_rasters.regenerate(db)
 
 
 @router.get("/emission-grid")
@@ -86,14 +72,3 @@ async def get_village_factor_stats(layer: str = Query(..., description="workspac
     return await run_in_threadpool(factors.village_stats, layer, village)
 
 
-
-@router.get("/india-states/labels")
-async def get_india_state_labels(db: db_read):
-    """One label point inside each India state (india_states), for the state names drawn on every map."""
-    try:
-        rows = await db.execute(text(
-            "SELECT state_name, ST_X(p) AS lon, ST_Y(p) AS lat "
-            "FROM (SELECT state_name, ST_PointOnSurface(ST_MakeValid(geom)) AS p FROM india_states) s ORDER BY state_name"))
-    except Exception:  # india_states not loaded yet
-        return []
-    return [{"name": r.state_name, "lon": r.lon, "lat": r.lat} for r in rows]

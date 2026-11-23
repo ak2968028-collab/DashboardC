@@ -105,4 +105,6 @@ async def recompute_and_save_all_emissions(db: AsyncSession):
         calc['village_id'] = int(row['village_id'])
         emissions_list.append(calc)
     await Village_emissions_crud(db).upsert(emissions_list)
+    from app.api.service.geoserver_svc.emission_rasters import invalidate
+    invalidate()
     return len(emissions_list)

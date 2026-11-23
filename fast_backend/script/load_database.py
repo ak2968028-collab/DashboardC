@@ -1,11 +1,11 @@
-# Loads all source data into the database by running the loader scripts in order.
+# Loads all source data from media/ into the database by running the loaders in script/database/ in order.
 # Each loader only fills an empty table, so this is safe to run on every start.
-# Usage (from fast_backend/): python media/run_all.py
+# Usage (from fast_backend/): python -m script.load_database
 import os
 import subprocess
 import sys
 
-base_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scripts")
+base_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "database")
 
 
 def run_scripts_in_sequence(script_list):

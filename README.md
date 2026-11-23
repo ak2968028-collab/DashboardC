@@ -56,20 +56,27 @@ mtech-thesis/
 │   │       ├── routes/            # Endpoints: villages, district, emissions, data_io, geo
 │   │       ├── schema/            # Pydantic request / response models
 │   │       └── service/           # carbon_svc (IPCC model), report_svc (PDF), import_svc (Excel),
-│   │                              # geoserver_svc (layer publishing), village_svc, emission_svc
+│   │                              # geoserver_svc (GeoServer client: reads layers, publishes what users create),
+│   │                              # village_svc, emission_svc, chat_svc (AI assistant). Reads only the database
+│   │                              # and GeoServer, never the source files in media/.
 │   ├── alembic/                   # Database migrations (alembic.ini alongside)
 │   │   └── versions/
-│   ├── script/
-│   │   ├── geoserver_publish.py   # Publishes PostGIS layers, khasra parcels & cadastral outlines to GeoServer
-│   │   └── geoserver_raster.py    # Uploads media/Rasters GeoTIFFs and the DEM to GeoServer with their SLDs
-│   ├── media/
-│   │   ├── run_all.py             # Runs the loader scripts below in order
-│   │   ├── scripts/               # One loader per table (read file -> df.to_sql), skips filled tables
-│   │   │   ├── db_connection.py   # DB connection details (from POSTGRES_* env vars)
+│   ├── script/                    # Read the source data in media/ and load it into the database and GeoServer
+│   │   ├── load_database.py       # Runs the loaders in database/ in order
+│   │   ├── database/              # One loader per table (read file in media/ -> database), skips filled tables
+│   │   │   ├── db_connection.py   # DB connection (POSTGRES_* env vars) and the media/ path
 │   │   │   ├── masters/           # emission_factors.py
+│   │   │   ├── locations/         # Census 2011 states, districts, sub-districts, villages
+│   │   │   ├── users/             # users.py (media/user/users.csv)
 │   │   │   ├── survey/            # villages.py, demographics.py, land_use.py, ... (village_data.csv)
 │   │   │   ├── emissions/         # village_emissions.py (IPCC Tier-1 model)
-│   │   │   └── boundaries/        # district / block / village polygons -> PostGIS
+│   │   │   └── boundaries/        # district / block / village polygons, all-India census villages -> PostGIS
+│   │   ├── geoserver_publish.py   # PostGIS layers, khasra parcels (GeoPackage) and the India state base map
+│   │   │                          # (media/basemap shapefile) -> GeoServer, styles from media/geoserver
+│   │   ├── geoserver_raster.py    # media/Rasters GeoTIFFs and the DEM -> GeoServer with their SLDs
+│   │   └── emission_rasters.py    # Builds the emission rasters from the database and publishes them
+│   ├── media/                     # Source data only (loaded by script/); plus the API's own files: temp/
+│   │                              # (assistant images & videos), chat_areas/ (uploaded areas), user/users.csv
 │   │   ├── data/raw/              # village_data.csv (1,334 villages, survey)
 │   │   ├── data/processed/        # District, block & village GeoJSON
 │   │   ├── config/                # emission_factors.csv (IPCC & CEA)
@@ -129,12 +136,15 @@ This starts four services:
 1. deletes the existing Alembic migration files (and clears Alembic's applied-revision record with `alembic stamp --purge base`;
    tables and data are kept), then autogenerates a fresh migration from the models (`alembic revision --autogenerate`),
 2. applies it (`alembic upgrade head`) and creates the views in `database/views.sql`,
-3. pushes data with `media/run_all.py` — each loader fills its table from `media/data/raw/village_data.csv`,
-   `emission_factors.csv` or the boundary GeoJSON; tables that already have data are skipped,
-4. publishes the vector layers, khasra parcels, cadastral outlines and DEM (workspace `varanasi`) and the rasters
-   (workspace `varanasi_raster`) to GeoServer.
+3. loads the data with `python -m script.load_database` — each loader in `script/database/` fills its table from a
+   file in `media/` (`data/raw/village_data.csv`, `config/emission_factors.csv`, the boundary GeoJSON, the India
+   village shapefile, ...); tables that already have data are skipped,
+4. publishes the data to GeoServer: the vector layers, khasra parcels and the India state base map
+   (`script.geoserver_publish`, workspace `varanasi`), the rasters and the DEM (`script.geoserver_raster`,
+   workspaces `varanasi_raster` / `varanasi`). Emission grids are calculated from database values and LULC on demand;
+   assistant-requested rasters are briefly published in `assistant_temp` and deleted after rendering.
 
-Re-running it is safe: after a model change it migrates the tables, and existing data and rasters are kept.
+Re-running it is safe: after a model change it migrates the tables, and existing data and source rasters are kept.
 
 | Layer | Contents | Style |
 |---|---|---|
@@ -176,7 +186,7 @@ cp .fastdb.env.example .fastdb.env
 python -m venv venv && source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 alembic upgrade head
-python media/run_all.py
+python -m script.load_database
 uvicorn app.main:app --reload --port 8000
 
 # Terminal 2 — Next.js frontend (port 3000, proxies /api to port 8000)

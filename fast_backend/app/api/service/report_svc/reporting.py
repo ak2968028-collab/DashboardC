@@ -552,8 +552,8 @@ def _emission_maps(v, grid, layers):
           "and so where action on the ground would matter most. Each source's cells add up to its village total.", "small"),
     ]
     if not grid:
-        return [KeepTogether(head + [callout("The emission rasters have not been generated on GeoServer yet; an admin can "
-                                             "build them from the dashboard (Carbon Lab → Rebuild from latest data).")])]
+        return [KeepTogether(head + [callout("Emission cells could not be calculated from the current village inventory, "
+                                             "boundaries and LULC data.")])]
     # The cadastral boundary the cells were built from (census boundary where the village has no parcels).
     import json
 

@@ -3,8 +3,10 @@ import sys
 
 from sqlalchemy import create_engine, text
 
-# Make the backend package (app.*) importable when a script is run directly.
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+# fast_backend/ (this file is fast_backend/script/database/db_connection.py): makes the backend package (app.*)
+# importable when a loader is run directly.
+BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, BACKEND_DIR)
 
 # Database connection details (from the environment, same variables as docker-compose / .fastdb.env)
 DB_USER = os.getenv("POSTGRES_USER", "varanasi")
@@ -13,7 +15,8 @@ DB_HOST = os.getenv("POSTGRES_HOST", "localhost")
 DB_PORT = os.getenv("POSTGRES_PORT", "5432")
 DB_NAME = os.getenv("POSTGRES_DB", "varanasi")
 
-MEDIA_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# The source data: loaders only read from media/ and write to the database.
+MEDIA_DIR = os.path.join(BACKEND_DIR, "media")
 SURVEY_FILE = os.path.join(MEDIA_DIR, "data", "raw", "village_data.csv")
 
 # Create the database engine

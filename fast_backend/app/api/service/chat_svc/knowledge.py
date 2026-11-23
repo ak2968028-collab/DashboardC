@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.service.geoserver_svc import factors as raster_factors
-from app.api.service.geoserver_svc.emission_rasters import ALLOCATION, EMISSION_WORKSPACE, UNIT as RASTER_UNIT
+from app.api.service.geoserver_svc.emission_rasters import ALLOCATION, UNIT as RASTER_UNIT
 from app.conf.logging.applog import logger
 from app.conf.settings import settings
 from app.database.models import EmissionFactor
@@ -53,8 +53,8 @@ METHODOLOGY = [
     ("Emission rasters",
      "Carbon emission rasters spread each village's yearly emissions over ~90 m cells inside its boundary, weighted by "
      "the LULC (land use / land cover) raster, so a village's cells add back up to its inventory total. Values are "
-     f"densities in {RASTER_UNIT}. Rasters exist for the total and for each source; they are published on GeoServer "
-     "and rebuilt every time emissions are recomputed."),
+     f"densities in {RASTER_UNIT}. They are calculated from current database values on demand. When the assistant "
+     "shows one, it briefly publishes a unique layer in assistant_temp and deletes it after rendering."),
     ("Mitigation options",
      "Typical village mitigation measures: rooftop solar and solar pumps (cut grid electricity emissions), biogas "
      "plants from cattle dung (replace firewood and LPG and reduce manure methane), improved cookstoves, electric "
@@ -69,7 +69,8 @@ METHODOLOGY = [
      "Village list, codes and population: Census of India 2011. Activity data: field baseline survey entered by village "
      "supervisors and approved by admins, or imported from Excel. Boundaries: Census 2011 village polygons (Survey "
      "of India), available for all of India on GeoServer. Rasters: LULC, population, groundwater "
-     "potential and recharge suitability layers, the DEM and the emission rasters, all served by GeoServer."),
+     "potential and recharge suitability layers and the DEM, served by GeoServer. Emission grids are derived from "
+     "the database and LULC on demand."),
 ]
 
 
@@ -130,7 +131,7 @@ class KnowledgeBase:
             from fastapi.concurrency import run_in_threadpool
             for r in await run_in_threadpool(raster_factors.list_factors):
                 # Emission rasters are already described by the allocation chunks above.
-                if r.get("description") and r.get("workspace") != EMISSION_WORKSPACE:
+                if r.get("description"):
                     chunks.append(Chunk(f"Map layer: {r['title']}", f"{r['layer']} ({r['group']}): {r['description']}",
                                         "rasters"))
         except Exception:  # GeoServer offline: methodology still works
