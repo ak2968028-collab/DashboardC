@@ -577,7 +577,7 @@ def _emission_maps(v, grid, layers):
         KeepTogether(head + [
             total_map,
             emission_legend(grid, "total", w),
-            P("Map 4. Total emissions per hectare inside the village (about 98 m cells); village boundary in green. "
+            P("Map 4. Total emissions per hectare inside the village (about 30 m cells); village boundary in green. "
               "Classes are shared by all villages in the district, so colours can be compared between reports.", "caption"),
         ]),
         KeepTogether([

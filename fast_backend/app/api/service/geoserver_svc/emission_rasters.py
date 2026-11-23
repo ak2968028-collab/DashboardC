@@ -2,7 +2,7 @@
 
 Each village's yearly emissions per source (t CO2e/yr) are spread over the cells inside its boundary, weighted by
 land cover from the LULC raster: household energy lands on built-up cells, livestock on grazing land and cropland,
-and so on (ALLOCATION). Cells are 3x3 LULC pixels (~90 m). Where a village has no LULC coverage, or none of the
+and so on (ALLOCATION). Cells are 3x3 LULC pixels (~30 m). Where a village has no LULC coverage, or none of the
 land cover a source is tied to, its emissions are spread evenly over the village. Values are densities in
 t CO2e/ha/yr, so a village's cells sum back to its inventory total.
 
@@ -280,7 +280,7 @@ def region(key: str, geom=None, codes=None) -> dict:
 
 
 def publish_region(key: str, geom=None, codes=None) -> dict:
-    """Publish one requested emission raster into the assistant-only workspace; caller must delete it."""
+    """Publish one requested emission raster into the assistant-only workspace for subsequent WMS requests."""
     from uuid import uuid4
 
     factors._require_geoserver()
@@ -293,7 +293,7 @@ def publish_region(key: str, geom=None, codes=None) -> dict:
                  content_type="image/tiff", timeout=300)
         _request("PUT", f"{store}/coverages/{name}", {"coverage": {
             "title": f"{ALLOCATION[key][0]} (assistant temporary)",
-            "abstract": f"Temporary, on-demand emission density raster ({UNIT}); automatically removed after delivery.",
+            "abstract": f"On-demand assistant emission density raster ({UNIT}); retained for interactive map use.",
             "keywords": {"string": ["kind=assistant_temporary", f"source={key}", f"unit={UNIT}"]}, "enabled": True,
         }})
         _publish_style(name, workspace=ASSISTANT_WORKSPACE, sld=sld(name, key))

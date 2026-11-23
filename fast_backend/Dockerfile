@@ -6,6 +6,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 RUN groupadd -g 1000 appuser && useradd -r -g appuser -u 1000 -m -d /home/appuser appuser
 
+# Rasterio's bundled GDAL links to the system Expat shared library.
+RUN apt-get update && apt-get install -y --no-install-recommends libexpat1 \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /home/app
 
 COPY requirements.txt .

@@ -5,7 +5,6 @@ Visuals are plain dicts the frontend renders:
   chart - bar or donut chart rows
   table - columns + rows
 Results for the model are kept short (top rows, rounded numbers): llama3.1:8b runs with a small context window."""
-import asyncio
 import difflib
 import re
 from typing import Any
@@ -321,8 +320,6 @@ class Toolbox:
         title = info["title"] + (f" – {found[0]['village_name']}" if found else "")
         vis = self._map("total_emissions", await self.villages(), title, highlight=focus, focus=focus, raster=raster)
         vis["values"] = {}  # draw the raster with outlines only, no choropleth underneath
-        if info.get("derived"):
-            vis["cleanup_layer"] = info["name"]
         return result, [vis]
 
     async def analyze_area(self, metric="total_emissions", raster=None, **_):
@@ -391,8 +388,6 @@ class Toolbox:
                         result["raster_error"] = f"Could not create temporary raster: {str(e)[:200]}"
                         info = None
                 raster_vis = {"name": rkey, **info, "clip": areas.clip_wkt(geom)} if info else None
-                if info and info.get("derived"):
-                    raster_vis["cleanup_layer"] = info["name"]
                 try:
                     if not info:
                         raise HTTPException(status_code=404, detail=result["raster_error"])
@@ -443,7 +438,7 @@ class Toolbox:
             pool = [v for v in pool if v["village_code"] in shares]
             area_outline, clip, scope = areas.outline_geojson(geom), areas.clip_wkt(geom), meta["name"]
         thematic = "thematic" in str(kind).lower() or "sector" in str(kind).lower()
-        frames, temporary_names = [], []
+        frames = []
         # source name -> (metric key for the thematic map, emission raster name)
         for name, (metric_key, rkey) in ANIMATION_SOURCES.items():
             if thematic:
@@ -455,21 +450,14 @@ class Toolbox:
                         temp = await run_in_threadpool(emission_rasters.publish_region, rkey.removeprefix("emission_"),
                                                        self.area[1] if self.area else None)
                     except Exception as e:
-                        await asyncio.gather(*(run_in_threadpool(emission_rasters.delete_temporary, n)
-                                               for n in temporary_names), return_exceptions=True)
                         return {"error": f"Could not create temporary raster: {str(e)[:200]}"}, []
                     raster = {**raster, **temp}
-                    temporary_names.append(raster["name"])
                 v = {"kind": "map", "values": {}, "highlight": [], "focus": focus, "area": area_outline,
                      "raster": {"name": rkey, **raster, "clip": clip}}
             else:
                 continue
             frames.append((v, f"{name} emissions – {scope}" + ("" if thematic else " (t CO2e/ha/yr)")))
-        try:
-            out = await run_in_threadpool(media.animate, frames)
-        finally:
-            await asyncio.gather(*(run_in_threadpool(emission_rasters.delete_temporary, n)
-                                   for n in temporary_names), return_exceptions=True)
+        out = await run_in_threadpool(media.animate, frames)
         title = f"Emissions by source – {scope}"
         # No URLs for the model: it would turn them into made-up links; the chat shows the player and download links.
         return ({"video_created": True, "format": "MP4 + animated GIF" if out["mp4"] else "animated GIF",
@@ -493,7 +481,6 @@ class Toolbox:
         catalog = raster_catalog()
         rkey = _raster_name(raster, catalog) or "emission_total"
         rtitle = catalog[rkey]["title"]
-        temporary_names = []
 
         if self.area:
             meta = self.area[0]
@@ -518,8 +505,6 @@ class Toolbox:
             if raster_total is not None:
                 stats.append((f"{rtitle} - total inside area", f"{raster_total:,.1f} t CO2e/yr"))
             base = vis[0]
-            if base.get("cleanup_layer"):
-                temporary_names.append(base["cleanup_layer"])
             thematic = {**base, "raster": None}
             raster_map = {**base, "values": {}, "highlight": []}
             donut = next((v for v in vis if v["kind"] == "chart"), None)
@@ -548,7 +533,6 @@ class Toolbox:
                 except Exception as e:
                     return {"error": f"Could not create temporary raster: {str(e)[:200]}"}, []
                 raster_info = {**raster_info, **temp}
-                temporary_names.append(raster_info["name"])
             raster_map = {"kind": "map", "values": {}, "highlight": [], "focus": [], "area": None,
                           "raster": {"name": rkey, **raster_info}}
             donut = next((v for v in ov_vis if v.get("chart") == "donut"), None)
@@ -562,7 +546,7 @@ class Toolbox:
                "series": [{"key": "value"}], "data": [{"name": n, "value": v} for n, v in top10]}
         notes += ["Emissions follow the IPCC 2006 Tier-1 method with the dashboard's emission factors (Settings / "
                   "Methodology page), from the village baseline survey.",
-                  f"{rtitle}: village emissions spread over ~90 m cells by land cover (t CO2e/ha/yr).",
+                  f"{rtitle}: village emissions spread over ~30 m cells by land cover (t CO2e/ha/yr).",
                   "Generated by the AI assistant of the Varanasi Village Environment & Carbon Dashboard (IIT BHU)."]
 
         def build():
@@ -576,11 +560,7 @@ class Toolbox:
             pdf = media.report_pdf(f"Carbon emission report - {scope}", subtitle, stats, figures, table, notes)
             return media.save(pdf, "pdf"), media.save(thematic_png, "png"), media.save(raster_png, "png"), len(figures)
 
-        try:
-            pdf_url, thematic_url, raster_url, n_fig = await run_in_threadpool(build)
-        finally:
-            await asyncio.gather(*(run_in_threadpool(emission_rasters.delete_temporary, name)
-                                   for name in temporary_names), return_exceptions=True)
+        pdf_url, thematic_url, raster_url, n_fig = await run_in_threadpool(build)
         return ({"report_created": True, "scope": scope, "contents": ["key figures", f"thematic map of {label}",
                  f"raster map of {rtitle}", "emissions by source chart", "top 10 villages chart", "village table"],
                  "note": "The PDF and the two map images are already shown in the chat with Open / Download links. "

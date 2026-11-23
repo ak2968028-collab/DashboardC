@@ -186,7 +186,7 @@ export default function FactorPanel({ villageCode, villageName, focus, emissions
                 <div><dt>Area emitting</dt><dd>{fmt(summary.cells ? (100 * summary.emitting) / summary.cells : 0, 0)}%</dd></div>
               </dl>
               <p className="caption">
-                {grid?.unit} on ~98 m cells, spread over land cover (LULC). Survey rasters from GeoServer
+                {grid?.unit} on ~30 m cells, spread over land cover (2025 LULC). Survey rasters from GeoServer
                 {grid?.generated_at && <> (built {new Date(grid.generated_at).toLocaleDateString()})</>}, rescaled in the browser for the scenario.
               </p>
             </>

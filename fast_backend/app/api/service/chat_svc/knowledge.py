@@ -51,10 +51,10 @@ METHODOLOGY = [
      "residents, in kg CO2e per person per year. India's average per capita emission is roughly 1.9 t CO2e/yr; "
      "rural village household inventories are usually much lower."),
     ("Emission rasters",
-     "Carbon emission rasters spread each village's yearly emissions over ~90 m cells inside its boundary, weighted by "
+     "Carbon emission rasters spread each village's yearly emissions over ~30 m cells inside its boundary, weighted by "
      "the LULC (land use / land cover) raster, so a village's cells add back up to its inventory total. Values are "
      f"densities in {RASTER_UNIT}. They are calculated from current database values on demand. When the assistant "
-     "shows one, it briefly publishes a unique layer in assistant_temp and deletes it after rendering."),
+     "shows one, it publishes a unique layer in assistant_temp and retains it for interactive map zooming."),
     ("Mitigation options",
      "Typical village mitigation measures: rooftop solar and solar pumps (cut grid electricity emissions), biogas "
      "plants from cattle dung (replace firewood and LPG and reduce manure methane), improved cookstoves, electric "

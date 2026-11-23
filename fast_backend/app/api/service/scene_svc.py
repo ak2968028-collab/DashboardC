@@ -35,7 +35,7 @@ BUILTUP_SHARE = 0.5     # parcels at least this built-up (by LULC pixels) form t
 # LULC legend label -> parcel use drawn by the 3D view
 USE_BY_LABEL = {
     "Builtup Area": "builtup", "Cropland": "cropland", "Trees": "trees", "Water": "water",
-    "Rangeland": "rangeland", "Bare Ground": "bare",
+    "Rangeland": "rangeland", "Bare Ground": "bare", "Flooded vegetation": "water",
 }
 _TO_UTM = Transformer.from_crs(4326, 32644, always_xy=True)
 _TO_LONLAT = Transformer.from_crs(32644, 4326, always_xy=True)

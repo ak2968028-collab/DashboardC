@@ -3,5 +3,5 @@
 .venv
 venv
 .fastdb.env
-media/unnecessary
-media/Rasters/**/*.aux.xml
+# Compose mounts media/ from the host into /home/app at runtime; keep the multi-GB source data out of the image.
+media/

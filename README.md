@@ -142,7 +142,7 @@ This starts four services:
 4. publishes the data to GeoServer: the vector layers, khasra parcels and the India state base map
    (`script.geoserver_publish`, workspace `varanasi`), the rasters and the DEM (`script.geoserver_raster`,
    workspaces `varanasi_raster` / `varanasi`). Emission grids are calculated from database values and LULC on demand;
-   assistant-requested rasters are briefly published in `assistant_temp` and deleted after rendering.
+   assistant-requested rasters are published in `assistant_temp` and retained for interactive map zooming.
 
 Re-running it is safe: after a model change it migrates the tables, and existing data and source rasters are kept.
 
@@ -156,16 +156,18 @@ Re-running it is safe: after a model change it migrates the tables, and existing
 | `varanasi:khasra_parcels` | Khasra parcels from `media/Smulation data/varanasi.gpkg` (GeoPackage store) | Thin outline, zoomed in only |
 | `varanasi:up_dem` | Uttar Pradesh elevation model `media/DEM/UP_DEM.tif` (raster) | Elevation ramp (`up_dem.sld`) |
 
-The website's maps load the district, block and village boundaries from GeoServer **WFS** (GeoJSON). The API still
-reads the GeoPackage, DEM and LULC files from disk for the Carbon Lab 3D view and emission calculations.
+The website's maps load the district, block and village boundaries from GeoServer **WFS** (GeoJSON). LULC consumers
+read the shared `varanasi_raster:lulc_priority` coverage, built from the 2025 44R tile clipped to the Varanasi district.
+The same 10 m land-cover data powers the 3D parcel view and the on-demand emission grids (about 30 m cells).
 
 The rasters also appear on the dashboard's **Village Map** as `Raster: …` overlays in the layer control (with their
 legend), served through the frontend's `/geoserver` proxy.
 
-Every GeoTIFF in `media/Rasters/files/<group>/` is published as `varanasi_raster:<file name>`, styled with
-`media/Rasters/SLD/<group>/<file name>.sld`. To add a raster, drop the `.tif` and its `.sld` there (ready-made styles for rasters we don't have yet are in
-`media/unnecessary/Rasters/SLD/`) and run
-`docker compose exec fast_backend python -m script.geoserver_raster` (add `--replace` to re-upload changed files).
+The source land-cover tiles are `media/Rasters/43R_20250101-20251231.tif`, `44R_20250101-20251231.tif` and
+`45R_20250101-20251231.tif`. Varanasi is covered by UTM zone 44R. Its district clip is published as
+`varanasi_raster:lulc_priority` in the GeoServer data volume; the app reads that published layer. The publishing script
+builds a temporary district clip and style from 44R each time it runs, so no processed copy needs to be stored in
+`media/Rasters/`.
 
 Add them to QGIS via *Layer → Add WMS/WFS Layer* with `http://localhost:8080/geoserver/varanasi/wms` (or `/wfs`).
 Data lives in the `varanasi_pgdata` and `varanasi_geoserver` Docker volumes; `docker compose down -v` wipes them so the next start reloads all data and re-uploads the rasters.

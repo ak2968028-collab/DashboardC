@@ -31,7 +31,7 @@ services:
       # AI assistant: Ollama on the HP GPU PC, through the "ollama" service's tunnel.
       OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11435}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:7b}
-      OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL:-nomic-embed-text}
+      OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL-nomic-embed-text}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -129,7 +129,7 @@ services:
       SSH_PASSWORD: ${OLLAMA_SSH_PASSWORD:-}
       # Docker bridge address: reachable from the containers, not from the LAN.
       LISTEN: ${OLLAMA_TUNNEL_LISTEN:-172.17.0.1:11435}
-      MODELS: ${OLLAMA_MODEL:-qwen2.5:7b} ${OLLAMA_EMBED_MODEL:-nomic-embed-text}
+      MODELS: ${OLLAMA_MODEL:-qwen2.5:7b} ${OLLAMA_EMBED_MODEL-nomic-embed-text}
     volumes:
       - ./ollama/tunnel.sh:/ollama/tunnel.sh:ro
       - ${OLLAMA_SSH_KEY:-${HOME}/.ssh/ollama_hp_ed25519}:/run/secrets/ollama_key:ro

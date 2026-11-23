@@ -111,7 +111,6 @@ class Agent:
     def __init__(self, emit):
         self.emit = emit  # async callable(event dict)
         self.renders: list[asyncio.Task] = []  # images of maps / charts being saved to media/temp
-        self.temporary_rasters: set[str] = set()
 
     def _save_image(self, visual: dict):
         """Renders a map / chart visual to a PNG in media/temp in the background; emits its link when ready."""
@@ -232,9 +231,6 @@ class Agent:
                     logger.exception("Assistant: analyze_area failed")
                     result, visuals = {"error": f"{type(e).__name__}: {e}"}, []
                 for v in visuals:
-                    cleanup = v.pop("cleanup_layer", None)
-                    if cleanup:
-                        self.temporary_rasters.add(cleanup)
                     await self.emit({"type": "visual", "visual": v})
                     if v.get("kind") in ("map", "chart"):
                         self._save_image(v)
@@ -273,9 +269,6 @@ class Agent:
                             result, visuals = {"error": f"{type(e).__name__}: {e}"}, []
                         done_calls[signature] = result
                         for v in visuals:
-                            cleanup = v.pop("cleanup_layer", None)
-                            if cleanup:
-                                self.temporary_rasters.add(cleanup)
                             await self.emit({"type": "visual", "visual": v})
                             if v.get("kind") in ("map", "chart"):
                                 self._save_image(v)
@@ -284,12 +277,6 @@ class Agent:
             if self.renders:
                 await self.emit({"type": "status", "text": "Saving images…"})
                 await asyncio.gather(*self.renders, return_exceptions=True)
-            if self.temporary_rasters:
-                from fastapi.concurrency import run_in_threadpool
-                from app.api.service.geoserver_svc import emission_rasters
-
-                await asyncio.gather(*(run_in_threadpool(emission_rasters.delete_temporary, name)
-                                       for name in self.temporary_rasters), return_exceptions=True)
 
 
 async def stream_answer(question: str, history: list[dict], area: tuple[dict, object] | None = None) -> AsyncIterator[bytes]:
