@@ -310,3 +310,35 @@ export interface SupervisorVillage {
   village: CensusVillageDetails | null;
   current: SurveyValues | null;
 }
+
+export interface ResearchMetric {
+  value: string;
+  label: string;
+}
+
+export interface ResearchPoint {
+  number?: string;
+  title: string;
+  text: string;
+  citation?: string;
+}
+
+export interface ResearchPaper {
+  id: string;
+  folder: string;
+  title: string;
+  authors: string;
+  year: string;
+  journal: string;
+  doi?: string;
+  description: string;
+  paper_file?: string | null;
+  ppt_file?: string | null;
+  ppt_pdf?: string | null;
+  report_file?: string | null;
+  highlights_file?: string | null;
+  metrics: ResearchMetric[];
+  points: ResearchPoint[];
+  highlights_md?: string;
+  report_md?: string;
+}

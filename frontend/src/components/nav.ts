@@ -1,6 +1,7 @@
 import {
   BarChart3,
   Beef,
+  BookOpen,
   Bot,
   Bike,
   ClipboardEdit,
@@ -29,6 +30,8 @@ export type NavBadgeVariant = "success" | "warning" | "info" | "neutral" | "prim
 export interface NavPage {
   href: string;
   label: string;
+  /** Optional custom title displayed on the page hero banner. */
+  heroTitle?: string;
   icon: typeof Map;
   needsVillage: boolean;
   /** Only listed for this login role. */
@@ -136,6 +139,16 @@ export const PAGES: readonly NavPage[] = [
     hint: "News, field reports and research updates from the project team",
     accentColor: "#0d47a1",
     keywords: ["blog", "news", "updates", "articles", "posts"],
+  },
+  {
+    href: "/references",
+    label: "References",
+    heroTitle: "Research References",
+    icon: BookOpen,
+    needsVillage: false,
+    hint: "Explore research papers, presentations, key findings, and detailed reports.",
+    accentColor: "#059669",
+    keywords: ["references", "research", "papers", "academic", "presentations", "ppt", "reports", "highlights", "literature", "citations"],
   },
 
   // ── Sectors: one page, six tabs (SECTORS below) ───────────────────────────

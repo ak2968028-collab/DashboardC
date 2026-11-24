@@ -23,7 +23,7 @@ export default function PageHero({ page }: { page: NavPage }) {
         </nav>
         <div className="page-hero-row">
           <div className="page-hero-text">
-            <h1><span className="page-hero-icon"><Icon size={22} /></span>{page.label}</h1>
+            <h1><span className="page-hero-icon"><Icon size={22} /></span>{page.heroTitle ?? page.label}</h1>
             {page.hint && <p>{page.hint}</p>}
           </div>
           {page.needsVillage && v && (

@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.routes import admin, auth, blog, chat, data_io, district, emissions, geo, locations, supervisor, villages
+from app.api.routes import admin, auth, blog, chat, data_io, district, emissions, geo, locations, references, supervisor, villages
 
 app_router = APIRouter()
 
@@ -55,4 +55,9 @@ app_router.include_router(
     chat.router,
     prefix="/chat",
     tags=["AI Assistant"]
+)
+app_router.include_router(
+    references.router,
+    prefix="/references",
+    tags=["Research References"]
 )

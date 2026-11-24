@@ -3,7 +3,9 @@ import type { FeatureCollection } from "geojson";
 import type {
   CensusVillage, CensusVillageDetails, District, EmissionFactor, RasterFactor, RasterLayer, State, Submission, SubmissionDetails, Subdistrict, Summary,
   SupervisorVillage, SurveyField, User, Village, VillageDetails, VillageFactorStats, VillageScene, VillageElevation, EmissionGrid, BlogPost, BlogPostDetails,
+  ResearchPaper,
 } from "./types";
+import fallbackReferences from "@/data/references.json";
 
 export class ApiError extends Error {
   constructor(message: string, readonly status?: number) {
@@ -185,3 +187,35 @@ export const useSubmissions = (enabled: boolean, status: string) =>
   useAuthed<Submission[]>(enabled ? `/api/admin/submissions${status ? `?status=${status}` : ""}` : null);
 export const useSubmission = (id: number | null) =>
   useAuthed<SubmissionDetails>(id ? `/api/admin/submissions/${id}` : null);
+
+// ---------- Research References ----------
+export const useReferences = () =>
+  useSWR<ResearchPaper[]>("/api/references", fetcher, {
+    fallbackData: fallbackReferences as unknown as ResearchPaper[],
+    revalidateOnFocus: false,
+  });
+
+export const usePaperHighlights = (folder: string | null) => {
+  const fallback = folder
+    ? (fallbackReferences as unknown as ResearchPaper[]).find((p) => p.folder === folder)?.highlights_md ?? ""
+    : "";
+  return useSWR<{ folder: string; markdown: string }>(
+    folder ? `/api/references/${encodeURIComponent(folder)}/highlights` : null,
+    fetcher,
+    { fallbackData: folder ? { folder, markdown: fallback } : undefined, revalidateOnFocus: false }
+  );
+};
+
+export const usePaperReport = (folder: string | null) => {
+  const fallback = folder
+    ? (fallbackReferences as unknown as ResearchPaper[]).find((p) => p.folder === folder)?.report_md ?? ""
+    : "";
+  return useSWR<{ folder: string; markdown: string }>(
+    folder ? `/api/references/${encodeURIComponent(folder)}/report` : null,
+    fetcher,
+    { fallbackData: folder ? { folder, markdown: fallback } : undefined, revalidateOnFocus: false }
+  );
+};
+
+export const referenceFileUrl = (folder: string, type: "paper" | "ppt" | "report" | "highlights") =>
+  `/api/references/${encodeURIComponent(folder)}/file/${type}`;

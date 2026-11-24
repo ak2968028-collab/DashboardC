@@ -53,6 +53,8 @@ frontend/.next/
 Thumbs.db
 [Dd]esktop.ini
 .DS_Store
+~$*
+Reaserch_carbon
 
 # Service logs written by log_collector
 logs/*.log
