@@ -3472,6 +3472,16 @@ details.chat-visual .table-wrap { max-height: 280px; overflow: auto; margin-top:
   flex-shrink: 0;
 }
 
+.scalgo-panel-title-bar {
+  padding: 10px 14px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #173f28;
+  background: #ffffff;
+  border-bottom: 2px solid #173f28;
+  flex-shrink: 0;
+}
+
 .scalgo-panel-tabs.three {
   grid-template-columns: repeat(3, 1fr);
 }
@@ -4222,6 +4232,91 @@ details.chat-visual .table-wrap { max-height: 280px; overflow: auto; margin-top:
   text-align: center;
   color: #14532d;
   background: #f0fdf4;
+}
+
+/* Carbon Lab 3D SCALGO Workbench Adjustments */
+.scalgo-panel.scalgo-lab-left {
+  width: 300px;
+}
+
+.scalgo-panel.scalgo-lab-right {
+  width: 375px;
+}
+
+.scalgo-panel.scalgo-lab-left.collapsed,
+.scalgo-panel.scalgo-lab-right.collapsed {
+  width: 0;
+}
+
+.scalgo-sliders-body {
+  padding: 6px 10px 12px 10px;
+}
+
+.scalgo-lab-stage {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #eef2f5;
+  overflow-y: auto;
+}
+
+.scalgo-lab-bar {
+  flex-shrink: 0;
+  margin: 0;
+}
+
+.scalgo-lab-canvas-wrap {
+  flex: 1;
+  min-height: 320px;
+  display: flex;
+  flex-direction: column;
+}
+
+.scalgo-lab-canvas-wrap .lab-scene {
+  flex: 1;
+  height: 100%;
+  min-height: 320px;
+}
+
+.scalgo-lab-share {
+  flex-shrink: 0;
+}
+
+.scalgo-lab-metrics {
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.scalgo-lab-metrics .metric-card {
+  padding: 10px 12px;
+}
+
+.scalgo-lab-metrics .metric-val {
+  font-size: 20px;
+}
+
+@media (max-width: 1024px) {
+  .scalgo-panel.scalgo-lab-left,
+  .scalgo-panel.scalgo-lab-right {
+    width: 100%;
+  }
+
+  .scalgo-lab-stage {
+    height: auto;
+    overflow: visible;
+  }
+
+  .scalgo-lab-canvas-wrap .lab-scene {
+    height: 420px;
+  }
+
+  .scalgo-lab-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 1024px) {

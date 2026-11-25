@@ -55,9 +55,9 @@ export default function Shell({ children }: { children: ReactNode }) {
   }, []);
 
   // Login and role pages are work areas: no block / village selector.
-  // The home page has its own hero and filters; /map uses its own 3-pane GIS workbench; policy pages need no controls.
+  // The home page has its own hero and filters; /map and /visualize use the 3-pane workbench; policy pages need no controls.
   const isHome = pathname === "/";
-  const isMapWorkbench = pathname === "/map";
+  const isMapWorkbench = pathname === "/map" || pathname === "/visualize";
   // The block / village selector only where the page follows the selected village (and the ranking's block filter).
   const showControls = !!page && !isHome && !isMapWorkbench && !page.role && (page.needsVillage || pathname === "/ranking");
 

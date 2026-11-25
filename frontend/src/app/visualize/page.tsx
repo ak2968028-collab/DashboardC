@@ -1,11 +1,31 @@
 "use client";
 
 import { useMemo, useState, type CSSProperties } from "react";
-import { Beef, Bike, Flame, Fuel, Layers, Map as MapIcon, RotateCcw, Sprout, Trash2, TreePine, Zap, type LucideIcon } from "lucide-react";
+import {
+  Beef,
+  Bike,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Flame,
+  Fuel,
+  HelpCircle,
+  Info,
+  Layers,
+  Map as MapIcon,
+  RotateCcw,
+  Sprout,
+  Trash2,
+  TreePine,
+  X,
+  Zap,
+  type LucideIcon,
+} from "lucide-react";
 import CarbonLabScene, { SOURCE_COLORS, type Emissions, type SourceKey } from "@/components/CarbonLabScene";
+import { useDashboard } from "@/components/DashboardContext";
 import FactorPanel from "@/components/FactorPanel";
 import MitigationPanel, { DEFAULT_MITIGATION, type MitigationState } from "@/components/MitigationPanel";
-import { Badge, MetricCard, PageTitle, WithVillage } from "@/components/ui";
+import { MetricCard, WithVillage } from "@/components/ui";
 import { useEmissionFactors, useVillageScene } from "@/lib/api";
 import { fmt, num } from "@/lib/format";
 import type { NumericKey, VillageDetails } from "@/lib/types";
@@ -25,11 +45,9 @@ interface Source {
   key: SourceKey;
   label: string;
   icon: LucideIcon;
-  /** Picture from public/icon, shown instead of `icon` when present. */
   img?: string;
   field: NumericKey;
   unit: string;
-  /** Activity is reported per month and multiplied by 12. */
   monthly: boolean;
   factorUnit: string;
   minMax: number;
@@ -82,7 +100,6 @@ const SOURCES: Source[] = [
 
 type Activity = Record<SourceKey, number>;
 
-// 1 kg LPG delivers about as much useful cooking heat as ~11.5 kg of wood in a traditional chulha.
 const SCENARIOS: { name: string; hint: string; apply: (a: Activity) => Activity }[] = [
   { name: "Clean cooking", hint: "Swap firewood for LPG", apply: (a) => ({ ...a, firewood: 0, lpg: a.lpg + a.firewood / 11.5 }) },
   { name: "Rooftop solar", hint: "−60% grid power", apply: (a) => ({ ...a, electricity: a.electricity * 0.4 }) },
@@ -104,10 +121,38 @@ export default function VisualizePage() {
 }
 
 function CarbonLab({ village }: { village: VillageDetails }) {
+  const {
+    states,
+    districts,
+    subdistricts,
+    stateCode,
+    districtCode,
+    subdistrictCode,
+    setStateCode,
+    setDistrictCode,
+    setSubdistrictCode,
+    areaLabel,
+    placeOptions,
+    selectedCode,
+    setSelectedCode,
+  } = useDashboard();
+
   const { data: factorRows } = useEmissionFactors();
   const { data: scene, isLoading: sceneLoading } = useVillageScene(village.village_code);
   const [useReal, setUseReal] = useState(true);
   const realLayout = useReal ? scene ?? null : null;
+
+  // SCALGO 3-pane UI state
+  const [leftOpen, setLeftOpen] = useState(true);
+  const [rightOpen, setRightOpen] = useState(true);
+  const [rightTab, setRightTab] = useState<"mitigation" | "raster" | "insight">("mitigation");
+  const [showHelp, setShowHelp] = useState(false);
+  const [openSections, setOpenSections] = useState({
+    location: true,
+    scenarios: true,
+    sliders: true,
+  });
+
   const factors = useMemo(() => {
     const f = { ...DEFAULT_FACTORS };
     for (const row of factorRows ?? []) {
@@ -125,15 +170,11 @@ function CarbonLab({ village }: { village: VillageDetails }) {
   const [focus, setFocus] = useState<SourceKey | null>("firewood");
   const [scenario, setScenario] = useState<string | null>(null);
   const [mitigation, setMitigation] = useState<MitigationState>(DEFAULT_MITIGATION);
-  const [rightTab, setRightTab] = useState<"mitigation" | "raster">("mitigation");
 
   const toEmissions = (a: Activity) => Object.fromEntries(SOURCES.map((s) => [s.key, tonnes(s, a[s.key], factors[s.key])])) as Emissions;
   const baseline = useMemo(() => toEmissions(baseActivity), [baseActivity, factors]);
   const emissions = useMemo(() => toEmissions(activity), [activity, factors]);
-  const baseTotal = Object.values(baseline).reduce((a, b) => a + b, 0);
   const total = Object.values(emissions).reduce((a, b) => a + b, 0);
-  const change = baseTotal > 0 ? ((total - baseTotal) / baseTotal) * 100 : 0;
-  const residents = num(village.total_residents);
   const focused = SOURCES.find((s) => s.key === focus);
 
   // Carbon sequestration from trees and clean intervention factors
@@ -152,61 +193,284 @@ function CarbonLab({ village }: { village: VillageDetails }) {
     setScenario(null);
   };
 
+  const resetAll = () => {
+    setActivity(baseActivity);
+    setScenario(null);
+    setMitigation(DEFAULT_MITIGATION);
+  };
+
+  const toggleSection = (key: keyof typeof openSections) =>
+    setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
+
+  const openRightTab = (tab: "mitigation" | "raster" | "insight") => {
+    setRightTab(tab);
+    setRightOpen(true);
+  };
+
   return (
-    <>
-      <PageTitle>🧪 Carbon Lab: See What Each Emission Source Does</PageTitle>
-      <Badge kind="derived">INTERACTIVE SIMULATION · IPCC TIER-1 FACTORS</Badge>
-      <p className="caption lab-intro">
-        Move the sliders to change how much of each activity happens in <b>{village.village_name}</b>. The 3D village shows where the gas
-        comes from and how it builds up in the atmosphere. Values start from the village survey.
-      </p>
-
-      <div className="lab">
-        <aside className="lab-panel">
-          <div className="lab-panel-head">
-            <h4>Emission parameters</h4>
-            <button type="button" className="btn-ghost" onClick={() => { setActivity(baseActivity); setScenario(null); }}>
-              <RotateCcw size={14} /> Survey values
-            </button>
+    <div className="scalgo-workbench">
+      {/* Top Dark Forest-Green Workbench Bar */}
+      <header className="scalgo-topbar">
+        <div className="scalgo-topbar-left">
+          <span className="scalgo-brand-dot" aria-hidden />
+          <div className="scalgo-brand-text">
+            <span className="scalgo-brand-title">Carbon Lab 3D Workbench</span>
+            <span className="scalgo-brand-sub">
+              {areaLabel || "Varanasi District"} · {village.village_name}
+            </span>
           </div>
+        </div>
 
-          <div className="lab-scenarios">
-            {SCENARIOS.map((sc) => (
-              <button key={sc.name} type="button" className={`lab-chip ${scenario === sc.name ? "active" : ""}`} title={sc.hint}
-                onClick={() => { setActivity(sc.apply(baseActivity)); setScenario(sc.name); }}>
-                {sc.name === "Unchecked growth" ? "📈" : <Sprout size={13} />} {sc.name}
-              </button>
-            ))}
-          </div>
+        <div className="scalgo-topbar-tools" role="toolbar" aria-label="Simulation tools">
+          <button
+            type="button"
+            className={`scalgo-tool-btn ${rightOpen && rightTab === "mitigation" ? "active" : ""}`}
+            onClick={() => openRightTab("mitigation")}
+            title="Positive Mitigation & Trees"
+          >
+            <Sprout size={16} />
+            <span>Mitigation</span>
+          </button>
 
-          {SOURCES.map((s) => {
-            const max = Math.max(s.minMax, baseActivity[s.key] * 3);
-            const step = max > 500 ? roundTo(max / 200, 5) || 1 : 1;
-            const value = activity[s.key];
-            const e = emissions[s.key];
-            const delta = e - baseline[s.key];
-            return (
-              <div key={s.key} className={`lab-param ${focus === s.key ? "active" : ""}`} style={{ "--src": SOURCE_COLORS[s.key] } as CSSProperties}
-                onClick={() => setFocus(s.key)}>
-                <div className="lab-param-top">
-                  <span className="lab-param-name"><SourceIcon source={s} size={18} /> {s.label}</span>
-                  <span className="lab-param-t">{fmt(e, 1)} t</span>
-                </div>
-                <input type="range" min={0} max={max} step={step} value={value} aria-label={`${s.label} (${s.unit})`}
-                  onChange={(ev) => set(s.key, Number(ev.target.value))} onFocus={() => setFocus(s.key)} />
-                <div className="lab-param-foot">
-                  <span>{fmt(value)} {s.unit}</span>
-                  {Math.abs(delta) >= 0.05 && (
-                    <span className={delta > 0 ? "up" : "down"}>{delta > 0 ? "+" : ""}{fmt(delta, 1)} t vs survey</span>
-                  )}
-                </div>
+          <button
+            type="button"
+            className={`scalgo-tool-btn ${rightOpen && rightTab === "raster" ? "active" : ""}`}
+            onClick={() => openRightTab("raster")}
+            title="Spatial Emission Raster"
+          >
+            <Layers size={16} />
+            <span>Spatial Raster</span>
+          </button>
+
+          <button
+            type="button"
+            className={`scalgo-tool-btn ${rightOpen && rightTab === "insight" ? "active" : ""}`}
+            onClick={() => openRightTab("insight")}
+            title="Focused Source Formula & Impact"
+          >
+            <Info size={16} />
+            <span>Source Info</span>
+          </button>
+        </div>
+
+        <div className="scalgo-topbar-right">
+          <button
+            type="button"
+            className="scalgo-tool-btn"
+            onClick={resetAll}
+            title="Reset sliders and mitigation to survey values"
+          >
+            <RotateCcw size={15} />
+            <span>Reset</span>
+          </button>
+          <button
+            type="button"
+            className={`scalgo-tool-btn ${showHelp ? "active" : ""}`}
+            onClick={() => setShowHelp((h) => !h)}
+            title="Simulation guide"
+          >
+            <HelpCircle size={15} />
+            <span>Help</span>
+          </button>
+        </div>
+      </header>
+
+      {showHelp && (
+        <div className="scalgo-help-banner">
+          <span>
+            <b>Carbon Lab 3D:</b> Adjust emission sliders or pick scenarios in the <b>Left Panel</b> to see live 3D plumes for <b>{village.village_name}</b>.
+            Use the <b>Right Panel</b> for <b>Mitigation &amp; Trees</b>, <b>Spatial Rasters</b>, and <b>Source Formulas</b>.
+          </span>
+          <button type="button" onClick={() => setShowHelp(false)} aria-label="Dismiss help">
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
+      {/* 3-Pane Split Workspace */}
+      <div className="scalgo-body">
+        {/* LEFT PANEL: Parameters, Scenarios & Location */}
+        <aside className={`scalgo-panel left scalgo-lab-left ${leftOpen ? "open" : "collapsed"}`} aria-label="Emission Parameters and Location">
+          {leftOpen && (
+            <div className="scalgo-panel-inner">
+              <div className="scalgo-panel-title-bar">
+                <span>Location &amp; Parameters</span>
               </div>
-            );
-          })}
+
+              <div className="scalgo-panel-scroll">
+                {/* Location Switcher Accordion */}
+                  <div className="scalgo-section">
+                    <button
+                      type="button"
+                      className="scalgo-section-head"
+                      onClick={() => toggleSection("location")}
+                      aria-expanded={openSections.location}
+                    >
+                      {openSections.location ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                      <span>Location ({village.village_name})</span>
+                    </button>
+                    {openSections.location && (
+                      <div className="scalgo-section-body">
+                        <label className="scalgo-field">
+                          <span>State</span>
+                          <select value={stateCode ?? ""} onChange={(e) => setStateCode(e.target.value ? Number(e.target.value) : null)}>
+                            <option value="" disabled>Select state…</option>
+                            {states.map((s) => (
+                              <option key={s.state_code} value={s.state_code}>{s.state_name}</option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="scalgo-field">
+                          <span>District</span>
+                          <select
+                            value={districtCode ?? ""}
+                            disabled={!stateCode}
+                            onChange={(e) => setDistrictCode(e.target.value ? Number(e.target.value) : null)}
+                          >
+                            <option value="" disabled>Select district…</option>
+                            {districts.map((d) => (
+                              <option key={d.district_code} value={d.district_code}>{d.district_name}</option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="scalgo-field">
+                          <span>Sub-district / Block</span>
+                          <select
+                            value={subdistrictCode ?? ""}
+                            disabled={!districtCode}
+                            onChange={(e) => setSubdistrictCode(e.target.value ? Number(e.target.value) : null)}
+                          >
+                            <option value="">All sub-districts</option>
+                            {subdistricts.map((s) => (
+                              <option key={s.subdistrict_code} value={s.subdistrict_code}>{s.subdistrict_name}</option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="scalgo-field">
+                          <span>Selected Village</span>
+                          <select
+                            value={selectedCode ?? ""}
+                            disabled={!placeOptions.length}
+                            onChange={(e) => e.target.value && setSelectedCode(e.target.value)}
+                          >
+                            <option value="" disabled>Select village…</option>
+                            {placeOptions.map((p) => (
+                              <option key={p.village_code} value={p.village_code}>
+                                {p.village_name}{p.survey ? "" : " (No survey)"}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Quick Scenarios Accordion */}
+                  <div className="scalgo-section">
+                    <button
+                      type="button"
+                      className="scalgo-section-head"
+                      onClick={() => toggleSection("scenarios")}
+                      aria-expanded={openSections.scenarios}
+                    >
+                      {openSections.scenarios ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                      <span>What-If Scenarios</span>
+                    </button>
+                    {openSections.scenarios && (
+                      <div className="scalgo-section-body">
+                        <div className="lab-scenarios" style={{ borderBottom: "none", paddingBottom: 0 }}>
+                          {SCENARIOS.map((sc) => (
+                            <button
+                              key={sc.name}
+                              type="button"
+                              className={`lab-chip ${scenario === sc.name ? "active" : ""}`}
+                              title={sc.hint}
+                              onClick={() => { setActivity(sc.apply(baseActivity)); setScenario(sc.name); }}
+                            >
+                              {sc.name === "Unchecked growth" ? "📈" : <Sprout size={12} />} {sc.name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Emission Sliders Accordion */}
+                  <div className="scalgo-section">
+                    <button
+                      type="button"
+                      className="scalgo-section-head"
+                      onClick={() => toggleSection("sliders")}
+                      aria-expanded={openSections.sliders}
+                    >
+                      {openSections.sliders ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                      <span>Emission Parameters (8)</span>
+                    </button>
+                    {openSections.sliders && (
+                      <div className="scalgo-section-body scalgo-sliders-body">
+                        {SOURCES.map((s) => {
+                          const max = Math.max(s.minMax, baseActivity[s.key] * 3);
+                          const step = max > 500 ? roundTo(max / 200, 5) || 1 : 1;
+                          const value = activity[s.key];
+                          const e = emissions[s.key];
+                          const delta = e - baseline[s.key];
+                          return (
+                            <div
+                              key={s.key}
+                              className={`lab-param ${focus === s.key ? "active" : ""}`}
+                              style={{ "--src": SOURCE_COLORS[s.key] } as CSSProperties}
+                              onClick={() => setFocus(s.key)}
+                            >
+                              <div className="lab-param-top">
+                                <span className="lab-param-name"><SourceIcon source={s} size={17} /> {s.label}</span>
+                                <span className="lab-param-t">{fmt(e, 1)} t</span>
+                              </div>
+                              <input
+                                type="range"
+                                min={0}
+                                max={max}
+                                step={step}
+                                value={value}
+                                aria-label={`${s.label} (${s.unit})`}
+                                onChange={(ev) => set(s.key, Number(ev.target.value))}
+                                onFocus={() => setFocus(s.key)}
+                              />
+                              <div className="lab-param-foot">
+                                <span>{fmt(value)} {s.unit}</span>
+                                {Math.abs(delta) >= 0.05 && (
+                                  <span className={delta > 0 ? "up" : "down"}>
+                                    {delta > 0 ? "+" : ""}{fmt(delta, 1)} t vs survey
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+              <div className="scalgo-panel-foot">
+                <span>Gross: <b>{fmt(total, 1)} t</b> · Net: <b>{fmt(netEmissions, 1)} t</b></span>
+              </div>
+            </div>
+          )}
+
+          <button
+            type="button"
+            className="scalgo-collapse-btn right"
+            onClick={() => setLeftOpen((o) => !o)}
+            aria-label={leftOpen ? "Collapse left panel" : "Expand left panel"}
+            title={leftOpen ? "Hide Parameters" : "Show Parameters"}
+          >
+            {leftOpen ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
+          </button>
         </aside>
 
-        <section className="lab-main">
-          <div className="lab-layout-bar">
+        {/* CENTER 3D SCENE STAGE */}
+        <main className="scalgo-lab-stage">
+          <div className="lab-layout-bar scalgo-lab-bar">
             <span>
               <MapIcon size={14} />{" "}
               {sceneLoading ? "Loading cadastral layout…"
@@ -227,25 +491,32 @@ function CarbonLab({ village }: { village: VillageDetails }) {
               </span>
             )}
           </div>
-          <CarbonLabScene
-            emissions={emissions}
-            baseline={baseline}
-            focus={focus}
-            onPick={setFocus}
-            village={realLayout}
-            plantedTrees={mitigation.trees}
-            netEmissions={netEmissions}
-            sequesteredCO2={treeSequestered}
-          />
 
-          <div className="lab-share" aria-label="Share of emissions by source">
+          <div className="scalgo-lab-canvas-wrap">
+            <CarbonLabScene
+              emissions={emissions}
+              baseline={baseline}
+              focus={focus}
+              onPick={setFocus}
+              village={realLayout}
+              plantedTrees={mitigation.trees}
+              netEmissions={netEmissions}
+              sequesteredCO2={treeSequestered}
+            />
+          </div>
+
+          <div className="lab-share scalgo-lab-share" aria-label="Share of emissions by source">
             {SOURCES.map((s) => total > 0 && emissions[s.key] > 0 && (
-              <span key={s.key} style={{ flexGrow: emissions[s.key], background: SOURCE_COLORS[s.key] }}
-                title={`${s.label}: ${fmt((emissions[s.key] / total) * 100, 1)}%`} onClick={() => setFocus(s.key)} />
+              <span
+                key={s.key}
+                style={{ flexGrow: emissions[s.key], background: SOURCE_COLORS[s.key] }}
+                title={`${s.label}: ${fmt((emissions[s.key] / total) * 100, 1)}%`}
+                onClick={() => setFocus(s.key)}
+              />
             ))}
           </div>
 
-          <div className="lab-metrics">
+          <div className="lab-metrics scalgo-lab-metrics">
             <MetricCard label="Gross Emissions" color="#d32f2f" value={`${fmt(total, 1)} t`} sub="t CO₂e / year (baseline)" />
             <MetricCard
               label="Mitigated & Absorbed"
@@ -262,71 +533,99 @@ function CarbonLab({ village }: { village: VillageDetails }) {
             <MetricCard
               label="Trees to Absorb Remainder"
               color="#2e7d32"
-              value={<><TreePine size={18} /> {fmt(Math.max(0, Math.ceil((netEmissions * 1000) / TREE_KG_YR)))}</>}
+              value={<><TreePine size={16} /> {fmt(Math.max(0, Math.ceil((netEmissions * 1000) / TREE_KG_YR)))}</>}
               sub={`at ~${TREE_KG_YR} kg CO₂ / tree / yr`}
             />
           </div>
+        </main>
 
-          {focused && (
-            <div className="lab-effect" style={{ "--src": SOURCE_COLORS[focused.key] } as CSSProperties}>
-              <div className="lab-effect-head">
-                <h4><SourceIcon source={focused} size={24} /> {focused.label}: what happens</h4>
-                <span className="lab-gas">{focused.gases}</span>
+        {/* RIGHT PANEL: Mitigation, Spatial Raster & Source Insight */}
+        <aside className={`scalgo-panel right scalgo-lab-right ${rightOpen ? "open" : "collapsed"}`} aria-label="Mitigation and Raster Panel">
+          <button
+            type="button"
+            className="scalgo-collapse-btn left"
+            onClick={() => setRightOpen((o) => !o)}
+            aria-label={rightOpen ? "Collapse right panel" : "Expand right panel"}
+            title={rightOpen ? "Hide Right Panel" : "Show Right Panel"}
+          >
+            {rightOpen ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+          </button>
+
+          {rightOpen && (
+            <div className="scalgo-panel-inner">
+              <div className="scalgo-panel-tabs three">
+                <button
+                  type="button"
+                  className={`scalgo-tab ${rightTab === "mitigation" ? "active" : ""}`}
+                  onClick={() => setRightTab("mitigation")}
+                >
+                  Mitigation
+                </button>
+                <button
+                  type="button"
+                  className={`scalgo-tab ${rightTab === "raster" ? "active" : ""}`}
+                  onClick={() => setRightTab("raster")}
+                >
+                  Spatial Raster
+                </button>
+                <button
+                  type="button"
+                  className={`scalgo-tab ${rightTab === "insight" ? "active" : ""}`}
+                  onClick={() => setRightTab("insight")}
+                >
+                  Source Info
+                </button>
               </div>
-              <p>{focused.effect}</p>
-              <div className="formula">
-                {fmt(activity[focused.key])} {focused.unit}{focused.monthly ? " × 12" : ""} × {factors[focused.key]} {focused.factorUnit} ÷ 1000
-                = <b>{fmt(emissions[focused.key], 2)} t CO₂e/yr</b>
-                {total > 0 && <> ({fmt((emissions[focused.key] / total) * 100, 1)}% of the village)</>}
+
+              <div className="scalgo-inspector-scroll">
+                {rightTab === "mitigation" && (
+                  <MitigationPanel
+                    village={village}
+                    grossEmissions={emissions}
+                    mitigation={mitigation}
+                    onChange={setMitigation}
+                  />
+                )}
+
+                {rightTab === "raster" && (
+                  <FactorPanel
+                    villageCode={village.village_code}
+                    villageName={village.village_name}
+                    focus={focus}
+                    emissions={emissions}
+                    baseline={baseline}
+                  />
+                )}
+
+                {rightTab === "insight" && (
+                  focused ? (
+                    <div className="lab-effect" style={{ "--src": SOURCE_COLORS[focused.key] } as CSSProperties}>
+                      <div className="lab-effect-head">
+                        <h4><SourceIcon source={focused} size={22} /> {focused.label}</h4>
+                        <span className="lab-gas">{focused.gases}</span>
+                      </div>
+                      <p>{focused.effect}</p>
+                      <div className="formula">
+                        {fmt(activity[focused.key])} {focused.unit}{focused.monthly ? " × 12" : ""} × {factors[focused.key]} {focused.factorUnit} ÷ 1000
+                        = <b>{fmt(emissions[focused.key], 2)} t CO₂e/yr</b>
+                        {total > 0 && <> ({fmt((emissions[focused.key] / total) * 100, 1)}% of the village)</>}
+                      </div>
+                      <p className="caption">
+                        <Fuel size={12} /> Cutting this source by half would save about <b>{fmt(emissions[focused.key] / 2, 1)} t CO₂e</b> a year,
+                        which is the yearly uptake of ~{fmt((emissions[focused.key] * 500) / TREE_KG_YR)} trees.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="scalgo-empty-inspector">
+                      <p>Click any emission slider on the left or a source inside the 3D village to inspect its IPCC Tier-1 formula.</p>
+                    </div>
+                  )
+                )}
               </div>
-              <p className="caption">
-                <Fuel size={12} /> Cutting this source by half would save about <b>{fmt(emissions[focused.key] / 2, 1)} t CO₂e</b> a year,
-                which is the yearly uptake of ~{fmt((emissions[focused.key] * 500) / TREE_KG_YR)} trees.
-              </p>
             </div>
           )}
-        </section>
-
-        <div className="lab-right-panel">
-          <div className="lab-right-tabs" role="tablist">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={rightTab === "mitigation"}
-              className={`lab-tab-btn ${rightTab === "mitigation" ? "active" : ""}`}
-              onClick={() => setRightTab("mitigation")}
-            >
-              <Sprout size={14} /> Positive Mitigation & Trees
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={rightTab === "raster"}
-              className={`lab-tab-btn ${rightTab === "raster" ? "active" : ""}`}
-              onClick={() => setRightTab("raster")}
-            >
-              <Layers size={14} /> Spatial Raster
-            </button>
-          </div>
-
-          {rightTab === "mitigation" ? (
-            <MitigationPanel
-              village={village}
-              grossEmissions={emissions}
-              mitigation={mitigation}
-              onChange={setMitigation}
-            />
-          ) : (
-            <FactorPanel
-              villageCode={village.village_code}
-              villageName={village.village_name}
-              focus={focus}
-              emissions={emissions}
-              baseline={baseline}
-            />
-          )}
-        </div>
+        </aside>
       </div>
-    </>
+    </div>
   );
 }

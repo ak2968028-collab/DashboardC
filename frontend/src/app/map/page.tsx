@@ -18,7 +18,6 @@ import {
   MapPin,
   RotateCcw,
   Scale,
-  Search,
   Trophy,
   X,
 } from "lucide-react";
@@ -102,10 +101,8 @@ export default function MapPage() {
   // Workbench UI state
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
-  const [leftTab, setLeftTab] = useState<"layers" | "villages">("layers");
   const [rightTab, setRightTab] = useState<RightTab>("overview");
   const [sectorKey, setSectorKey] = useState<string>(SECTORS[0].key);
-  const [villageQuery, setVillageQuery] = useState("");
   const [showHelp, setShowHelp] = useState(false);
 
   // Support deep links like /map?tab=carbon, /map?tab=ranking, /map?tab=sectors&s=energy
@@ -152,19 +149,6 @@ export default function MapPage() {
     [subdistrictCode, areaLabel, filteredVillages]
   );
 
-  // Villages shown inside left panel search/list
-  const listedVillages = useMemo(() => {
-    const q = villageQuery.trim().toLowerCase();
-    const base = filteredVillages.length ? filteredVillages : allVillages;
-    if (!q) return base;
-    return base.filter(
-      (item) =>
-        item.village_name.toLowerCase().includes(q) ||
-        item.block_name.toLowerCase().includes(q) ||
-        (showCodes && item.village_code.toLowerCase().includes(q))
-    );
-  }, [filteredVillages, allVillages, villageQuery, showCodes]);
-
   const toggleSection = (key: keyof typeof openSections) =>
     setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
 
@@ -178,7 +162,6 @@ export default function MapPage() {
 
   const resetWorkbench = () => {
     setSubdistrictCode(null);
-    setVillageQuery("");
     setMetricIdx(0);
     setBaseMap("topo");
     setShowDistrictBoundary(true);
@@ -385,26 +368,12 @@ export default function MapPage() {
         <aside className={`scalgo-panel left ${leftOpen ? "open" : "collapsed"}`} aria-label="Locations and Layers">
           {leftOpen && (
             <div className="scalgo-panel-inner">
-              <div className="scalgo-panel-tabs">
-                <button
-                  type="button"
-                  className={`scalgo-tab ${leftTab === "layers" ? "active" : ""}`}
-                  onClick={() => setLeftTab("layers")}
-                >
-                  Location &amp; Layers
-                </button>
-                <button
-                  type="button"
-                  className={`scalgo-tab ${leftTab === "villages" ? "active" : ""}`}
-                  onClick={() => setLeftTab("villages")}
-                >
-                  Villages ({listedVillages.length})
-                </button>
+              <div className="scalgo-panel-title-bar">
+                <span>Locations &amp; Layers</span>
               </div>
 
-              {leftTab === "layers" ? (
-                <div className="scalgo-panel-scroll">
-                  {/* Accordion 1: Location Selector */}
+              <div className="scalgo-panel-scroll">
+                {/* Accordion 1: Location Selector */}
                   <div className="scalgo-section">
                     <button
                       type="button"
@@ -578,46 +547,6 @@ export default function MapPage() {
                     )}
                   </div>
                 </div>
-              ) : (
-                <div className="scalgo-villages-pane">
-                  <div className="scalgo-search-wrap">
-                    <Search size={14} className="scalgo-search-icon" />
-                    <input
-                      type="text"
-                      placeholder="Filter villages by name or block…"
-                      value={villageQuery}
-                      onChange={(e) => setVillageQuery(e.target.value)}
-                    />
-                    {villageQuery && (
-                      <button type="button" onClick={() => setVillageQuery("")} aria-label="Clear search">
-                        <X size={13} />
-                      </button>
-                    )}
-                  </div>
-                  <div className="scalgo-village-list">
-                    {listedVillages.map((item) => {
-                      const active = item.village_code === selectedCode;
-                      return (
-                        <button
-                          key={item.village_code}
-                          type="button"
-                          className={`scalgo-village-row ${active ? "active" : ""}`}
-                          onClick={() => setSelectedCode(item.village_code)}
-                        >
-                          <div className="scalgo-vrow-main">
-                            <span className="scalgo-vrow-name">{item.village_name}</span>
-                            <span className="scalgo-vrow-sub">{item.block_name}</span>
-                          </div>
-                          <span className="scalgo-vrow-val">{fmt(item.total_co2e_t_yr, 0)} t</span>
-                        </button>
-                      );
-                    })}
-                    {listedVillages.length === 0 && (
-                      <div className="scalgo-muted-note">No villages match your filter.</div>
-                    )}
-                  </div>
-                </div>
-              )}
 
               <div className="scalgo-panel-foot">
                 <Layers size={14} />
