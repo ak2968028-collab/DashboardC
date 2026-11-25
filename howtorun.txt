@@ -1,0 +1,63 @@
+============================================================
+HOW TO RUN — VARANASI CARBON DASHBOARD (DashboardC)
+============================================================
+
+1. FIRST TIME SETUP (from project root: DashboardC/)
+------------------------------------------------------------
+# Step 1: Build and start Docker services (database, fast_backend, geoserver, cloudflared, ollama, log_collector)
+docker compose up -d --build
+
+# Step 2: Run migrations, load database data, and publish GeoServer layers
+cd fast_backend
+bash start.sh
+cd ..
+
+# Step 3: Start the Next.js frontend (frontend service is commented out in docker-compose.yml)
+cd frontend
+npm install
+npm run dev
+
+
+2. NEXT TIME / NORMAL RESTART (keeps existing database & GeoServer data)
+------------------------------------------------------------
+# Stop containers (keeps volumes)
+docker compose down
+
+# Start containers again (no need to run start.sh again)
+docker compose up -d
+
+# Start frontend
+cd frontend
+npm run dev
+
+# Tip: If you only edited Python files in fast_backend/, just restart fast_backend:
+docker compose restart fast_backend
+
+# Tip: If you edited Dockerfile or requirements.txt, rebuild:
+docker compose up -d --build
+
+
+3. IF YOU RUN "docker compose down -v" (wipes all database & GeoServer volumes)
+------------------------------------------------------------
+# Warning: -v deletes all Postgres and GeoServer data!
+docker compose down -v
+
+# Start fresh and re-run start.sh to reload data & GeoServer layers
+docker compose up -d --build
+cd fast_backend
+bash start.sh
+cd ..
+
+
+4. FULL RESET (removes containers, volumes, images & caches)
+------------------------------------------------------------
+./del.sh
+# Then follow Section 1 (First Time Setup) again.
+
+
+5. SERVICE URLs
+------------------------------------------------------------
+Frontend (Next.js) : http://localhost:3000
+Backend API Docs   : http://localhost:8000/docs
+GeoServer          : http://localhost:8080/geoserver
+PostgreSQL/PostGIS : localhost:5432 (db/user: varanasi)
