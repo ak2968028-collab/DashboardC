@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { useReferences, referenceFileUrl } from "@/lib/api";
 import type { ResearchPaper } from "@/lib/types";
-import ReadingView from "@/components/AcademicReader";
+import ReadingView, { type ReadingMode } from "@/components/AcademicReader";
 
 export default function ReferencesPage() {
   const { data: papers = [], isLoading } = useReferences();
@@ -28,7 +28,8 @@ export default function ReferencesPage() {
   const [selectedYear, setSelectedYear] = useState<string>("All");
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [readingPaper, setReadingPaper] = useState<ResearchPaper | null>(null);
-  const [readingMode, setReadingMode] = useState<"highlights" | "report">("highlights");
+  const [readingMode, setReadingMode] = useState<ReadingMode>("highlights");
+  const [sideDoc, setSideDoc] = useState<{ paper: ResearchPaper; mode: "paper" | "ppt" } | null>(null);
 
   // Available publication years
   const availableYears = useMemo(() => {
@@ -88,8 +89,32 @@ export default function ReferencesPage() {
     };
   }, [readingPaper]);
 
+  // Escape key closes side PDF/PPT viewer and resets layout
+  useEffect(() => {
+    if (!sideDoc || readingPaper) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSideDoc(null);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [sideDoc, readingPaper]);
+
+  const sideEmbedUrl = sideDoc
+    ? sideDoc.mode === "paper" && sideDoc.paper.paper_file
+      ? referenceFileUrl(sideDoc.paper.folder, "paper")
+      : sideDoc.mode === "ppt" && sideDoc.paper.ppt_pdf
+        ? referenceFileUrl(sideDoc.paper.folder, "ppt_pdf")
+        : null
+    : null;
+
+  const sideDownloadUrl = sideDoc
+    ? sideDoc.mode === "paper" && sideDoc.paper.paper_file
+      ? referenceFileUrl(sideDoc.paper.folder, "paper")
+      : referenceFileUrl(sideDoc.paper.folder, sideDoc.paper.ppt_file ? "ppt" : "ppt_pdf")
+    : null;
+
   return (
-    <div className="references-page">
+    <div className={`references-page ${sideDoc ? "has-side-viewer" : ""}`}>
       {/* Search, Filter & Toolbar Bar */}
       <div className="references-toolbar">
         <div className="references-search-box">
@@ -172,14 +197,17 @@ export default function ReferencesPage() {
           )}
         </div>
       ) : (
-        <div className="references-vertical-list">
-          {filteredPapers.map((paper, index) => {
-            const isExpanded = expandedIds.has(paper.id);
-            return (
-              <article
-                key={paper.id}
-                className={`research-paper-card ${isExpanded ? "expanded" : ""}`}
-              >
+        <div className={`references-workspace ${sideDoc ? "split" : ""}`}>
+          <div className="references-list-pane">
+            <div className="references-vertical-list">
+              {filteredPapers.map((paper, index) => {
+                const isExpanded = expandedIds.has(paper.id);
+                const isSideActive = sideDoc?.paper.id === paper.id;
+                return (
+                  <article
+                    key={paper.id}
+                    className={`research-paper-card ${isExpanded ? "expanded" : ""} ${isSideActive ? "active-doc" : ""}`}
+                  >
                 {/* Clickable Card Header */}
                 <div
                   className="paper-card-header"
@@ -247,18 +275,28 @@ export default function ReferencesPage() {
                       </p>
                     </div>
 
-                    {/* 2. Original Research Paper Link */}
+                    {/* 2. Original Research Paper Link (Opens on right side in same page) */}
                     <div className="paper-original-link-row">
-                      {paper.doi || paper.paper_file ? (
+                      {paper.paper_file ? (
+                        <button
+                          type="button"
+                          className={`paper-original-link ${isSideActive && sideDoc?.mode === "paper" ? "active" : ""}`}
+                          onClick={() => setSideDoc({ paper, mode: "paper" })}
+                          title="Open original research paper (PDF) on the right side"
+                        >
+                          <FileText size={15} className="link-icon" />
+                          <span>Open Original Research Paper (PDF)</span>
+                        </button>
+                      ) : paper.doi ? (
                         <a
-                          href={paper.doi || (paper.paper_file ? referenceFileUrl(paper.folder, "paper") : "#")}
+                          href={paper.doi}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="paper-original-link"
                           title="Access original research paper"
                         >
                           <FileText size={15} className="link-icon" />
-                          <span>Access Original Research Paper (PDF)</span>
+                          <span>Access Original Research Paper (DOI)</span>
                           <ExternalLink size={13} className="link-ext" />
                         </a>
                       ) : (
@@ -271,18 +309,17 @@ export default function ReferencesPage() {
 
                     {/* 3. Three Horizontal Options Row */}
                     <div className="paper-options-row">
-                      {/* Option 1: PPT */}
-                      {paper.ppt_file ? (
-                        <a
-                          href={referenceFileUrl(paper.folder, "ppt")}
-                          download
-                          className="paper-option-link opt-ppt"
-                          title="Download and open presentation (.pptx)"
+                      {/* Option 1: PPT (Opens on right side in same page) */}
+                      {paper.ppt_pdf || paper.ppt_file ? (
+                        <button
+                          type="button"
+                          className={`paper-option-link opt-ppt ${isSideActive && sideDoc?.mode === "ppt" ? "active" : ""}`}
+                          onClick={() => setSideDoc({ paper, mode: "ppt" })}
+                          title="Open presentation slides on the right side"
                         >
                           <Presentation size={15} className="option-icon" />
                           <span>PPT</span>
-                          <Download size={13} className="option-sub-icon" />
-                        </a>
+                        </button>
                       ) : (
                         <span className="paper-option-link disabled" title="Presentation not available">
                           <Presentation size={15} className="option-icon" />
@@ -339,6 +376,115 @@ export default function ReferencesPage() {
               </article>
             );
           })}
+            </div>
+          </div>
+
+          {/* Right-Side Google-Style PDF / PPT Viewer Panel */}
+          {sideDoc && (
+            <aside className="references-side-viewer" aria-label="Document Preview">
+              <div className="side-viewer-header">
+                <div className="side-viewer-tabs">
+                  {sideDoc.paper.paper_file && (
+                    <button
+                      type="button"
+                      className={`side-viewer-tab ${sideDoc.mode === "paper" ? "active" : ""}`}
+                      onClick={() => setSideDoc({ paper: sideDoc.paper, mode: "paper" })}
+                    >
+                      <FileText size={14} />
+                      <span>Paper (PDF)</span>
+                    </button>
+                  )}
+                  {(sideDoc.paper.ppt_pdf || sideDoc.paper.ppt_file) && (
+                    <button
+                      type="button"
+                      className={`side-viewer-tab ${sideDoc.mode === "ppt" ? "active" : ""}`}
+                      onClick={() => setSideDoc({ paper: sideDoc.paper, mode: "ppt" })}
+                    >
+                      <Presentation size={14} />
+                      <span>PPT</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="side-viewer-actions">
+                  {sideDownloadUrl && (
+                    <a
+                      href={sideDownloadUrl}
+                      download
+                      className="side-viewer-btn"
+                      title={sideDoc.mode === "ppt" && sideDoc.paper.ppt_file ? "Download PowerPoint (.pptx)" : "Download PDF"}
+                    >
+                      <Download size={14} />
+                      <span>{sideDoc.mode === "ppt" && sideDoc.paper.ppt_file ? ".pptx" : "PDF"}</span>
+                    </a>
+                  )}
+                  {sideEmbedUrl && (
+                    <a
+                      href={sideEmbedUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="side-viewer-btn"
+                      title="Open in full browser tab"
+                    >
+                      <ExternalLink size={14} />
+                      <span>Fullscreen</span>
+                    </a>
+                  )}
+                  {sideDoc.paper.doi && (
+                    <a
+                      href={sideDoc.paper.doi}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="side-viewer-btn"
+                      title="View official publisher DOI"
+                    >
+                      <ExternalLink size={14} />
+                      <span>DOI</span>
+                    </a>
+                  )}
+                  <button
+                    type="button"
+                    className="side-viewer-close-btn"
+                    onClick={() => setSideDoc(null)}
+                    aria-label="Close document preview"
+                    title="Close preview and reset layout (Esc)"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="side-viewer-subbar">
+                <span className="side-viewer-badge">
+                  {sideDoc.mode === "paper" ? "PDF" : "PPT"}
+                </span>
+                <span className="side-viewer-title" title={sideDoc.paper.title}>
+                  {sideDoc.paper.title}
+                </span>
+              </div>
+
+              {sideEmbedUrl ? (
+                <iframe
+                  key={sideEmbedUrl}
+                  src={`${sideEmbedUrl}#view=FitH`}
+                  title={`${sideDoc.paper.title} — ${sideDoc.mode === "paper" ? "Research Paper PDF" : "Summary Presentation"}`}
+                  className="side-viewer-frame"
+                />
+              ) : (
+                <div className="side-viewer-fallback">
+                  <Presentation size={44} className="empty-icon" />
+                  <h3>Inline Preview Not Available</h3>
+                  <p>Download the presentation file directly to view it.</p>
+                  {sideDownloadUrl && (
+                    <a href={sideDownloadUrl} download className="btn">
+                      <Download size={14} />
+                      <span>Download Presentation</span>
+                    </a>
+                  )}
+                </div>
+              )}
+            </aside>
+          )}
         </div>
       )}
 

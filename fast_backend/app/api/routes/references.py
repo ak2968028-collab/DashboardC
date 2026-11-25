@@ -21,6 +21,7 @@ async def get_reference_file(db: db_read, folder: str, file_type: str):
     A paper's document, served from the database:
     - `paper`: original research paper PDF
     - `ppt`: summary presentation (.pptx, else .pdf)
+    - `ppt_pdf`: summary presentation PDF for inline preview (.pdf, else .pptx)
     - `report`: simplified report (.pdf, else .docx)
     - `highlights`: key highlights (.pdf, else .docx)
     PDFs open in the browser; other files download.

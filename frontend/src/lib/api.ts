@@ -199,5 +199,5 @@ export const usePaperReport = (folder: string | null) =>
   useSWR<{ folder: string; markdown: string }>(
     folder ? `/api/references/${encodeURIComponent(folder)}/report` : null, fetcher, { revalidateOnFocus: false });
 
-export const referenceFileUrl = (folder: string, type: "paper" | "ppt" | "report" | "highlights") =>
+export const referenceFileUrl = (folder: string, type: "paper" | "ppt" | "ppt_pdf" | "report" | "highlights") =>
   `/api/references/${encodeURIComponent(folder)}/file/${type}`;

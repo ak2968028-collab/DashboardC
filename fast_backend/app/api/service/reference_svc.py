@@ -12,6 +12,7 @@ from app.database.models.reference import ResearchPaper, ResearchPaperFile
 FILE_TYPES = {
     "paper": ("paper",),
     "ppt": ("ppt", "ppt_pdf"),
+    "ppt_pdf": ("ppt_pdf", "ppt"),
     "report": ("report",),
     "highlights": ("highlights",),
 }
@@ -40,7 +41,7 @@ class ReferenceService:
 
     @staticmethod
     async def get_file(db: AsyncSession, folder: str, file_type: str) -> ResearchPaperFile | None:
-        """The document of a paper for an API file type (paper | ppt | report | highlights), with its bytes."""
+        """The document of a paper for an API file type (paper | ppt | ppt_pdf | report | highlights), with its bytes."""
         wanted = FILE_TYPES.get(file_type.lower())
         if not wanted:
             return None

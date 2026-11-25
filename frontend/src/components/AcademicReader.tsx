@@ -6,14 +6,19 @@ import {
   Building2,
   Calendar,
   CheckCircle2,
+  Download,
   ExternalLink,
   FileText,
   Lightbulb,
+  Presentation,
   Sparkles,
   Users,
   X,
 } from "lucide-react";
+import { referenceFileUrl } from "@/lib/api";
 import type { ResearchPaper } from "@/lib/types";
+
+export type ReadingMode = "paper" | "ppt" | "highlights" | "report";
 
 /** Safe inline parser for bold, italic, code, and external links */
 export function renderInline(text: string): ReactNode[] {
@@ -160,23 +165,43 @@ export function AcademicMarkdown({ content }: { content: string }) {
 
 interface ReadingViewProps {
   paper: ResearchPaper;
-  mode: "highlights" | "report";
+  mode: ReadingMode;
   onClose: () => void;
-  onSwitchMode: (mode: "highlights" | "report") => void;
+  onSwitchMode: (mode: ReadingMode) => void;
 }
 
-/** Full in-app reading overlay view */
+/** Full in-app reading & Google-style document viewer overlay */
 export default function ReadingView({
   paper,
   mode,
   onClose,
   onSwitchMode,
 }: ReadingViewProps) {
+  const isEmbedMode = mode === "paper" || mode === "ppt";
+  const hasPaperPdf = Boolean(paper.paper_file);
+  const hasPpt = Boolean(paper.ppt_pdf || paper.ppt_file);
+  const hasHighlights = Boolean(paper.highlights_md || (paper.points && paper.points.length > 0) || paper.highlights_file);
+  const hasReport = Boolean(paper.report_md || paper.report_file);
+
+  const embedUrl =
+    mode === "paper" && paper.paper_file
+      ? referenceFileUrl(paper.folder, "paper")
+      : mode === "ppt" && paper.ppt_pdf
+        ? referenceFileUrl(paper.folder, "ppt_pdf")
+        : null;
+
+  const downloadUrl =
+    mode === "paper" && paper.paper_file
+      ? referenceFileUrl(paper.folder, "paper")
+      : mode === "ppt"
+        ? referenceFileUrl(paper.folder, paper.ppt_file ? "ppt" : "ppt_pdf")
+        : null;
+
   const content = mode === "highlights" ? paper.highlights_md : paper.report_md;
 
   return (
     <div className="reader-overlay" role="dialog" aria-modal="true">
-      <div className="reader-container">
+      <div className={`reader-container ${isEmbedMode ? "reader-doc-mode" : ""}`}>
         {/* Top Sticky Navigation Bar */}
         <header className="reader-nav-bar">
           <div className="reader-nav-left">
@@ -192,23 +217,49 @@ export default function ReadingView({
           </div>
 
           <div className="reader-nav-tabs">
-            <button
-              type="button"
-              className={`reader-tab ${mode === "highlights" ? "active" : ""}`}
-              onClick={() => onSwitchMode("highlights")}
-            >
-              <Lightbulb size={15} />
-              <span>Key Highlights</span>
-            </button>
+            {hasPaperPdf && (
+              <button
+                type="button"
+                className={`reader-tab ${mode === "paper" ? "active" : ""}`}
+                onClick={() => onSwitchMode("paper")}
+              >
+                <FileText size={15} />
+                <span>Paper (PDF)</span>
+              </button>
+            )}
 
-            <button
-              type="button"
-              className={`reader-tab ${mode === "report" ? "active" : ""}`}
-              onClick={() => onSwitchMode("report")}
-            >
-              <FileText size={15} />
-              <span>Full Report</span>
-            </button>
+            {hasPpt && (
+              <button
+                type="button"
+                className={`reader-tab ${mode === "ppt" ? "active" : ""}`}
+                onClick={() => onSwitchMode("ppt")}
+              >
+                <Presentation size={15} />
+                <span>PPT</span>
+              </button>
+            )}
+
+            {hasHighlights && (
+              <button
+                type="button"
+                className={`reader-tab ${mode === "highlights" ? "active" : ""}`}
+                onClick={() => onSwitchMode("highlights")}
+              >
+                <Lightbulb size={15} />
+                <span>Key Highlights</span>
+              </button>
+            )}
+
+            {hasReport && (
+              <button
+                type="button"
+                className={`reader-tab ${mode === "report" ? "active" : ""}`}
+                onClick={() => onSwitchMode("report")}
+              >
+                <FileText size={15} />
+                <span>Full Report</span>
+              </button>
+            )}
           </div>
 
           <div className="reader-nav-right">
@@ -224,8 +275,86 @@ export default function ReadingView({
           </div>
         </header>
 
-        {/* Reader Document Body */}
-        <main className="reader-main-scroll">
+        {isEmbedMode ? (
+          <div className="reader-embed-wrap">
+            <div className="reader-embed-subbar">
+              <div className="reader-embed-title-group">
+                <span className="reader-embed-kind">
+                  {mode === "paper" ? "Research Paper (PDF)" : "Summary Presentation (PPT)"}
+                </span>
+                <span className="reader-embed-title" title={paper.title}>
+                  {paper.title}
+                </span>
+              </div>
+              <div className="reader-embed-actions">
+                {downloadUrl && (
+                  <a
+                    href={downloadUrl}
+                    download
+                    className="reader-embed-action-btn"
+                    title={mode === "ppt" && paper.ppt_file ? "Download PowerPoint (.pptx)" : "Download PDF"}
+                  >
+                    <Download size={14} />
+                    <span>{mode === "ppt" && paper.ppt_file ? "Download .pptx" : "Download PDF"}</span>
+                  </a>
+                )}
+                {embedUrl && (
+                  <a
+                    href={embedUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="reader-embed-action-btn"
+                    title="Open document in full browser tab"
+                  >
+                    <ExternalLink size={14} />
+                    <span>Open Fullscreen</span>
+                  </a>
+                )}
+                {paper.doi && (
+                  <a
+                    href={paper.doi}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="reader-embed-action-btn"
+                    title="View official publisher DOI"
+                  >
+                    <ExternalLink size={14} />
+                    <span>Official DOI</span>
+                  </a>
+                )}
+              </div>
+            </div>
+
+            {embedUrl ? (
+              <iframe
+                key={embedUrl}
+                src={`${embedUrl}#view=FitH`}
+                title={`${paper.title} — ${mode === "paper" ? "Research Paper PDF" : "Summary Presentation"}`}
+                className="reader-pdf-frame"
+              />
+            ) : (
+              <div className="reader-main-scroll">
+                <div className="reader-document">
+                  <div className="reader-empty-state">
+                    <Presentation size={48} className="empty-icon" />
+                    <h3>Inline Preview Not Available</h3>
+                    <p>
+                      A PDF preview is not available for this presentation. You can download the PowerPoint file directly below.
+                    </p>
+                    {downloadUrl && (
+                      <a href={downloadUrl} download className="btn">
+                        <Download size={14} />
+                        <span>Download Presentation (.pptx)</span>
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          /* Reader Document Body */
+          <main className="reader-main-scroll">
           <div className="reader-document">
             {/* Document Header */}
             <div className="reader-doc-header">
@@ -337,6 +466,7 @@ export default function ReadingView({
             </div>
           </div>
         </main>
+        )}
       </div>
     </div>
   );
