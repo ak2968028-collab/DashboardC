@@ -36,6 +36,9 @@ venv.bak/
 # Frontend build output
 frontend/node_modules/
 frontend/.next/
+frontend/out/
+frontend/next-env.d.ts
+frontend/*.tsbuildinfo
 
 # Environment variables
 .env
