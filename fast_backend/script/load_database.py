@@ -56,6 +56,8 @@ if __name__ == "__main__":
         "boundaries/village_boundaries.py",
         # All-India census villages (a few minutes the first time)
         "boundaries/india_layers.py",
+        # Research papers of the References page (media/Research_paper)
+        "references/research_papers.py",
     ]
 
     run_scripts_in_sequence(scripts_to_run)

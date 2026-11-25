@@ -17,6 +17,11 @@ export interface MapVisual {
     name: string; layer: string; workspace: string; title: string; unit: string | null;
     /** WKT the raster is clipped to (GeoServer WMS "clip"), e.g. an uploaded area. */
     clip?: string;
+    /** Saved image of a temporary layer (deleted from GeoServer once delivered), drawn over `bounds`. */
+    image?: string;
+    legend_image?: string;
+    /** west, south, east, north */
+    bounds?: [number, number, number, number];
     stats?: { min: number | null; max: number | null; mean: number | null; total: number | null; covered: boolean;
       classes: { label: string; color: string; share_pct: number }[] };
   };

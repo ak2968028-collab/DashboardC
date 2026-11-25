@@ -1,7 +1,7 @@
 # ====================================================================
 # app/api/service/geoserver_svc/geoserver.py
 # GeoServer client (REST + OGC services) used by the API at runtime: listing layers, reading rasters (WCS / WMS),
-# and publishing what users create on the site (uploaded factor rasters, regenerated emission rasters).
+# and publishing what users create on the site (uploaded factor rasters, the assistant's temporary emission rasters).
 # Loading the source data from media/ into GeoServer is done by the scripts in fast_backend/script/.
 # ====================================================================
 import base64

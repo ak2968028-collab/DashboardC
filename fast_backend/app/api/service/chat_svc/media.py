@@ -383,3 +383,29 @@ def report_pdf(title: str, subtitle: str, stats: list[tuple[str, str]], figures:
     story += [Paragraph(n, styles["BodyText"]) for n in notes]
     doc.build(story)
     return out.getvalue()
+
+
+# ---------- temporary GeoServer layers ----------
+
+def snapshot(temp: dict, width: int = 1200) -> dict:
+    """The temporary layer as a map image and legend image in media/temp, so the chat keeps showing it after the
+    GeoServer layer is deleted. The image is rendered in Web Mercator over the layer's bounds, which is exactly how
+    Leaflet draws an image overlay between two corners."""
+    w, s, e, n = temp["bounds"]
+    x0, y0 = _merc(w, s)
+    x1, y1 = _merc(e, n)
+    height = max(64, min(2400, round(width * (y1 - y0) / max(x1 - x0, 1e-9))))
+    q = urllib.parse.urlencode({"service": "WMS", "version": "1.1.1", "request": "GetMap", "layers": temp["layer"],
+                                "styles": "", "srs": "EPSG:3857", "bbox": f"{x0},{y0},{x1},{y1}", "width": width,
+                                "height": height, "format": "image/png", "transparent": "true"})
+    image = ows_get(f"/{temp['workspace']}/wms?{q}", timeout=120)
+    if not image.startswith(b"\x89PNG"):
+        raise RuntimeError(f"GeoServer did not return an image for {temp['layer']}: {image[:200]!r}")
+    out = {"image": save(image, "png")}
+    lq = urllib.parse.urlencode({"service": "WMS", "request": "GetLegendGraphic", "format": "image/png",
+                                 "layer": temp["layer"]})
+    try:
+        out["legend_image"] = save(ows_get(f"/{temp['workspace']}/wms?{lq}"), "png")
+    except Exception:
+        logger.warning("Assistant media: no legend for %s", temp["layer"])
+    return out

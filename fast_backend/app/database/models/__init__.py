@@ -30,3 +30,4 @@ from app.database.models.user import (
     DataSubmission,
 )
 from app.database.models.blog import BlogPost
+from app.database.models.reference import ResearchPaper, ResearchPaperFile

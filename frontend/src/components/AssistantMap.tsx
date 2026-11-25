@@ -7,7 +7,7 @@ import "@geoman-io/leaflet-geoman-free";
 import { useEffect, useMemo, useRef } from "react";
 import type { Feature, FeatureCollection, GeoJsonObject } from "geojson";
 import L, { geoJSON, type Layer, type PathOptions, type WMSParams } from "leaflet";
-import { GeoJSON, LayersControl, MapContainer, Pane, ScaleControl, TileLayer, WMSTileLayer, useMap } from "react-leaflet";
+import { GeoJSON, ImageOverlay, LayersControl, MapContainer, Pane, ScaleControl, TileLayer, WMSTileLayer, useMap } from "react-leaflet";
 import { useGeoJson, wmsUrl } from "@/lib/api";
 import type { MapVisual } from "@/lib/chat";
 import { interpolate } from "@/lib/colors";
@@ -209,10 +209,16 @@ export default function AssistantMap({ visual, visualKey, onDraw, clearDrawKey =
           // villages); alone, it sits under the village outlines.
           <Pane name={hasValues ? "assistant-raster-top" : "assistant-raster"}
             style={hasValues ? { zIndex: 450, pointerEvents: "none" } : { zIndex: 390 }}>
-            <WMSTileLayer key={`${raster.layer}|${raster.clip ?? ""}`} url={wmsUrl(raster.workspace)}
-              // "clip": GeoServer cuts the raster to the uploaded area.
-              params={{ layers: raster.layer, format: "image/png", transparent: true, ...(raster.clip ? { clip: raster.clip } : {}) } as WMSParams}
-              opacity={hasValues ? 0.7 : 0.8} />
+            {raster.image && raster.bounds ? (
+              // A temporary layer: its saved image (the GeoServer layer is deleted once the answer is delivered).
+              <ImageOverlay key={raster.image} url={raster.image} opacity={hasValues ? 0.7 : 0.85}
+                bounds={[[raster.bounds[1], raster.bounds[0]], [raster.bounds[3], raster.bounds[2]]]} />
+            ) : (
+              <WMSTileLayer key={`${raster.layer}|${raster.clip ?? ""}`} url={wmsUrl(raster.workspace)}
+                // "clip": GeoServer cuts the raster to the uploaded area.
+                params={{ layers: raster.layer, format: "image/png", transparent: true, ...(raster.clip ? { clip: raster.clip } : {}) } as WMSParams}
+                opacity={hasValues ? 0.7 : 0.8} />
+            )}
           </Pane>
         )}
         {geo && <GeoJSON key={visualKey + (boundaries?.features.length ?? 0)} data={geo} style={style} onEachFeature={onEach} />}
@@ -240,7 +246,7 @@ export default function AssistantMap({ visual, visualKey, onDraw, clearDrawKey =
               {hasValues && <div className="legend-sub">{raster.title}</div>}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img alt={`${raster.title} legend`}
-                src={`${wmsUrl(raster.workspace)}?service=WMS&request=GetLegendGraphic&format=image/png&layer=${encodeURIComponent(raster.layer)}`} />
+                src={raster.legend_image ?? `${wmsUrl(raster.workspace)}?service=WMS&request=GetLegendGraphic&format=image/png&layer=${encodeURIComponent(raster.layer)}`} />
               {raster.unit && <div className="legend-range"><span>{raster.unit}</span></div>}
               {stats?.covered && (
                 <div className="assistant-raster-stats">

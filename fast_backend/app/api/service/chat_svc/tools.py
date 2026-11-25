@@ -119,6 +119,30 @@ class Toolbox:
         self._villages: list[dict] | None = None
         # Vector area the user uploaded in the chat: (metadata, WGS84 shapely geometry), see area.py.
         self.area = area
+        # Temporary GeoServer layers published while answering; deleted by cleanup_temp() once delivered.
+        self.temp_layers: list[str] = []
+
+    async def _publish_temp(self, key: str, geom=None, codes=None, snapshot: bool = True) -> dict:
+        """Publishes an on-demand emission raster to the assistant_temp workspace and records it for deletion.
+        snapshot=True also saves it as a map + legend image (media/temp) that the chat map shows after the layer is
+        deleted; reports and videos render from the live layer instead."""
+        from app.api.service.chat_svc import media
+
+        await run_in_threadpool(emission_rasters.cleanup_stale)
+        temp = await run_in_threadpool(emission_rasters.publish_region, key, geom, codes)
+        self.temp_layers.append(temp["name"])
+        if snapshot:
+            temp.update(await run_in_threadpool(media.snapshot, temp))
+        return temp
+
+    async def cleanup_temp(self):
+        """Deletes this answer's temporary GeoServer layers (called once the answer has been delivered)."""
+        names, self.temp_layers = self.temp_layers, []
+        for name in names:
+            try:
+                await run_in_threadpool(emission_rasters.delete_temporary, name)
+            except Exception:
+                pass  # cleanup_stale() removes it later
 
     async def villages(self) -> list[dict]:
         if self._villages is None:
@@ -287,7 +311,7 @@ class Toolbox:
             result_not_found = []
         if info.get("derived"):
             try:
-                temporary = await run_in_threadpool(emission_rasters.publish_region, key.removeprefix("emission_"),
+                temporary = await self._publish_temp(key.removeprefix("emission_"),
                                                     self.area[1] if self.area else None,
                                                     [v["village_code"] for v in found] if found else None)
                 info = {**info, **temporary}
@@ -382,7 +406,7 @@ class Toolbox:
                 info = catalog[rkey]
                 if info.get("derived"):
                     try:
-                        temp = await run_in_threadpool(emission_rasters.publish_region, rkey.removeprefix("emission_"), geom)
+                        temp = await self._publish_temp(rkey.removeprefix("emission_"), geom)
                         info = {**info, **temp}
                     except Exception as e:
                         result["raster_error"] = f"Could not create temporary raster: {str(e)[:200]}"
@@ -447,8 +471,8 @@ class Toolbox:
                 raster = catalog[rkey]
                 if raster.get("derived"):
                     try:
-                        temp = await run_in_threadpool(emission_rasters.publish_region, rkey.removeprefix("emission_"),
-                                                       self.area[1] if self.area else None)
+                        temp = await self._publish_temp(rkey.removeprefix("emission_"),
+                                                        self.area[1] if self.area else None, snapshot=False)
                     except Exception as e:
                         return {"error": f"Could not create temporary raster: {str(e)[:200]}"}, []
                     raster = {**raster, **temp}
@@ -529,7 +553,7 @@ class Toolbox:
             raster_info = catalog[rkey]
             if raster_info.get("derived"):
                 try:
-                    temp = await run_in_threadpool(emission_rasters.publish_region, rkey.removeprefix("emission_"))
+                    temp = await self._publish_temp(rkey.removeprefix("emission_"), snapshot=False)
                 except Exception as e:
                     return {"error": f"Could not create temporary raster: {str(e)[:200]}"}, []
                 raster_info = {**raster_info, **temp}

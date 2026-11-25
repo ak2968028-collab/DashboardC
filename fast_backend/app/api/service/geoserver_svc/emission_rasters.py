@@ -23,7 +23,9 @@ from fastapi import HTTPException, status
 from PIL import Image, TiffImagePlugin
 
 from app.api.service.geoserver_svc import factors
-from app.api.service.geoserver_svc.geoserver import RASTER_WORKSPACE, _ensure_workspace, _publish_style, _request, ows_get
+from app.api.service.geoserver_svc.geoserver import (
+    RASTER_WORKSPACE, _ensure_workspace, _publish_style, _request, ows_get, rest_get,
+)
 from app.conf.settings import settings
 
 LULC_TIF = "lulc_priority"
@@ -279,8 +281,13 @@ def region(key: str, geom=None, codes=None) -> dict:
     }
 
 
+TEMP_MAX_AGE_S = 600  # assistant layers older than this are removed by cleanup_stale()
+
+
 def publish_region(key: str, geom=None, codes=None) -> dict:
-    """Publish one requested emission raster into the assistant-only workspace for subsequent WMS requests."""
+    """Publish one requested emission raster into the assistant-only workspace. Temporary: the assistant deletes it
+    (delete_temporary) once the answer has been delivered; cleanup_stale() removes any left behind."""
+    import time
     from uuid import uuid4
 
     factors._require_geoserver()
@@ -293,8 +300,9 @@ def publish_region(key: str, geom=None, codes=None) -> dict:
                  content_type="image/tiff", timeout=300)
         _request("PUT", f"{store}/coverages/{name}", {"coverage": {
             "title": f"{ALLOCATION[key][0]} (assistant temporary)",
-            "abstract": f"On-demand assistant emission density raster ({UNIT}); retained for interactive map use.",
-            "keywords": {"string": ["kind=assistant_temporary", f"source={key}", f"unit={UNIT}"]}, "enabled": True,
+            "abstract": f"On-demand assistant emission density raster ({UNIT}); deleted once delivered.",
+            "keywords": {"string": ["kind=assistant_temporary", f"source={key}", f"unit={UNIT}",
+                                    f"at={int(time.time())}"]}, "enabled": True,
         }})
         _publish_style(name, workspace=ASSISTANT_WORKSPACE, sld=sld(name, key))
         _request("PUT", f"/layers/{ASSISTANT_WORKSPACE}:{name}", {"layer": {
@@ -312,6 +320,23 @@ def delete_temporary(name: str):
         return
     _request("DELETE", f"/workspaces/{ASSISTANT_WORKSPACE}/coveragestores/{name}?recurse=true&purge=all")
     _request("DELETE", f"/workspaces/{ASSISTANT_WORKSPACE}/styles/{name}?purge=true")
+
+
+def cleanup_stale(max_age_s: int = TEMP_MAX_AGE_S) -> int:
+    """Deletes assistant layers older than max_age_s (or without a timestamp): leftovers of failed requests."""
+    import time
+
+    listing = rest_get(f"/workspaces/{ASSISTANT_WORKSPACE}/coveragestores.json") or {}
+    stores = ((listing.get("coverageStores") or {}).get("coverageStore") or []) if isinstance(listing, dict) else []
+    removed = 0
+    for store in stores:
+        name = store["name"]
+        cov = (rest_get(f"/workspaces/{ASSISTANT_WORKSPACE}/coverages/{name}.json") or {}).get("coverage") or {}
+        at = factors._keywords(cov).get("at")
+        if not at or time.time() - int(at) > max_age_s:
+            delete_temporary(name)
+            removed += 1
+    return removed
 
 
 # ---------- one village (Carbon Lab, Comparison page, Advanced report) ----------

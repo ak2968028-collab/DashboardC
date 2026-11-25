@@ -187,96 +187,103 @@ class Agent:
     async def run(self, question: str, history: list[dict], area: tuple[dict, object] | None = None):
         async with AsyncSessionLocal() as db:
             toolbox = Toolbox(db, area=area)
-            await self.emit({"type": "status", "text": "Searching the knowledge base…"})
             try:
-                hits = await knowledge_base.search(db, question, k=3)
-                passages = [p for p in hits if p["score"] >= CONTEXT_MIN_SCORE]
-                if not passages and ADVICE_QUESTION.search(question):
-                    passages = hits[:2]
-            except Exception:
-                logger.exception("Assistant: knowledge retrieval failed")
-                passages = []
-            system = SYSTEM_PROMPT
-            if area:
-                meta = area[0]
-                system += (f"\nThe user has uploaded a vector area \"{meta['name']}\" ({meta['area_ha']:,.0f} ha, "
-                           f"{meta['features']} feature(s), {meta['inside_district_pct']:.0f}% inside Varanasi district). "
-                           "For any question about this area, my area, the uploaded file/boundary, clipping, or what lies "
-                           "inside it, call analyze_area (with metric for a thematic map and raster to clip a raster). "
-                           "Its results cover ONLY the area; rank_villages, map_metric and district_overview cover the "
-                           "whole district, so never use them for questions about villages in the area. The area may "
-                           "be anywhere in India: census population figures cover all of India, but emission data "
-                           "exists only for the surveyed Varanasi villages - say so when the area is elsewhere.\n")
-            if passages:
-                system += "\nReference passages (cite them when relevant):\n" + "\n".join(
-                    f"[{i + 1}] {p['title']}: {p['text']}" for i, p in enumerate(passages))
-                await self.emit({"type": "sources", "sources": [{"title": p["title"], "source": p["source"]} for p in passages]})
-
-            messages = [{"role": "system", "content": system}]
-            for turn in history[-HISTORY_TURNS * 2:]:
-                if turn.get("role") in ("user", "assistant") and turn.get("content"):
-                    messages.append({"role": turn["role"], "content": str(turn["content"])[:2000]})
-            messages.append({"role": "user", "content": question})
-
-            tools = tool_specs(has_area=area is not None)
-            done_calls: dict[tuple[str, str], dict] = {}
-            if area and AREA_QUESTION.search(question):
-                # Ground the answer: run analyze_area first and hand the model its result as an earlier tool call.
-                call = {"function": {"name": "analyze_area", "arguments": {}}}
-                await self.emit({"type": "tool", "name": "analyze_area", "args": {}})
-                await self.emit({"type": "status", "text": "Analysing your area…"})
+                await self.emit({"type": "status", "text": "Searching the knowledge base…"})
                 try:
-                    result, visuals = await toolbox.run("analyze_area", {})
-                except Exception as e:
-                    logger.exception("Assistant: analyze_area failed")
-                    result, visuals = {"error": f"{type(e).__name__}: {e}"}, []
-                for v in visuals:
-                    await self.emit({"type": "visual", "visual": v})
-                    if v.get("kind") in ("map", "chart"):
-                        self._save_image(v)
-                done_calls[("analyze_area", "{}")] = result
-                messages += [{"role": "assistant", "content": "", "tool_calls": [call]},
-                             {"role": "tool", "tool_name": "analyze_area",
-                              "content": json.dumps(result, ensure_ascii=False, default=str)[:6000]}]
-            async with httpx.AsyncClient(timeout=httpx.Timeout(settings.OLLAMA_TIMEOUT, connect=10)) as client:
-                for round_no in range(MAX_TOOL_ROUNDS + 1):
-                    await self.emit({"type": "status", "text": "Thinking…" if round_no == 0 else "Writing the answer…"})
-                    # Last round: no tools, so the model has to answer.
-                    content, calls = await self._chat(client, messages, tools if round_no < MAX_TOOL_ROUNDS else None)
-                    if not calls:
-                        break
-                    messages.append({"role": "assistant", "content": content, "tool_calls": calls})
-                    for call in calls:
-                        fn = call.get("function") or {}
-                        name, args = fn.get("name", ""), fn.get("arguments") or {}
-                        if isinstance(args, str):
+                    hits = await knowledge_base.search(db, question, k=3)
+                    passages = [p for p in hits if p["score"] >= CONTEXT_MIN_SCORE]
+                    if not passages and ADVICE_QUESTION.search(question):
+                        passages = hits[:2]
+                except Exception:
+                    logger.exception("Assistant: knowledge retrieval failed")
+                    passages = []
+                system = SYSTEM_PROMPT
+                if area:
+                    meta = area[0]
+                    system += (f"\nThe user has uploaded a vector area \"{meta['name']}\" ({meta['area_ha']:,.0f} ha, "
+                               f"{meta['features']} feature(s), {meta['inside_district_pct']:.0f}% inside Varanasi district). "
+                               "For any question about this area, my area, the uploaded file/boundary, clipping, or what lies "
+                               "inside it, call analyze_area (with metric for a thematic map and raster to clip a raster). "
+                               "Its results cover ONLY the area; rank_villages, map_metric and district_overview cover the "
+                               "whole district, so never use them for questions about villages in the area. The area may "
+                               "be anywhere in India: census population figures cover all of India, but emission data "
+                               "exists only for the surveyed Varanasi villages - say so when the area is elsewhere.\n")
+                if passages:
+                    system += "\nReference passages (cite them when relevant):\n" + "\n".join(
+                        f"[{i + 1}] {p['title']}: {p['text']}" for i, p in enumerate(passages))
+                    await self.emit({"type": "sources", "sources": [{"title": p["title"], "source": p["source"]} for p in passages]})
+
+                messages = [{"role": "system", "content": system}]
+                for turn in history[-HISTORY_TURNS * 2:]:
+                    if turn.get("role") in ("user", "assistant") and turn.get("content"):
+                        messages.append({"role": turn["role"], "content": str(turn["content"])[:2000]})
+                messages.append({"role": "user", "content": question})
+
+                tools = tool_specs(has_area=area is not None)
+                done_calls: dict[tuple[str, str], dict] = {}
+                if area and AREA_QUESTION.search(question):
+                    # Ground the answer: run analyze_area first and hand the model its result as an earlier tool call.
+                    call = {"function": {"name": "analyze_area", "arguments": {}}}
+                    await self.emit({"type": "tool", "name": "analyze_area", "args": {}})
+                    await self.emit({"type": "status", "text": "Analysing your area…"})
+                    try:
+                        result, visuals = await toolbox.run("analyze_area", {})
+                    except Exception as e:
+                        logger.exception("Assistant: analyze_area failed")
+                        result, visuals = {"error": f"{type(e).__name__}: {e}"}, []
+                    for v in visuals:
+                        await self.emit({"type": "visual", "visual": v})
+                        if v.get("kind") in ("map", "chart"):
+                            self._save_image(v)
+                    done_calls[("analyze_area", "{}")] = result
+                    messages += [{"role": "assistant", "content": "", "tool_calls": [call]},
+                                 {"role": "tool", "tool_name": "analyze_area",
+                                  "content": json.dumps(result, ensure_ascii=False, default=str)[:6000]}]
+                async with httpx.AsyncClient(timeout=httpx.Timeout(settings.OLLAMA_TIMEOUT, connect=10)) as client:
+                    for round_no in range(MAX_TOOL_ROUNDS + 1):
+                        await self.emit({"type": "status", "text": "Thinking…" if round_no == 0 else "Writing the answer…"})
+                        # Last round: no tools, so the model has to answer.
+                        content, calls = await self._chat(client, messages, tools if round_no < MAX_TOOL_ROUNDS else None)
+                        if not calls:
+                            break
+                        messages.append({"role": "assistant", "content": content, "tool_calls": calls})
+                        for call in calls:
+                            fn = call.get("function") or {}
+                            name, args = fn.get("name", ""), fn.get("arguments") or {}
+                            if isinstance(args, str):
+                                try:
+                                    args = json.loads(args)
+                                except json.JSONDecodeError:
+                                    args = {}
+                            signature = (name, json.dumps(args, sort_keys=True, default=str))
+                            if signature in done_calls:
+                                # The model repeated an identical call: reuse the result instead of making it again.
+                                messages.append({"role": "tool", "tool_name": name, "content": json.dumps(
+                                    {"already_done": True, "result": done_calls[signature]}, ensure_ascii=False, default=str)[:6000]})
+                                continue
+                            await self.emit({"type": "tool", "name": name, "args": args})
+                            await self.emit({"type": "status", "text": f"Running {name.replace('_', ' ')}…"})
                             try:
-                                args = json.loads(args)
-                            except json.JSONDecodeError:
-                                args = {}
-                        signature = (name, json.dumps(args, sort_keys=True, default=str))
-                        if signature in done_calls:
-                            # The model repeated an identical call: reuse the result instead of making it again.
-                            messages.append({"role": "tool", "tool_name": name, "content": json.dumps(
-                                {"already_done": True, "result": done_calls[signature]}, ensure_ascii=False, default=str)[:6000]})
-                            continue
-                        await self.emit({"type": "tool", "name": name, "args": args})
-                        await self.emit({"type": "status", "text": f"Running {name.replace('_', ' ')}…"})
-                        try:
-                            result, visuals = await toolbox.run(name, args)
-                        except Exception as e:
-                            logger.exception("Assistant tool %s failed", name)
-                            result, visuals = {"error": f"{type(e).__name__}: {e}"}, []
-                        done_calls[signature] = result
-                        for v in visuals:
-                            await self.emit({"type": "visual", "visual": v})
-                            if v.get("kind") in ("map", "chart"):
-                                self._save_image(v)
-                        messages.append({"role": "tool", "tool_name": name,
-                                         "content": json.dumps(result, ensure_ascii=False, default=str)[:6000]})
-            if self.renders:
-                await self.emit({"type": "status", "text": "Saving images…"})
-                await asyncio.gather(*self.renders, return_exceptions=True)
+                                result, visuals = await toolbox.run(name, args)
+                            except Exception as e:
+                                logger.exception("Assistant tool %s failed", name)
+                                result, visuals = {"error": f"{type(e).__name__}: {e}"}, []
+                            done_calls[signature] = result
+                            for v in visuals:
+                                await self.emit({"type": "visual", "visual": v})
+                                if v.get("kind") in ("map", "chart"):
+                                    self._save_image(v)
+                            messages.append({"role": "tool", "tool_name": name,
+                                             "content": json.dumps(result, ensure_ascii=False, default=str)[:6000]})
+                if self.renders:
+                    await self.emit({"type": "status", "text": "Saving images…"})
+                    await asyncio.gather(*self.renders, return_exceptions=True)
+            finally:
+                # Temporary GeoServer layers (assistant_temp) are only needed until the answer is delivered: the
+                # chat shows saved images of them, and reports / videos were rendered while they existed.
+                if self.renders:
+                    await asyncio.gather(*self.renders, return_exceptions=True)
+                await toolbox.cleanup_temp()
 
 
 async def stream_answer(question: str, history: list[dict], area: tuple[dict, object] | None = None) -> AsyncIterator[bytes]:
