@@ -56,6 +56,12 @@ export default function ReferencesPage() {
     });
   }, [papers, search, selectedYear]);
 
+  // Open PDF or PPT on the right side and collapse left list to compact headings
+  const openSideDoc = (paper: ResearchPaper, mode: "paper" | "ppt") => {
+    setSideDoc({ paper, mode });
+    setExpandedIds(new Set());
+  };
+
   // Toggle single card
   const toggleCard = (id: string) => {
     setExpandedIds((prev) => {
@@ -230,28 +236,30 @@ export default function ReferencesPage() {
                   <div className="paper-card-main-info">
                     <h2 className="paper-card-title">{paper.title}</h2>
 
-                    <div className="paper-card-meta-row">
-                      {paper.authors && (
-                        <span className="paper-meta-item authors" title={`Authors: ${paper.authors}`}>
-                          <Users size={13} className="meta-icon" />
-                          <span className="meta-text">{paper.authors}</span>
-                        </span>
-                      )}
+                    {(!sideDoc || isExpanded) && (
+                      <div className="paper-card-meta-row">
+                        {paper.authors && (
+                          <span className="paper-meta-item authors" title={`Authors: ${paper.authors}`}>
+                            <Users size={13} className="meta-icon" />
+                            <span className="meta-text">{paper.authors}</span>
+                          </span>
+                        )}
 
-                      {paper.year && (
-                        <span className="paper-meta-item year" title={`Publication Year: ${paper.year}`}>
-                          <Calendar size={13} className="meta-icon" />
-                          <span className="meta-text"><b>{paper.year}</b></span>
-                        </span>
-                      )}
+                        {paper.year && (
+                          <span className="paper-meta-item year" title={`Publication Year: ${paper.year}`}>
+                            <Calendar size={13} className="meta-icon" />
+                            <span className="meta-text"><b>{paper.year}</b></span>
+                          </span>
+                        )}
 
-                      {paper.journal && (
-                        <span className="paper-meta-item journal" title={`Journal: ${paper.journal}`}>
-                          <Building2 size={13} className="meta-icon" />
-                          <span className="meta-text">{paper.journal}</span>
-                        </span>
-                      )}
-                    </div>
+                        {paper.journal && (
+                          <span className="paper-meta-item journal" title={`Journal: ${paper.journal}`}>
+                            <Building2 size={13} className="meta-icon" />
+                            <span className="meta-text">{paper.journal}</span>
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <div className="paper-card-expand-indicator" title={isExpanded ? "Collapse" : "Expand"}>
@@ -281,7 +289,7 @@ export default function ReferencesPage() {
                         <button
                           type="button"
                           className={`paper-original-link ${isSideActive && sideDoc?.mode === "paper" ? "active" : ""}`}
-                          onClick={() => setSideDoc({ paper, mode: "paper" })}
+                          onClick={() => openSideDoc(paper, "paper")}
                           title="Open original research paper (PDF) on the right side"
                         >
                           <FileText size={15} className="link-icon" />
@@ -314,7 +322,7 @@ export default function ReferencesPage() {
                         <button
                           type="button"
                           className={`paper-option-link opt-ppt ${isSideActive && sideDoc?.mode === "ppt" ? "active" : ""}`}
-                          onClick={() => setSideDoc({ paper, mode: "ppt" })}
+                          onClick={() => openSideDoc(paper, "ppt")}
                           title="Open presentation slides on the right side"
                         >
                           <Presentation size={15} className="option-icon" />

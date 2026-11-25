@@ -1710,13 +1710,70 @@ details.chat-visual .table-wrap { max-height: 280px; overflow: auto; margin-top:
 .references-workspace.split {
   display: flex;
   align-items: flex-start;
-  gap: 20px;
+  gap: 16px;
 }
 
 .references-workspace.split .references-list-pane {
-  flex: 0 0 42%;
-  min-width: 340px;
-  max-width: 560px;
+  flex: 0 0 clamp(255px, 23vw, 320px);
+  width: clamp(255px, 23vw, 320px);
+  max-height: calc(100vh - 96px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.references-workspace.split .references-vertical-list {
+  gap: 10px;
+}
+
+.references-workspace.split .paper-card-header {
+  padding: 10px 12px;
+  gap: 10px;
+  align-items: center;
+}
+
+.references-workspace.split .paper-card-icon-box {
+  width: 34px;
+  padding: 5px 4px;
+  gap: 2px;
+}
+
+.references-workspace.split .paper-card-icon-box .paper-icon {
+  display: none;
+}
+
+.references-workspace.split .paper-card-title {
+  font-size: 13px;
+  line-height: 1.35;
+  margin-bottom: 0;
+}
+
+.references-workspace.split .research-paper-card.expanded .paper-card-title {
+  margin-bottom: 8px;
+}
+
+.references-workspace.split .paper-card-expand-indicator {
+  padding: 4px 6px;
+}
+
+.references-workspace.split .paper-card-expand-indicator .expand-label {
+  display: none;
+}
+
+.references-workspace.split .paper-card-body {
+  padding: 12px;
+}
+
+.references-workspace.split .paper-description-box {
+  padding: 10px 12px;
+}
+
+.references-workspace.split .paper-description-text {
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.references-workspace.split .paper-options-row {
+  gap: 10px 14px;
 }
 
 .research-paper-card.active-doc {
@@ -1899,6 +1956,8 @@ details.chat-visual .table-wrap { max-height: 280px; overflow: auto; margin-top:
     width: 100%;
     max-width: 100%;
     min-width: 0;
+    max-height: none;
+    overflow-y: visible;
   }
 
   .references-side-viewer {
