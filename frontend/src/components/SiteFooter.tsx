@@ -31,9 +31,9 @@ const PARTNERS: Partner[] = [
 const EXPLORE = [
   { href: "/", label: "Overview" },
   { href: "/map", label: "Village Map" },
-  { href: "/carbon", label: "Carbon Emission" },
+  { href: "/map?tab=carbon", label: "Carbon Emission" },
   { href: "/visualize", label: "Carbon Lab 3D" },
-  { href: "/ranking", label: "Village Ranking" },
+  { href: "/map?tab=ranking", label: "Village Ranking" },
   { href: "/reports", label: "Village Reports" },
 ];
 

@@ -1,19 +1,21 @@
 "use client";
 
 import "leaflet/dist/leaflet.css";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { Feature, FeatureCollection } from "geojson";
-import type { Layer, PathOptions } from "leaflet";
+import type { Layer, Map as LeafletMap, PathOptions } from "leaflet";
 import {
-  CircleMarker, GeoJSON, LayersControl, MapContainer, Pane, Popup, ScaleControl, TileLayer, WMSTileLayer, useMap, useMapEvents,
+  CircleMarker, GeoJSON, MapContainer, Pane, Popup, ScaleControl, TileLayer, WMSTileLayer, ZoomControl, useMap,
 } from "react-leaflet";
-import { Maximize2, Minimize2 } from "lucide-react";
+import { Layers, Maximize2, Minimize2 } from "lucide-react";
 import { useGeoJson, useRasterLayers, wmsLegendUrl, wmsUrl } from "@/lib/api";
 import { interpolate } from "@/lib/colors";
 import { fmt, num } from "@/lib/format";
 import type { NumericKey, RasterLayer, Village } from "@/lib/types";
 import { useDashboard } from "./DashboardContext";
 import IndiaStatesLayer from "./IndiaStatesLayer";
+
+export type BaseMapId = "streets" | "topo" | "satellite" | "none";
 
 export interface ThematicMetric {
   label: string;
@@ -31,6 +33,33 @@ export const THEMATIC_METRICS: ThematicMetric[] = [
   { label: "Livestock Population (Count)", col: "total_livestock", colors: ["#f2f0f7", "#cbc9e2", "#9e9ac8", "#756bb1", "#54278f"], caption: "Total Livestock (Cattle/Goats/Sheep)" },
 ];
 
+export const BASE_MAPS: { id: BaseMapId; label: string; url: string; attribution: string }[] = [
+  {
+    id: "streets",
+    label: "Streets & Places",
+    url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  },
+  {
+    id: "topo",
+    label: "Topographic Map",
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
+    attribution: "Esri, HERE, Garmin, Intermap, USGS",
+  },
+  {
+    id: "satellite",
+    label: "Satellite Imagery",
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    attribution: "Esri Satellite World Imagery",
+  },
+  {
+    id: "none",
+    label: "None",
+    url: "",
+    attribution: "",
+  },
+];
+
 const DISTRICT_CENTER: [number, number] = [25.37, 82.93];
 
 interface Props {
@@ -38,20 +67,49 @@ interface Props {
   selectedCode: string | null;
   /** Only these villages are drawn (the selected sub-district); null draws every village. */
   areaFilter: { label: string; codes: Set<string> } | null;
-  metric: ThematicMetric;
+  metricIdx: number;
+  onMetricChange: (idx: number) => void;
   onSelect: (code: string) => void;
+  baseMap: BaseMapId;
+  showDistrictBoundary: boolean;
+  showBlockBoundaries: boolean;
+  showVillages: boolean;
+  activeRasters: string[];
+  rasters?: RasterLayer[];
+  zoomRequest?: { target: "district" | "village"; seq: number } | null;
+  layoutTick?: number;
+  fullscreenSeq?: number;
 }
 
 const featureCode = (f: Feature) => String(f.properties?.village_code ?? "").trim();
 
-export default function VillageMap({ villages, selectedCode, areaFilter, metric, onSelect }: Props) {
+export default function VillageMap({
+  villages,
+  selectedCode,
+  areaFilter,
+  metricIdx,
+  onMetricChange,
+  onSelect,
+  baseMap,
+  showDistrictBoundary,
+  showBlockBoundaries,
+  showVillages,
+  activeRasters,
+  rasters: rastersProp,
+  zoomRequest,
+  layoutTick = 0,
+  fullscreenSeq = 0,
+}: Props) {
   const { data: villageGeo } = useGeoJson("villages");
   const { data: blockGeo } = useGeoJson("blocks");
   const { data: districtGeo } = useGeoJson("district");
-  const { data: rasters = [] } = useRasterLayers();
-  const [activeRasters, setActiveRasters] = useState<string[]>([]);
+  const { data: fetchedRasters = [] } = useRasterLayers();
+  const rasters = rastersProp ?? fetchedRasters;
   const [isFullscreen, setIsFullscreen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const metric = THEMATIC_METRICS[metricIdx] ?? THEMATIC_METRICS[0];
+  const activeBase = BASE_MAPS.find((b) => b.id === baseMap) ?? BASE_MAPS[0];
 
   useEffect(() => {
     const handleFsChange = () => {
@@ -77,6 +135,10 @@ export default function VillageMap({ villages, selectedCode, areaFilter, metric,
       setIsFullscreen((prev) => !prev);
     }
   };
+
+  useEffect(() => {
+    if (fullscreenSeq > 0) toggleFullscreen();
+  }, [fullscreenSeq]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -110,7 +172,7 @@ export default function VillageMap({ villages, selectedCode, areaFilter, metric,
 
   const style = (feature?: Feature): PathOptions => {
     const code = feature ? featureCode(feature) : "";
-    if (code === selectedCode) return { fillColor: "#ffd600", color: "#e65100", weight: 4, fillOpacity: 0.85 };
+    if (code === selectedCode) return { fillColor: "#ffd600", color: "#e65100", weight: 3.5, fillOpacity: 0.85 };
     const val = num(byCode.get(code)?.[metric.col]);
     const fillColor = max > min ? interpolate(metric.colors, (val - min) / (max - min)) : "#a5d6a7";
     return { fillColor, color: "#37474f", weight: 0.7, fillOpacity: 0.65 };
@@ -130,48 +192,81 @@ export default function VillageMap({ villages, selectedCode, areaFilter, metric,
   };
 
   const selected = selectedCode ? byCode.get(selectedCode) : undefined;
+  const enabledRasterObjects = useMemo(
+    () => rasters.filter((r) => activeRasters.includes(r.layer)),
+    [rasters, activeRasters]
+  );
+
+  // Clip raster layers to the selected sub-district polygons (if filtered) or the Varanasi district boundary.
+  const clipGeo = areaFilter && displayGeo ? displayGeo : districtGeo;
+  const rawClipId = useId();
+  const clipId = `raster-clip-${rawClipId.replace(/[^a-zA-Z0-9_-]/g, "")}`;
+  const [clipPaths, setClipPaths] = useState<string[]>([]);
+  const [isRasterZooming, setIsRasterZooming] = useState(false);
 
   return (
-    <div className={`map-wrap ${isFullscreen ? "is-fullscreen" : ""}`} ref={containerRef}>
-      <MapContainer center={DISTRICT_CENTER} zoom={10} preferCanvas className="map">
-        <IndiaStatesLayer />
-        <LayersControl position="topright">
-          <LayersControl.BaseLayer checked name="OpenStreetMap">
-            <TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' />
-          </LayersControl.BaseLayer>
-          <LayersControl.BaseLayer name="Satellite Imagery (Esri)">
-            <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" attribution="Esri Satellite World Imagery" />
-          </LayersControl.BaseLayer>
+    <div className={`map-wrap scalgo-map-wrap ${isFullscreen ? "is-fullscreen" : ""} ${baseMap === "none" ? "no-basemap" : ""}`} ref={containerRef}>
+      <svg width="0" height="0" aria-hidden="true" style={{ position: "absolute", width: 0, height: 0, pointerEvents: "none" }}>
+        <defs>
+          <clipPath id={clipId} clipPathUnits="userSpaceOnUse">
+            {clipPaths.map((d, i) => (
+              <path key={i} d={d} clipRule="evenodd" />
+            ))}
+          </clipPath>
+        </defs>
+      </svg>
 
-          {districtGeo && (
-            <LayersControl.Overlay checked name="Varanasi District Boundary">
-              <GeoJSON data={districtGeo} interactive={false} style={{ fillColor: "transparent", fillOpacity: 0, color: "#1a237e", weight: 3, dashArray: "6, 6" }} />
-            </LayersControl.Overlay>
-          )}
-          {displayGeo && (
-            <LayersControl.Overlay checked name="Varanasi Villages">
-              {/* Remount when styling inputs change so every polygon is restyled. */}
-              <GeoJSON key={`${metric.col}|${areaFilter?.label ?? ""}|${selectedCode}|${villages.length}|${showCodes}`} data={displayGeo} style={style} onEachFeature={onEachFeature} />
-            </LayersControl.Overlay>
-          )}
-          {rasters.map((r) => (
-            <LayersControl.Overlay key={r.layer} name={rasterOverlayName(r)}>
-              {/* Own pane above the village polygons; clicks pass through to the villages. */}
-              <Pane name={`raster-${r.name}`} style={{ zIndex: 450, pointerEvents: "none" }}>
-                <WMSTileLayer url={wmsUrl(r.workspace)} params={{ layers: r.layer, format: "image/png", transparent: true }} opacity={0.8} />
-              </Pane>
-            </LayersControl.Overlay>
+      <MapContainer center={DISTRICT_CENTER} zoom={10} zoomControl={false} preferCanvas className="map scalgo-map">
+        <ZoomControl position="topleft" />
+        <IndiaStatesLayer />
+        {activeBase.url && (
+          <TileLayer key={activeBase.id} url={activeBase.url} attribution={activeBase.attribution} />
+        )}
+
+        {showDistrictBoundary && districtGeo && (
+          <GeoJSON
+            data={districtGeo}
+            interactive={false}
+            style={{ fillColor: "transparent", fillOpacity: 0, color: "#1a237e", weight: 3, dashArray: "6, 6" }}
+          />
+        )}
+
+        {showVillages && displayGeo && (
+          <GeoJSON
+            key={`${metric.col}|${areaFilter?.label ?? ""}|${selectedCode}|${villages.length}|${showCodes}`}
+            data={displayGeo}
+            style={style}
+            onEachFeature={onEachFeature}
+          />
+        )}
+
+        <Pane
+          name="clipped-rasters"
+          style={{
+            zIndex: 450,
+            pointerEvents: "none",
+            clipPath: clipPaths.length > 0 ? `url(#${clipId})` : undefined,
+            opacity: isRasterZooming || (enabledRasterObjects.length > 0 && clipGeo && clipPaths.length === 0) ? 0 : 1,
+          }}
+        >
+          {enabledRasterObjects.map((r) => (
+            <WMSTileLayer
+              key={r.layer}
+              url={wmsUrl(r.workspace)}
+              params={{ layers: r.layer, format: "image/png", transparent: true }}
+              opacity={0.8}
+            />
           ))}
-          {blockGeo && (
-            <LayersControl.Overlay checked name="Block Boundaries">
-              <GeoJSON
-                data={blockGeo}
-                interactive={false}
-                style={{ fillColor: "transparent", fillOpacity: 0, color: "#d84315", weight: 2, dashArray: "3, 4" }}
-              />
-            </LayersControl.Overlay>
-          )}
-        </LayersControl>
+        </Pane>
+        <ClipPathSync clipGeo={clipGeo} onPaths={setClipPaths} onZooming={setIsRasterZooming} />
+
+        {showBlockBoundaries && blockGeo && (
+          <GeoJSON
+            data={blockGeo}
+            interactive={false}
+            style={{ fillColor: "transparent", fillOpacity: 0, color: "#d84315", weight: 2, dashArray: "3, 4" }}
+          />
+        )}
 
         {selected?.latitude != null && selected.longitude != null && (
           <CircleMarker center={[selected.latitude, selected.longitude]} radius={7} pathOptions={{ color: "#fff", weight: 2, fillColor: "#d32f2f", fillOpacity: 1 }}>
@@ -180,13 +275,38 @@ export default function VillageMap({ villages, selectedCode, areaFilter, metric,
             </Popup>
           </CircleMarker>
         )}
+
         <ScaleControl position="bottomleft" />
-        <ActiveOverlayTracker onChange={setActiveRasters} />
-        <FlyToSelection village={selected} zoomed={!!areaFilter} />
-        <MapResizeOnFullscreen isFullscreen={isFullscreen} />
+        <FlyToSelection village={selected} zoomed={!!areaFilter} zoomRequest={zoomRequest} />
+        <MapResizeTrigger trigger={`${isFullscreen}-${layoutTick}`} />
       </MapContainer>
 
+      {/* Floating Thematic Map Layer Dropdown on Top-Right of Map */}
+      <div className="map-thematic-float" role="region" aria-label="Thematic Map Layer">
+        <div className="map-thematic-head">
+          <Layers size={13} />
+          <span>Thematic Map Layer</span>
+        </div>
+        <select
+          className="map-thematic-select"
+          aria-label="Select Thematic Map Layer"
+          value={metricIdx}
+          onChange={(e) => onMetricChange(Number(e.target.value))}
+        >
+          {THEMATIC_METRICS.map((m, i) => (
+            <option key={m.col} value={i}>{m.label}</option>
+          ))}
+        </select>
+        <div
+          className="map-thematic-ramp"
+          style={{ background: `linear-gradient(to right, ${metric.colors.join(",")})` }}
+          title={metric.caption}
+        />
+      </div>
+
+      {/* Fullscreen button under zoom controls */}
       <button
+        type="button"
         className={`map-fullscreen ${isFullscreen ? "is-active" : ""}`}
         onClick={toggleFullscreen}
         title={isFullscreen ? "Exit Full Screen (Esc / F)" : "Full Screen Map (F)"}
@@ -194,9 +314,11 @@ export default function VillageMap({ villages, selectedCode, areaFilter, metric,
       >
         {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
       </button>
-      {activeRasters.length > 0 && (
+
+      {/* Active Raster Legends */}
+      {enabledRasterObjects.length > 0 && (
         <div className="map-legend raster-legend">
-          {rasters.filter((r) => activeRasters.includes(rasterOverlayName(r))).map((r) => (
+          {enabledRasterObjects.map((r) => (
             <div key={r.layer}>
               <div className="legend-title">{r.title}</div>
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -205,7 +327,9 @@ export default function VillageMap({ villages, selectedCode, areaFilter, metric,
           ))}
         </div>
       )}
-      {max > min && (
+
+      {/* Thematic Gradient Legend */}
+      {showVillages && max > min && (
         <div className="map-legend">
           <div className="legend-title">{metric.caption}</div>
           <div className="legend-bar" style={{ background: `linear-gradient(to right, ${metric.colors.join(",")})` }} />
@@ -216,18 +340,15 @@ export default function VillageMap({ villages, selectedCode, areaFilter, metric,
   );
 }
 
-const rasterOverlayName = (r: RasterLayer) => `Raster: ${r.title}`;
-
-/** Reports which layer-control overlays are switched on (for the raster legends). */
-function ActiveOverlayTracker({ onChange }: { onChange: (update: (names: string[]) => string[]) => void }) {
-  useMapEvents({
-    overlayadd: (e) => onChange((names) => [...names, e.name]),
-    overlayremove: (e) => onChange((names) => names.filter((n) => n !== e.name)),
-  });
-  return null;
-}
-
-function FlyToSelection({ village, zoomed }: { village?: Village; zoomed: boolean }) {
+function FlyToSelection({
+  village,
+  zoomed,
+  zoomRequest,
+}: {
+  village?: Village;
+  zoomed: boolean;
+  zoomRequest?: { target: "district" | "village"; seq: number } | null;
+}) {
   const map = useMap();
   useEffect(() => {
     if (village?.latitude != null && village.longitude != null) {
@@ -236,21 +357,102 @@ function FlyToSelection({ village, zoomed }: { village?: Village; zoomed: boolea
       map.setView(DISTRICT_CENTER, zoomed ? 11 : 10);
     }
   }, [map, village?.village_code, village?.latitude, village?.longitude, zoomed]);
+
+  useEffect(() => {
+    if (!zoomRequest) return;
+    if (zoomRequest.target === "district") {
+      map.flyTo(DISTRICT_CENTER, 10, { duration: 0.5 });
+    } else if (zoomRequest.target === "village" && village?.latitude != null && village.longitude != null) {
+      map.flyTo([village.latitude, village.longitude], 13, { duration: 0.5 });
+    }
+  }, [map, zoomRequest, village?.latitude, village?.longitude]);
+
   return null;
 }
 
-/** Triggers leaflet resize when entering or exiting fullscreen mode. */
-function MapResizeOnFullscreen({ isFullscreen }: { isFullscreen: boolean }) {
+function ringToPath(map: LeafletMap, ring: number[][]): string {
+  if (!ring.length) return "";
+  let d = "";
+  for (let i = 0; i < ring.length; i++) {
+    const [lng, lat] = ring[i];
+    const pt = map.latLngToLayerPoint([lat, lng]);
+    d += `${i === 0 ? "M" : "L"}${pt.x.toFixed(1)},${pt.y.toFixed(1)}`;
+  }
+  return d ? `${d}Z` : "";
+}
+
+function geoToPaths(map: LeafletMap, geo: FeatureCollection | null | undefined): string[] {
+  if (!geo?.features?.length) return [];
+  const paths: string[] = [];
+  for (const f of geo.features) {
+    const g = f.geometry;
+    if (!g) continue;
+    if (g.type === "Polygon") {
+      const d = g.coordinates.map((ring) => ringToPath(map, ring)).join(" ");
+      if (d) paths.push(d);
+    } else if (g.type === "MultiPolygon") {
+      for (const poly of g.coordinates) {
+        const d = poly.map((ring) => ringToPath(map, ring)).join(" ");
+        if (d) paths.push(d);
+      }
+    }
+  }
+  return paths;
+}
+
+/** Keeps the SVG clip-path synchronized with Leaflet layer coordinates for the selected district or sub-district. */
+function ClipPathSync({
+  clipGeo,
+  onPaths,
+  onZooming,
+}: {
+  clipGeo: FeatureCollection | null | undefined;
+  onPaths: (paths: string[]) => void;
+  onZooming: (zooming: boolean) => void;
+}) {
+  const map = useMap();
+
+  const recompute = useCallback(() => {
+    onPaths(geoToPaths(map, clipGeo));
+  }, [map, clipGeo, onPaths]);
+
+  useEffect(() => {
+    recompute();
+  }, [recompute]);
+
+  useEffect(() => {
+    const onZoomStart = () => onZooming(true);
+    const onZoomEnd = () => {
+      recompute();
+      onZooming(false);
+    };
+    map.on("zoomstart", onZoomStart);
+    map.on("zoomend", onZoomEnd);
+    map.on("viewreset", onZoomEnd);
+    map.on("moveend", recompute);
+    map.on("resize", recompute);
+    return () => {
+      map.off("zoomstart", onZoomStart);
+      map.off("zoomend", onZoomEnd);
+      map.off("viewreset", onZoomEnd);
+      map.off("moveend", recompute);
+      map.off("resize", recompute);
+    };
+  }, [map, recompute, onZooming]);
+
+  return null;
+}
+
+/** Triggers leaflet resize when entering/exiting fullscreen or toggling side panels. */
+function MapResizeTrigger({ trigger }: { trigger: string }) {
   const map = useMap();
   useEffect(() => {
     const t1 = setTimeout(() => map.invalidateSize(), 60);
-    const t2 = setTimeout(() => map.invalidateSize(), 250);
-    const t3 = setTimeout(() => map.invalidateSize(), 500);
+    const t2 = setTimeout(() => map.invalidateSize(), 260);
     return () => {
       clearTimeout(t1);
       clearTimeout(t2);
-      clearTimeout(t3);
     };
-  }, [map, isFullscreen]);
+  }, [map, trigger]);
   return null;
 }

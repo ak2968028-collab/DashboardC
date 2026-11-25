@@ -1272,6 +1272,7 @@ button.nav-link { background: none; border: none; font: inherit; cursor: pointer
 .page-hero-stats .village dd { font-size: 22px; }
 .page-hero-stats .village small { margin-top: 3px; font-size: 12px; color: rgba(255, 255, 255, 0.78); display: inline-flex; align-items: center; gap: 4px; }
 .page-body { position: relative; padding: 22px 32px 44px; }
+.page-body-workbench { position: relative; padding: 0; }
 .page-body.has-toolbar { margin-top: -36px; padding-top: 0; }
 .page-body > .toolbar { position: relative; z-index: 3; margin-bottom: 22px; border: none; border-radius: 12px; padding: 14px 18px; box-shadow: 0 6px 22px rgba(16, 38, 64, 0.14); }
 .page-body > :not(.toolbar):first-child { margin-top: 0; }
@@ -1745,10 +1746,29 @@ details.chat-visual .table-wrap { max-height: 280px; overflow: auto; margin-top:
   font-size: 13px;
   line-height: 1.35;
   margin-bottom: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .references-workspace.split .research-paper-card.expanded .paper-card-title {
-  margin-bottom: 8px;
+  margin-bottom: 6px;
+}
+
+.references-workspace.split .paper-card-meta-row {
+  gap: 6px 10px;
+}
+
+.references-workspace.split .paper-meta-item {
+  max-width: 100%;
+  font-size: 11.5px;
+}
+
+.references-workspace.split .paper-meta-item .meta-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .references-workspace.split .paper-card-expand-indicator {
@@ -1760,20 +1780,29 @@ details.chat-visual .table-wrap { max-height: 280px; overflow: auto; margin-top:
 }
 
 .references-workspace.split .paper-card-body {
-  padding: 12px;
-}
-
-.references-workspace.split .paper-description-box {
   padding: 10px 12px;
 }
 
+.references-workspace.split .paper-description-box {
+  padding: 8px 10px;
+}
+
 .references-workspace.split .paper-description-text {
-  font-size: 12.5px;
-  line-height: 1.45;
+  font-size: 12px;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.references-workspace.split .paper-original-link-row {
+  margin: 10px 0;
 }
 
 .references-workspace.split .paper-options-row {
-  gap: 10px 14px;
+  margin-top: 8px;
+  gap: 8px 12px;
 }
 
 .research-paper-card.active-doc {
@@ -1932,6 +1961,18 @@ details.chat-visual .table-wrap { max-height: 280px; overflow: auto; margin-top:
   height: 100%;
   border: none;
   background: #525659;
+}
+
+.side-viewer-article-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px 36px;
+  background: #fcfdfd;
+}
+
+.side-viewer-article-scroll .reader-document {
+  max-width: 100%;
+  padding: 28px 32px;
 }
 
 .side-viewer-fallback {
@@ -3216,5 +3257,1005 @@ details.chat-visual .table-wrap { max-height: 280px; overflow: auto; margin-top:
 
   .paper-card-expand-indicator {
     align-self: flex-start;
+  }
+}
+
+/* ==========================================================================
+   SCALGO-Style 3-Pane GIS Workbench (/map)
+   ========================================================================== */
+.scalgo-workbench {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 122px);
+  min-height: 600px;
+  width: 100%;
+  background: #e5ebf0;
+  border-top: 1px solid #cbd5e1;
+  overflow: hidden;
+}
+
+.scalgo-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 16px;
+  background: #173f28;
+  color: #ffffff;
+  border-bottom: 1px solid #0f2c1b;
+  flex-shrink: 0;
+}
+
+.scalgo-topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.scalgo-brand-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #4ade80;
+  box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.25);
+  flex-shrink: 0;
+}
+
+.scalgo-brand-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.scalgo-brand-title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+}
+
+.scalgo-brand-sub {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.78);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.scalgo-topbar-tools,
+.scalgo-topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.scalgo-tool-btn {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 62px;
+  padding: 5px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 11px;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.scalgo-tool-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+.scalgo-tool-btn.active {
+  background: #235939;
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+}
+
+.scalgo-tool-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.scalgo-help-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 16px;
+  background: #ecfdf5;
+  border-bottom: 1px solid #bbf7d0;
+  color: #14532d;
+  font-size: 12.5px;
+  flex-shrink: 0;
+}
+
+.scalgo-help-banner button {
+  background: none;
+  border: none;
+  color: #166534;
+  cursor: pointer;
+  padding: 3px;
+  display: grid;
+  place-items: center;
+}
+
+/* Main 3-Pane Split */
+.scalgo-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  position: relative;
+}
+
+.scalgo-panel {
+  position: relative;
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  z-index: 15;
+  transition: width 0.2s ease;
+}
+
+.scalgo-panel.left {
+  width: 288px;
+  border-right: 1px solid #d5dde5;
+  box-shadow: 2px 0 8px rgba(15, 23, 42, 0.06);
+}
+
+.scalgo-panel.right {
+  width: 360px;
+  border-left: 1px solid #d5dde5;
+  box-shadow: -2px 0 8px rgba(15, 23, 42, 0.06);
+}
+
+.scalgo-panel.collapsed {
+  width: 0;
+  border-color: transparent;
+}
+
+.scalgo-panel-inner {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.scalgo-collapse-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.18);
+  color: #475569;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  z-index: 30;
+  transition: all 0.15s ease;
+}
+
+.scalgo-collapse-btn:hover {
+  background: #f0fdf4;
+  border-color: #16a34a;
+  color: #15803d;
+}
+
+.scalgo-collapse-btn.right {
+  right: -12px;
+}
+
+.scalgo-collapse-btn.left {
+  left: -12px;
+}
+
+/* Left Panel Tabs */
+.scalgo-panel-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-bottom: 1px solid #e2e8f0;
+  background: #ffffff;
+  flex-shrink: 0;
+}
+
+.scalgo-panel-tabs.three {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.scalgo-panel-tabs.four {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.scalgo-sector-pills {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.scalgo-sector-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 6px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.scalgo-sector-pill:hover {
+  border-color: var(--sector, #173f28);
+  color: #0f172a;
+}
+
+.scalgo-sector-pill.active {
+  background: var(--sector, #173f28);
+  border-color: var(--sector, #173f28);
+  color: #ffffff;
+}
+
+.scalgo-tab {
+  padding: 10px 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #64748b;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.scalgo-tab:hover {
+  color: #0f172a;
+}
+
+.scalgo-tab.active {
+  color: #173f28;
+  border-bottom-color: #173f28;
+}
+
+.scalgo-panel-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.scalgo-section {
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.scalgo-section-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #ffffff;
+  border: none;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #1e293b;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.scalgo-section-head:hover {
+  background: #f8fafc;
+}
+
+.scalgo-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 14px 12px 18px;
+}
+
+.scalgo-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.scalgo-field span {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.scalgo-field select {
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 12.5px;
+  color: #0f172a;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  outline: none;
+}
+
+.scalgo-field select:focus {
+  border-color: #16a34a;
+  background: #ffffff;
+}
+
+.scalgo-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: #334155;
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+.scalgo-check input[type="checkbox"] {
+  accent-color: #16a34a;
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+
+.scalgo-radio {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: #334155;
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+.scalgo-radio input {
+  display: none;
+}
+
+.scalgo-radio-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1.5px solid #cbd5e1;
+  background: #ffffff;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.scalgo-radio.checked .scalgo-radio-dot {
+  border-color: #16a34a;
+  background: #22c55e;
+  box-shadow: inset 0 0 0 3px #ffffff;
+}
+
+.scalgo-radio.checked {
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.scalgo-muted-note {
+  font-size: 12px;
+  color: #64748b;
+  padding: 6px 0;
+}
+
+/* Villages Tab Inside Left Panel */
+.scalgo-villages-pane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.scalgo-search-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 12px 8px;
+  padding: 6px 10px;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+}
+
+.scalgo-search-wrap:focus-within {
+  border-color: #16a34a;
+  background: #ffffff;
+}
+
+.scalgo-search-icon {
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.scalgo-search-wrap input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 12.5px;
+  color: #0f172a;
+}
+
+.scalgo-search-wrap button {
+  background: none;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  padding: 2px;
+  display: grid;
+  place-items: center;
+}
+
+.scalgo-village-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.scalgo-village-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.scalgo-village-row:hover {
+  background: #f1f5f9;
+}
+
+.scalgo-village-row.active {
+  background: #ecfdf5;
+  border-color: #86efac;
+}
+
+.scalgo-vrow-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.scalgo-vrow-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.scalgo-vrow-sub {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.scalgo-vrow-val {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #166534;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  padding: 2px 6px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.scalgo-panel-foot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  flex-shrink: 0;
+}
+
+/* Center Map Stage */
+.scalgo-map-stage {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  position: relative;
+}
+
+.scalgo-map-wrap {
+  height: 100%;
+  width: 100%;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.scalgo-map-wrap.no-basemap .leaflet-container {
+  background: #e9eff4;
+}
+
+.scalgo-map {
+  height: 100% !important;
+  width: 100% !important;
+}
+
+/* Floating Thematic Map Layer Dropdown on Top-Right of Map */
+.map-thematic-float {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  z-index: 1000;
+  width: 265px;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(6px);
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 8px 10px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.16);
+}
+
+.map-thematic-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #173f28;
+  margin-bottom: 5px;
+}
+
+.map-thematic-select {
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #0f172a;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  outline: none;
+  cursor: pointer;
+}
+
+.map-thematic-select:focus {
+  border-color: #16a34a;
+  background: #ffffff;
+}
+
+.map-thematic-ramp {
+  height: 5px;
+  border-radius: 999px;
+  margin-top: 6px;
+}
+
+/* Right Panel Inspector */
+.scalgo-inspector-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.scalgo-inspector-head h3 {
+  margin: 6px 0 4px;
+  font-size: 18px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.25;
+}
+
+.scalgo-inspector-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #166534;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.scalgo-inspector-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: #64748b;
+  flex-wrap: wrap;
+}
+
+.scalgo-metric-highlight {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #173f28;
+  color: #ffffff;
+  border-radius: 8px;
+}
+
+.scalgo-metric-highlight .label {
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.scalgo-metric-highlight .val {
+  font-size: 16px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.scalgo-kpi-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.scalgo-kpi-tile {
+  padding: 9px 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.scalgo-kpi-tile span {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.scalgo-kpi-tile b {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.scalgo-inspector-card {
+  padding: 10px 12px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.scalgo-inspector-card h4 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #334155;
+}
+
+.scalgo-sector-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.scalgo-sector-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #475569;
+  margin-bottom: 3px;
+}
+
+.scalgo-sector-track {
+  height: 6px;
+  background: #e2e8f0;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.scalgo-sector-fill {
+  height: 100%;
+  border-radius: 999px;
+}
+
+.scalgo-dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.scalgo-dl div {
+  display: flex;
+  flex-direction: column;
+}
+
+.scalgo-dl dt {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.scalgo-dl dd {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.scalgo-inspector-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.scalgo-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 8px 12px;
+  border-radius: 7px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #1e293b;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.scalgo-action-btn:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+
+.scalgo-action-btn.primary {
+  background: #173f28;
+  border-color: #173f28;
+  color: #ffffff;
+}
+
+.scalgo-action-btn.primary:hover {
+  background: #1e5235;
+}
+
+.scalgo-empty-inspector {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 28px 20px;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.5;
+  gap: 18px;
+}
+
+.scalgo-empty-icons {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.scalgo-empty-icons span {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #173f28;
+  color: #ffffff;
+  display: grid;
+  place-items: center;
+}
+
+/* Carbon & Ranking Tabs inside Right Inspector */
+.scalgo-kpi-tile.accent-red { border-top: 3px solid #d32f2f; }
+.scalgo-kpi-tile.accent-orange { border-top: 3px solid #f57c00; }
+.scalgo-kpi-tile.accent-blue { border-top: 3px solid #1976d2; }
+.scalgo-kpi-tile.accent-green { border-top: 3px solid #388e3c; }
+
+.scalgo-formula-mini {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #1e293b;
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.scalgo-factor-list {
+  margin: 0;
+  padding-left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11.5px;
+  color: #475569;
+  line-height: 1.4;
+}
+
+.scalgo-ranking-pane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.scalgo-ranking-controls {
+  padding: 10px 12px;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #f8fafc;
+  flex-shrink: 0;
+}
+
+.scalgo-ranking-subrow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.scalgo-rank-table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.scalgo-rank-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.scalgo-rank-table thead th {
+  position: sticky;
+  top: 0;
+  background: #ffffff;
+  border-bottom: 1px solid #cbd5e1;
+  padding: 7px 10px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  color: #475569;
+  z-index: 2;
+}
+
+.scalgo-rank-table thead th.num,
+.scalgo-rank-table tbody td.num {
+  text-align: right;
+}
+
+.scalgo-rank-row {
+  cursor: pointer;
+  border-bottom: 1px solid #f1f5f9;
+  transition: background 0.12s ease;
+}
+
+.scalgo-rank-row:hover {
+  background: #f8fafc;
+}
+
+.scalgo-rank-row.selected {
+  background: #ecfdf5;
+}
+
+.scalgo-rank-row td {
+  padding: 7px 10px;
+  vertical-align: middle;
+}
+
+.scalgo-rank-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.scalgo-rank-name {
+  font-weight: 600;
+  color: #0f172a;
+  line-height: 1.25;
+}
+
+.scalgo-rank-block {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.scalgo-rank-gap td {
+  text-align: center;
+  color: #94a3b8;
+  padding: 4px;
+}
+
+.scalgo-panel-foot.rank-foot {
+  font-size: 11.5px;
+  text-align: center;
+  color: #14532d;
+  background: #f0fdf4;
+}
+
+@media (max-width: 1024px) {
+  .scalgo-workbench {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .scalgo-topbar {
+    flex-wrap: wrap;
+  }
+
+  .scalgo-body {
+    flex-direction: column;
+  }
+
+  .scalgo-panel.left,
+  .scalgo-panel.right {
+    width: 100%;
+    border: none;
+    border-bottom: 1px solid #d5dde5;
+  }
+
+  .scalgo-collapse-btn {
+    display: none;
+  }
+
+  .scalgo-map-stage {
+    height: 560px;
+    flex: none;
+  }
+
+  .map-thematic-float {
+    width: 220px;
   }
 }

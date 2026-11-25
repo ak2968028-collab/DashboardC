@@ -20,16 +20,14 @@ import {
 } from "lucide-react";
 import { useReferences, referenceFileUrl } from "@/lib/api";
 import type { ResearchPaper } from "@/lib/types";
-import ReadingView, { type ReadingMode } from "@/components/AcademicReader";
+import { ReadingArticle, type ReadingMode } from "@/components/AcademicReader";
 
 export default function ReferencesPage() {
   const { data: papers = [], isLoading } = useReferences();
   const [search, setSearch] = useState("");
   const [selectedYear, setSelectedYear] = useState<string>("All");
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-  const [readingPaper, setReadingPaper] = useState<ResearchPaper | null>(null);
-  const [readingMode, setReadingMode] = useState<ReadingMode>("highlights");
-  const [sideDoc, setSideDoc] = useState<{ paper: ResearchPaper; mode: "paper" | "ppt" } | null>(null);
+  const [sideDoc, setSideDoc] = useState<{ paper: ResearchPaper; mode: ReadingMode } | null>(null);
 
   // Available publication years
   const availableYears = useMemo(() => {
@@ -56,8 +54,8 @@ export default function ReferencesPage() {
     });
   }, [papers, search, selectedYear]);
 
-  // Open PDF or PPT on the right side and collapse left list to compact headings
-  const openSideDoc = (paper: ResearchPaper, mode: "paper" | "ppt") => {
+  // Open any paper resource (PDF, PPT, Key Highlights, Report) on the right side and collapse left list to compact headings
+  const openSideDoc = (paper: ResearchPaper, mode: ReadingMode) => {
     setSideDoc({ paper, mode });
     setExpandedIds(new Set());
   };
@@ -81,29 +79,15 @@ export default function ReferencesPage() {
     }
   };
 
-  // Lock body scroll when reading view is open
+  // Escape key closes side viewer and resets layout
   useEffect(() => {
-    if (!readingPaper) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setReadingPaper(null);
-    };
-    document.addEventListener("keydown", onKey);
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
-    };
-  }, [readingPaper]);
-
-  // Escape key closes side PDF/PPT viewer and resets layout
-  useEffect(() => {
-    if (!sideDoc || readingPaper) return;
+    if (!sideDoc) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setSideDoc(null);
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [sideDoc, readingPaper]);
+  }, [sideDoc]);
 
   const sideEmbedUrl = sideDoc
     ? sideDoc.mode === "paper" && sideDoc.paper.paper_file
@@ -116,8 +100,19 @@ export default function ReferencesPage() {
   const sideDownloadUrl = sideDoc
     ? sideDoc.mode === "paper" && sideDoc.paper.paper_file
       ? referenceFileUrl(sideDoc.paper.folder, "paper")
-      : referenceFileUrl(sideDoc.paper.folder, sideDoc.paper.ppt_file ? "ppt" : "ppt_pdf")
+      : sideDoc.mode === "ppt"
+        ? referenceFileUrl(sideDoc.paper.folder, sideDoc.paper.ppt_file ? "ppt" : "ppt_pdf")
+        : null
     : null;
+
+  const sideModeLabel =
+    sideDoc?.mode === "paper"
+      ? "PDF"
+      : sideDoc?.mode === "ppt"
+        ? "PPT"
+        : sideDoc?.mode === "highlights"
+          ? "Highlights"
+          : "Report";
 
   return (
     <div className={`references-page ${sideDoc ? "has-side-viewer" : ""}`}>
@@ -335,16 +330,13 @@ export default function ReferencesPage() {
                         </span>
                       )}
 
-                      {/* Option 2: Key Highlights */}
+                      {/* Option 2: Key Highlights (Opens on right side in same page) */}
                       {paper.highlights_md || (paper.points && paper.points.length > 0) || paper.highlights_file ? (
                         <button
                           type="button"
-                          className="paper-option-link opt-highlights"
-                          onClick={() => {
-                            setReadingPaper(paper);
-                            setReadingMode("highlights");
-                          }}
-                          title="Read Key Highlights"
+                          className={`paper-option-link opt-highlights ${isSideActive && sideDoc?.mode === "highlights" ? "active" : ""}`}
+                          onClick={() => openSideDoc(paper, "highlights")}
+                          title="Read Key Highlights on the right side"
                         >
                           <Lightbulb size={15} className="option-icon" />
                           <span>Key Highlights</span>
@@ -357,20 +349,16 @@ export default function ReferencesPage() {
                         </span>
                       )}
 
-                      {/* Option 3: Report */}
+                      {/* Option 3: Report (Opens on right side in same page) */}
                       {paper.report_md || paper.report_file ? (
                         <button
                           type="button"
-                          className="paper-option-link opt-report"
-                          onClick={() => {
-                            setReadingPaper(paper);
-                            setReadingMode("report");
-                          }}
-                          title="Read Complete Report"
+                          className={`paper-option-link opt-report ${isSideActive && sideDoc?.mode === "report" ? "active" : ""}`}
+                          onClick={() => openSideDoc(paper, "report")}
+                          title="Read Complete Report on the right side"
                         >
                           <FileText size={15} className="option-icon" />
                           <span>Report</span>
-                          <ExternalLink size={13} className="option-sub-icon" />
                         </button>
                       ) : (
                         <span className="paper-option-link disabled" title="Report not available">
@@ -387,7 +375,7 @@ export default function ReferencesPage() {
             </div>
           </div>
 
-          {/* Right-Side Google-Style PDF / PPT Viewer Panel */}
+          {/* Right-Side Google-Style Viewer Panel (PDF, PPT, Key Highlights, Full Report) */}
           {sideDoc && (
             <aside className="references-side-viewer" aria-label="Document Preview">
               <div className="side-viewer-header">
@@ -410,6 +398,26 @@ export default function ReferencesPage() {
                     >
                       <Presentation size={14} />
                       <span>PPT</span>
+                    </button>
+                  )}
+                  {(sideDoc.paper.highlights_md || (sideDoc.paper.points && sideDoc.paper.points.length > 0) || sideDoc.paper.highlights_file) && (
+                    <button
+                      type="button"
+                      className={`side-viewer-tab ${sideDoc.mode === "highlights" ? "active" : ""}`}
+                      onClick={() => setSideDoc({ paper: sideDoc.paper, mode: "highlights" })}
+                    >
+                      <Lightbulb size={14} />
+                      <span>Key Highlights</span>
+                    </button>
+                  )}
+                  {(sideDoc.paper.report_md || sideDoc.paper.report_file) && (
+                    <button
+                      type="button"
+                      className={`side-viewer-tab ${sideDoc.mode === "report" ? "active" : ""}`}
+                      onClick={() => setSideDoc({ paper: sideDoc.paper, mode: "report" })}
+                    >
+                      <FileText size={14} />
+                      <span>Report</span>
                     </button>
                   )}
                 </div>
@@ -463,15 +471,17 @@ export default function ReferencesPage() {
               </div>
 
               <div className="side-viewer-subbar">
-                <span className="side-viewer-badge">
-                  {sideDoc.mode === "paper" ? "PDF" : "PPT"}
-                </span>
+                <span className="side-viewer-badge">{sideModeLabel}</span>
                 <span className="side-viewer-title" title={sideDoc.paper.title}>
                   {sideDoc.paper.title}
                 </span>
               </div>
 
-              {sideEmbedUrl ? (
+              {sideDoc.mode === "highlights" || sideDoc.mode === "report" ? (
+                <div className="side-viewer-article-scroll">
+                  <ReadingArticle paper={sideDoc.paper} mode={sideDoc.mode} showFooter={false} />
+                </div>
+              ) : sideEmbedUrl ? (
                 <iframe
                   key={sideEmbedUrl}
                   src={`${sideEmbedUrl}#view=FitH`}
@@ -494,16 +504,6 @@ export default function ReferencesPage() {
             </aside>
           )}
         </div>
-      )}
-
-      {/* In-App Reading View (Key Highlights & Full Report) */}
-      {readingPaper && (
-        <ReadingView
-          paper={readingPaper}
-          mode={readingMode}
-          onClose={() => setReadingPaper(null)}
-          onSwitchMode={(m) => setReadingMode(m)}
-        />
       )}
     </div>
   );

@@ -163,6 +163,137 @@ export function AcademicMarkdown({ content }: { content: string }) {
   );
 }
 
+interface ReadingArticleProps {
+  paper: ResearchPaper;
+  mode: "highlights" | "report";
+  onClose?: () => void;
+  showFooter?: boolean;
+}
+
+/** Shared in-app article renderer for Key Highlights and Full Report */
+export function ReadingArticle({ paper, mode, onClose, showFooter = true }: ReadingArticleProps) {
+  const content = mode === "highlights" ? paper.highlights_md : paper.report_md;
+
+  return (
+    <div className="reader-document">
+      {/* Document Header */}
+      <div className="reader-doc-header">
+        <div className="reader-doc-badge">
+          {mode === "highlights" ? (
+            <>
+              <Sparkles size={14} />
+              <span>Executive Key Highlights &amp; Findings</span>
+            </>
+          ) : (
+            <>
+              <FileText size={14} />
+              <span>Complete Research Paper Report</span>
+            </>
+          )}
+        </div>
+
+        <h1 className="reader-doc-title">{paper.title}</h1>
+
+        <div className="reader-doc-meta">
+          {paper.authors && (
+            <span className="doc-meta-item authors">
+              <Users size={14} />
+              <span>{paper.authors}</span>
+            </span>
+          )}
+
+          {paper.journal && (
+            <span className="doc-meta-item journal">
+              <Building2 size={14} />
+              <span>{paper.journal}</span>
+            </span>
+          )}
+
+          {paper.year && (
+            <span className="doc-meta-item year">
+              <Calendar size={14} />
+              <span><b>{paper.year}</b></span>
+            </span>
+          )}
+
+          {paper.doi && (
+            <a
+              href={paper.doi}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="doc-meta-item doi-link"
+              title="View official publisher DOI"
+            >
+              <ExternalLink size={13} />
+              <span>Official DOI</span>
+            </a>
+          )}
+        </div>
+      </div>
+
+      {/* If in Highlights mode and metrics exist, display metric callout cards */}
+      {mode === "highlights" && paper.metrics && paper.metrics.length > 0 && (
+        <div className="reader-metrics-section">
+          <h3 className="reader-section-title">
+            <CheckCircle2 size={16} /> Key Quantitative Indicators
+          </h3>
+          <div className="reader-metrics-grid">
+            {paper.metrics.map((m, idx) => (
+              <div key={idx} className="reader-metric-card">
+                <div className="metric-val">{m.value}</div>
+                <div className="metric-lbl">{m.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Document Markdown Content */}
+      <div className="reader-doc-content">
+        {content ? (
+          <AcademicMarkdown content={content} />
+        ) : (
+          <div className="reader-empty-state">
+            <FileText size={48} className="empty-icon" />
+            <h3>Content Not Available</h3>
+            <p>
+              {mode === "highlights"
+                ? "The key highlights document is currently not available for this research paper."
+                : "The detailed report document is currently not available for this research paper."}
+            </p>
+            {onClose && (
+              <button type="button" className="btn" onClick={onClose}>
+                Return to References
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Reader Footer */}
+      {showFooter && (
+        <div className="reader-doc-footer">
+          <div className="footer-left">
+            <span>End of {mode === "highlights" ? "Key Highlights" : "Report"}</span>
+          </div>
+          {onClose && (
+            <div className="footer-right">
+              <button
+                type="button"
+                className="btn reader-bottom-back-btn"
+                onClick={onClose}
+              >
+                <ArrowLeft size={14} />
+                <span>Back to References</span>
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface ReadingViewProps {
   paper: ResearchPaper;
   mode: ReadingMode;
@@ -196,8 +327,6 @@ export default function ReadingView({
       : mode === "ppt"
         ? referenceFileUrl(paper.folder, paper.ppt_file ? "ppt" : "ppt_pdf")
         : null;
-
-  const content = mode === "highlights" ? paper.highlights_md : paper.report_md;
 
   return (
     <div className="reader-overlay" role="dialog" aria-modal="true">
@@ -355,117 +484,8 @@ export default function ReadingView({
         ) : (
           /* Reader Document Body */
           <main className="reader-main-scroll">
-          <div className="reader-document">
-            {/* Document Header */}
-            <div className="reader-doc-header">
-              <div className="reader-doc-badge">
-                {mode === "highlights" ? (
-                  <>
-                    <Sparkles size={14} />
-                    <span>Executive Key Highlights &amp; Findings</span>
-                  </>
-                ) : (
-                  <>
-                    <FileText size={14} />
-                    <span>Complete Research Paper Report</span>
-                  </>
-                )}
-              </div>
-
-              <h1 className="reader-doc-title">{paper.title}</h1>
-
-              <div className="reader-doc-meta">
-                {paper.authors && (
-                  <span className="doc-meta-item authors">
-                    <Users size={14} />
-                    <span>{paper.authors}</span>
-                  </span>
-                )}
-
-                {paper.journal && (
-                  <span className="doc-meta-item journal">
-                    <Building2 size={14} />
-                    <span>{paper.journal}</span>
-                  </span>
-                )}
-
-                {paper.year && (
-                  <span className="doc-meta-item year">
-                    <Calendar size={14} />
-                    <span><b>{paper.year}</b></span>
-                  </span>
-                )}
-
-                {paper.doi && (
-                  <a
-                    href={paper.doi}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="doc-meta-item doi-link"
-                    title="View official publisher DOI"
-                  >
-                    <ExternalLink size={13} />
-                    <span>Official DOI</span>
-                  </a>
-                )}
-              </div>
-            </div>
-
-            {/* If in Highlights mode and metrics exist, display metric callout cards */}
-            {mode === "highlights" && paper.metrics && paper.metrics.length > 0 && (
-              <div className="reader-metrics-section">
-                <h3 className="reader-section-title">
-                  <CheckCircle2 size={16} /> Key Quantitative Indicators
-                </h3>
-                <div className="reader-metrics-grid">
-                  {paper.metrics.map((m, idx) => (
-                    <div key={idx} className="reader-metric-card">
-                      <div className="metric-val">{m.value}</div>
-                      <div className="metric-lbl">{m.label}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Document Markdown Content */}
-            <div className="reader-doc-content">
-              {content ? (
-                <AcademicMarkdown content={content} />
-              ) : (
-                <div className="reader-empty-state">
-                  <FileText size={48} className="empty-icon" />
-                  <h3>Content Not Available</h3>
-                  <p>
-                    {mode === "highlights"
-                      ? "The key highlights document is currently not available for this research paper."
-                      : "The detailed report document is currently not available for this research paper."}
-                  </p>
-                  <button type="button" className="btn" onClick={onClose}>
-                    Return to References
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Reader Footer */}
-            <div className="reader-doc-footer">
-              <div className="footer-left">
-                <span>End of {mode === "highlights" ? "Key Highlights" : "Report"}</span>
-              </div>
-              <div className="footer-right">
-                <button
-                  type="button"
-                  className="btn reader-bottom-back-btn"
-                  onClick={onClose}
-                >
-                  <ArrowLeft size={14} />
-                  <span>Back to References</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </main>
+            <ReadingArticle paper={paper} mode={mode} onClose={onClose} />
+          </main>
         )}
       </div>
     </div>

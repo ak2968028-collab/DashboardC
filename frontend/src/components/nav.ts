@@ -10,16 +10,13 @@ import {
   FileText,
   Flame,
   FlaskConical,
-  Layers,
   LayoutDashboard,
-  Leaf,
   Map,
   Newspaper,
   Scale,
   Settings,
   ShieldCheck,
   Trash2,
-  Trophy,
   Users,
   Wheat,
 } from "lucide-react";
@@ -68,10 +65,10 @@ export const NAV_GROUPS: Record<string, NavGroupMeta> = {
     id: "Analytics",
     label: "Analytics",
     icon: BarChart3,
-    description: "IPCC Tier-1 modeling, interactive 3D simulations & rankings",
+    description: "Interactive 3D simulations & cross-village benchmarking",
     badge: "Interactive",
-    columns: 2,
-    menuWidth: 420,
+    columns: 1,
+    menuWidth: 320,
   },
   Reports: {
     id: "Reports",
@@ -140,42 +137,8 @@ export const PAGES: readonly NavPage[] = [
     accentColor: "#0d47a1",
     keywords: ["blog", "news", "updates", "articles", "posts"],
   },
-  {
-    href: "/references",
-    label: "References",
-    heroTitle: "Research References",
-    icon: BookOpen,
-    needsVillage: false,
-    hint: "Explore research papers, presentations, key findings, and detailed reports.",
-    accentColor: "#059669",
-    keywords: ["references", "research", "papers", "academic", "presentations", "ppt", "reports", "highlights", "literature", "citations"],
-  },
-
-  // ── Sectors: one page, six tabs (SECTORS below) ───────────────────────────
-  {
-    href: "/sectors",
-    label: "Sectors",
-    icon: Layers,
-    needsVillage: true,
-    hint: "Demography, land & water, energy, transport, waste and livestock for the selected village",
-    accentColor: "#7c3aed",
-    keywords: ["sectors", "population", "census", "land", "water", "irrigation", "energy", "electricity", "lpg",
-      "firewood", "transport", "vehicles", "petrol", "waste", "garbage", "livestock", "cattle", "goats", "sheep"],
-  },
 
   // ── Analytics & Simulations ────────────────────────────────────────────────
-  {
-    href: "/carbon",
-    label: "Carbon Emission",
-    icon: Leaf,
-    needsVillage: true,
-    group: "Analytics",
-    hint: "IPCC Tier-1 sectoral breakdown (CO₂, CH₄, N₂O in t CO₂e)",
-    badge: "IPCC Tier-1",
-    badgeVariant: "success",
-    accentColor: "#16a34a",
-    keywords: ["carbon", "ghg", "greenhouse gas", "co2", "methane", "n2o", "ipcc", "footprint", "emissions"],
-  },
   {
     href: "/visualize",
     label: "Carbon Lab 3D",
@@ -199,18 +162,6 @@ export const PAGES: readonly NavPage[] = [
     badgeVariant: "neutral",
     accentColor: "#0284c7",
     keywords: ["compare", "benchmark", "side by side", "contrast", "blocks", "cross comparison"],
-  },
-  {
-    href: "/ranking",
-    label: "Village Ranking",
-    icon: Trophy,
-    needsVillage: false,
-    group: "Analytics",
-    hint: "Map and table of all villages ranked by emissions, population, land, energy, waste or livestock",
-    badge: "Leaderboard",
-    badgeVariant: "warning",
-    accentColor: "#b45309",
-    keywords: ["ranking", "leaderboard", "rank", "top", "per capita", "lowest emission", "greenest"],
   },
 
   // ── Reports ────────────────────────────────────────────────────────────────
@@ -291,6 +242,18 @@ export const PAGES: readonly NavPage[] = [
     badgeVariant: "primary",
     accentColor: "#e11d48",
     keywords: ["admin", "users", "passwords", "security", "permissions", "roles", "audit"],
+  },
+
+  // ── References ─────────────────────────────────────────────────────────────
+  {
+    href: "/references",
+    label: "References",
+    heroTitle: "Research References",
+    icon: BookOpen,
+    needsVillage: false,
+    hint: "Explore research papers, presentations, key findings, and detailed reports.",
+    accentColor: "#059669",
+    keywords: ["references", "research", "papers", "academic", "presentations", "ppt", "reports", "highlights", "literature", "citations"],
   },
 ];
 

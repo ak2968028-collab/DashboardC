@@ -55,10 +55,11 @@ export default function Shell({ children }: { children: ReactNode }) {
   }, []);
 
   // Login and role pages are work areas: no block / village selector.
-  // The home page has its own hero and filters; policy pages and work areas need no village controls.
+  // The home page has its own hero and filters; /map uses its own 3-pane GIS workbench; policy pages need no controls.
   const isHome = pathname === "/";
+  const isMapWorkbench = pathname === "/map";
   // The block / village selector only where the page follows the selected village (and the ranking's block filter).
-  const showControls = !!page && !isHome && !page.role && (page.needsVillage || pathname === "/ranking");
+  const showControls = !!page && !isHome && !isMapWorkbench && !page.role && (page.needsVillage || pathname === "/ranking");
 
   // Close mobile navigation on route change and scroll active link into view
   useEffect(() => {
@@ -204,8 +205,8 @@ export default function Shell({ children }: { children: ReactNode }) {
       {navOpen && <div className="backdrop" onClick={() => setNavOpen(false)} />}
 
       <main className={`main ${isHome ? "main-home" : page ? "main-page" : ""}`}>
-        {!isHome && page && <PageHero page={page} />}
-        <div className={page && !isHome ? `page-body ${showControls ? "has-toolbar" : ""}` : undefined}>
+        {!isHome && !isMapWorkbench && page && <PageHero page={page} />}
+        <div className={isMapWorkbench ? "page-body-workbench" : page && !isHome ? `page-body ${showControls ? "has-toolbar" : ""}` : undefined}>
           {showControls && <VillageToolbar />}
           {pathname === "/carbon" && <CarbonHero />}
           {LEGAL_PATHS.includes(pathname) ? children : <DataGate>{children}</DataGate>}
