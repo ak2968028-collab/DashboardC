@@ -11,7 +11,6 @@ import {
   Fuel,
   HelpCircle,
   Info,
-  Layers,
   Map as MapIcon,
   RotateCcw,
   Sprout,
@@ -23,7 +22,6 @@ import {
 } from "lucide-react";
 import CarbonLabScene, { SOURCE_COLORS, type Emissions, type SourceKey } from "@/components/CarbonLabScene";
 import { useDashboard } from "@/components/DashboardContext";
-import FactorPanel from "@/components/FactorPanel";
 import MitigationPanel, { DEFAULT_MITIGATION, type MitigationState } from "@/components/MitigationPanel";
 import { MetricCard, WithVillage } from "@/components/ui";
 import { useEmissionFactors, useVillageScene } from "@/lib/api";
@@ -138,14 +136,14 @@ function CarbonLab({ village }: { village: VillageDetails }) {
   } = useDashboard();
 
   const { data: factorRows } = useEmissionFactors();
-  const { data: scene, isLoading: sceneLoading } = useVillageScene(village.village_code);
+  const { data: scene } = useVillageScene(village.village_code);
   const [useReal, setUseReal] = useState(true);
   const realLayout = useReal ? scene ?? null : null;
 
   // SCALGO 3-pane UI state
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
-  const [rightTab, setRightTab] = useState<"mitigation" | "raster" | "insight">("mitigation");
+  const [rightTab, setRightTab] = useState<"mitigation" | "insight">("mitigation");
   const [showHelp, setShowHelp] = useState(false);
   const [openSections, setOpenSections] = useState({
     location: true,
@@ -202,7 +200,7 @@ function CarbonLab({ village }: { village: VillageDetails }) {
   const toggleSection = (key: keyof typeof openSections) =>
     setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
 
-  const openRightTab = (tab: "mitigation" | "raster" | "insight") => {
+  const openRightTab = (tab: "mitigation" | "insight") => {
     setRightTab(tab);
     setRightOpen(true);
   };
@@ -234,16 +232,6 @@ function CarbonLab({ village }: { village: VillageDetails }) {
 
           <button
             type="button"
-            className={`scalgo-tool-btn ${rightOpen && rightTab === "raster" ? "active" : ""}`}
-            onClick={() => openRightTab("raster")}
-            title="Spatial Emission Raster"
-          >
-            <Layers size={16} />
-            <span>Spatial Raster</span>
-          </button>
-
-          <button
-            type="button"
             className={`scalgo-tool-btn ${rightOpen && rightTab === "insight" ? "active" : ""}`}
             onClick={() => openRightTab("insight")}
             title="Focused Source Formula & Impact"
@@ -251,6 +239,18 @@ function CarbonLab({ village }: { village: VillageDetails }) {
             <Info size={16} />
             <span>Source Info</span>
           </button>
+
+          {scene && (
+            <button
+              type="button"
+              className={`scalgo-tool-btn ${useReal ? "active" : ""}`}
+              onClick={() => setUseReal((r) => !r)}
+              title="Switch between Real Village layout and Illustrative layout"
+            >
+              <MapIcon size={16} />
+              <span>{useReal ? "Real Layout" : "Illustrative"}</span>
+            </button>
+          )}
         </div>
 
         <div className="scalgo-topbar-right">
@@ -279,7 +279,7 @@ function CarbonLab({ village }: { village: VillageDetails }) {
         <div className="scalgo-help-banner">
           <span>
             <b>Carbon Lab 3D:</b> Adjust emission sliders or pick scenarios in the <b>Left Panel</b> to see live 3D plumes for <b>{village.village_name}</b>.
-            Use the <b>Right Panel</b> for <b>Mitigation &amp; Trees</b>, <b>Spatial Rasters</b>, and <b>Source Formulas</b>.
+            Use the <b>Right Panel</b> for <b>Mitigation &amp; Trees</b> and <b>Source Formulas</b>.
           </span>
           <button type="button" onClick={() => setShowHelp(false)} aria-label="Dismiss help">
             <X size={14} />
@@ -470,28 +470,6 @@ function CarbonLab({ village }: { village: VillageDetails }) {
 
         {/* CENTER 3D SCENE STAGE */}
         <main className="scalgo-lab-stage">
-          <div className="lab-layout-bar scalgo-lab-bar">
-            <span>
-              <MapIcon size={14} />{" "}
-              {sceneLoading ? "Loading cadastral layout…"
-                : !scene ? <>No cadastral parcels for this village yet. Showing an <b>illustrative village</b>.</>
-                : realLayout ? <>
-                    <b>Real layout:</b> {fmt(scene.parcel_count)} khasra parcels · {fmt(scene.extent_m[0] / 1000, 1)} × {fmt(scene.extent_m[1] / 1000, 1)} km
-                    · built-up {fmt(scene.builtup_est_ha, 1)} ha
-                    {scene.landcover_source.startsWith("LULC") ? " (LULC)" : " (estimated, no LULC here)"}
-                    {scene.households_per_house > 1 && <> · 1 house = {fmt(scene.households_per_house, 1)} households</>}
-                    {scene.elevation_base_m ? <> · ⛰️ {Math.round(scene.elevation_base_m)} m MSL (DEM)</> : null}
-                  </>
-                : <>Showing the <b>illustrative village</b>.</>}
-            </span>
-            {scene && (
-              <span className="lab-toggle" role="group" aria-label="Village layout">
-                <button type="button" className={useReal ? "active" : ""} onClick={() => setUseReal(true)}>Real village</button>
-                <button type="button" className={!useReal ? "active" : ""} onClick={() => setUseReal(false)}>Illustrative</button>
-              </span>
-            )}
-          </div>
-
           <div className="scalgo-lab-canvas-wrap">
             <CarbonLabScene
               emissions={emissions}
@@ -539,8 +517,8 @@ function CarbonLab({ village }: { village: VillageDetails }) {
           </div>
         </main>
 
-        {/* RIGHT PANEL: Mitigation, Spatial Raster & Source Insight */}
-        <aside className={`scalgo-panel right scalgo-lab-right ${rightOpen ? "open" : "collapsed"}`} aria-label="Mitigation and Raster Panel">
+        {/* RIGHT PANEL: Mitigation & Source Insight */}
+        <aside className={`scalgo-panel right scalgo-lab-right ${rightOpen ? "open" : "collapsed"}`} aria-label="Mitigation and Source Info Panel">
           <button
             type="button"
             className="scalgo-collapse-btn left"
@@ -553,20 +531,13 @@ function CarbonLab({ village }: { village: VillageDetails }) {
 
           {rightOpen && (
             <div className="scalgo-panel-inner">
-              <div className="scalgo-panel-tabs three">
+              <div className="scalgo-panel-tabs">
                 <button
                   type="button"
                   className={`scalgo-tab ${rightTab === "mitigation" ? "active" : ""}`}
                   onClick={() => setRightTab("mitigation")}
                 >
                   Mitigation
-                </button>
-                <button
-                  type="button"
-                  className={`scalgo-tab ${rightTab === "raster" ? "active" : ""}`}
-                  onClick={() => setRightTab("raster")}
-                >
-                  Spatial Raster
                 </button>
                 <button
                   type="button"
@@ -584,16 +555,6 @@ function CarbonLab({ village }: { village: VillageDetails }) {
                     grossEmissions={emissions}
                     mitigation={mitigation}
                     onChange={setMitigation}
-                  />
-                )}
-
-                {rightTab === "raster" && (
-                  <FactorPanel
-                    villageCode={village.village_code}
-                    villageName={village.village_name}
-                    focus={focus}
-                    emissions={emissions}
-                    baseline={baseline}
                   />
                 )}
 

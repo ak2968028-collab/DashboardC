@@ -953,7 +953,7 @@ export default function CarbonLabScene({
 
       // DEM Elevation badge (top right, left of tree badge).
       if (L.elevationBaseM) {
-        const elevText = `⛰️ ${Math.round(L.elevationBaseM)}m MSL${L.elevationReliefM ? ` (±${(L.elevationReliefM / 2).toFixed(1)}m)` : ""}`;
+        const elevText = `⛰️ ${Math.round(L.elevationBaseM)} m above Mean Sea Level${L.elevationReliefM ? ` (±${(L.elevationReliefM / 2).toFixed(1)} m)` : ""}`;
         const ew = ctx.measureText(elevText).width + 20;
         const ex = stackBadges ? w - ew - 12 : tx - 8 - ew;
         const ey = stackBadges ? 68 : 12;
