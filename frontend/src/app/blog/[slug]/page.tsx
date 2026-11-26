@@ -8,6 +8,7 @@ import { mutate } from "swr";
 import { useAuth } from "@/components/AuthContext";
 import BlogBody from "@/components/blog/BlogBody";
 import { postDate } from "@/components/blog/BlogCard";
+import { CarbonLoader } from "@/components/ui";
 import { blogCoverUrl, errorText, sendApi, useBlogPost } from "@/lib/api";
 
 export default function BlogPostPage() {
@@ -18,7 +19,7 @@ export default function BlogPostPage() {
   const { data: post, error, isLoading } = useBlogPost(slug, isAdmin);
   const [busy, setBusy] = useState(false);
 
-  if (isLoading) return <div className="loading">Loading post…</div>;
+  if (isLoading) return <CarbonLoader label="Loading post…" />;
   if (error || !post) {
     return (
       <div className="blog-empty">

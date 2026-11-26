@@ -12,6 +12,7 @@ import { postDate } from "@/components/blog/BlogCard";
 import { ALL_BLOCKS, useDashboard } from "@/components/DashboardContext";
 import type { MapClass } from "@/components/HomeMap";
 import MiniVideo, { type VideoItem } from "@/components/MiniVideo";
+import { CarbonLoader } from "@/components/ui";
 import { useBlogPosts, useBlocks, useSummary } from "@/lib/api";
 import { fmt, num } from "@/lib/format";
 import type { NumericKey, Village } from "@/lib/types";
@@ -19,7 +20,7 @@ import type { NumericKey, Village } from "@/lib/types";
 // Leaflet needs the browser window, so the map is client-only.
 const HomeMap = dynamic(() => import("@/components/HomeMap"), {
   ssr: false,
-  loading: () => <div className="home-map-wrap"><div className="loading home-map-loading">Loading map…</div></div>,
+  loading: () => <div className="home-map-wrap"><CarbonLoader compact className="home-map-loading" label="Loading map…" /></div>,
 });
 
 // Files in public/vedio/.
@@ -226,7 +227,7 @@ export default function OverviewPage() {
     setFocus((cur) => (cur?.id.startsWith("cls:") ? null : cur));
   };
 
-  if (!s) return <div className="loading">Loading district summary…</div>;
+  if (!s) return <CarbonLoader label="Loading district summary…" />;
   const sectors = [...s.sector_emissions].sort((a, b) => b.co2e_t_yr - a.co2e_t_yr);
   const blockRows = [...s.block_emissions].sort((a, b) => b.total_co2e_t_yr - a.total_co2e_t_yr);
 

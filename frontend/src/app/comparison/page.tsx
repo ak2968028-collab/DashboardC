@@ -18,6 +18,7 @@ import { QUALITATIVE, SimpleBarChart } from "@/components/charts";
 import { useDashboard, villageLabel } from "@/components/DashboardContext";
 import type { Basemap, SwipeLayer } from "@/components/SwipeMap";
 import { VillageCombobox } from "@/components/VillageSelector";
+import { CarbonLoader } from "@/components/ui";
 import { useEmissionGrid } from "@/lib/api";
 import { fmt, num } from "@/lib/format";
 import type { Village } from "@/lib/types";
@@ -25,7 +26,7 @@ import type { Village } from "@/lib/types";
 // Leaflet needs the browser window, so the maps are client-only.
 const DualMaps = dynamic(() => import("@/components/SwipeMap"), {
   ssr: false,
-  loading: () => <div className="dual-map-loading">Loading side-by-side comparison maps…</div>,
+  loading: () => <CarbonLoader className="dual-map-loading" label="Loading side-by-side comparison maps…" />,
 });
 
 const LAYERS: { key: SwipeLayer; label: string }[] = [

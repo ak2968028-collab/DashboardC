@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState, type FormEvent } from "react";
 import { ClipboardList, LogIn, LogOut, ShieldCheck } from "lucide-react";
 import { homeFor, useAuth } from "@/components/AuthContext";
-import { Alert, Card, PageTitle } from "@/components/ui";
+import { Alert, CarbonLoader, Card, PageTitle } from "@/components/ui";
 import { errorText } from "@/lib/api";
 import type { Role } from "@/lib/types";
 
@@ -16,7 +16,7 @@ const ROLES: Record<Role, { title: string; label: string; hint: string; icon: ty
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div className="loading">Loading…</div>}>
+    <Suspense fallback={<CarbonLoader label="Loading…" />}>
       <LoginForm />
     </Suspense>
   );

@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { Newspaper, PenSquare } from "lucide-react";
 import { useAuth } from "@/components/AuthContext";
 import BlogCard from "@/components/blog/BlogCard";
+import { CarbonLoader } from "@/components/ui";
 import { useBlogPosts, useManagedPosts } from "@/lib/api";
 
 export default function BlogPage() {
@@ -28,7 +29,7 @@ export default function BlogPage() {
         </div>
         {isAdmin && <Link href="/blog/new" className="btn primary"><PenSquare size={16} /> New post</Link>}
       </div>
-      {isLoading ? <div className="loading">Loading posts…</div> : shown.length ? (
+      {isLoading ? <CarbonLoader label="Loading posts…" /> : shown.length ? (
         <div className="blog-grid">{shown.map((p) => <BlogCard key={p.id} post={p} />)}</div>
       ) : (
         <div className="blog-empty">

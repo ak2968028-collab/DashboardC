@@ -24,6 +24,7 @@ import {
 import { DonutChart } from "@/components/charts";
 import { useDashboard } from "@/components/DashboardContext";
 import { SECTORS } from "@/components/nav";
+import { CarbonLoader } from "@/components/ui";
 import { CensusCode } from "@/components/VillageSelector";
 import { BASE_MAPS, THEMATIC_METRICS, type BaseMapId } from "@/components/VillageMap";
 import { useRasterLayers } from "@/lib/api";
@@ -34,7 +35,7 @@ import type { NumericKey, Village } from "@/lib/types";
 // Leaflet needs the browser window, so the map is client-only.
 const VillageMap = dynamic(() => import("@/components/VillageMap"), {
   ssr: false,
-  loading: () => <div className="loading">Rendering GIS Map with Village Polygons…</div>,
+  loading: () => <CarbonLoader label="Rendering GIS Map with Village Polygons…" />,
 });
 
 type RightTab = "overview" | "carbon" | "ranking" | "sectors";

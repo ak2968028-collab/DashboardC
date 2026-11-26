@@ -9,6 +9,7 @@ import LandWater from "@/components/sectors/LandWater";
 import Livestock from "@/components/sectors/Livestock";
 import Transport from "@/components/sectors/Transport";
 import Waste from "@/components/sectors/Waste";
+import { CarbonLoader } from "@/components/ui";
 
 const VIEWS: Record<string, ComponentType> = {
   demography: Demography,
@@ -22,7 +23,7 @@ const VIEWS: Record<string, ComponentType> = {
 export default function SectorsPage() {
   // useSearchParams needs a Suspense boundary when the route is prerendered.
   return (
-    <Suspense fallback={<div className="loading">Loading sector…</div>}>
+    <Suspense fallback={<CarbonLoader label="Loading sector…" />}>
       <Sectors />
     </Suspense>
   );

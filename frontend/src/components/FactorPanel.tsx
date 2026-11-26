@@ -10,9 +10,10 @@ import { fmt } from "@/lib/format";
 import { RASTER_GROUPS, classOf, paint, scenarioRaster, type GridEntry } from "@/lib/emissionGrid";
 import type { RasterFactor, VillageFactorStats } from "@/lib/types";
 import { useAuth } from "./AuthContext";
+import { CarbonLoader } from "./ui";
 
 // Leaflet needs the browser window, so the map is client-only.
-const FactorMap = dynamic(() => import("./FactorMap"), { ssr: false, loading: () => <div className="factor-map loading">Loading map…</div> });
+const FactorMap = dynamic(() => import("./FactorMap"), { ssr: false, loading: () => <CarbonLoader compact className="factor-map" label="Loading map…" /> });
 type GridOverlay = import("./FactorMap").GridOverlay;
 
 const RAMPS: Record<string, string[]> = {

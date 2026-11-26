@@ -6,7 +6,7 @@ import { RequireRole, useAuth } from "@/components/AuthContext";
 import ChangePassword from "@/components/ChangePassword";
 import LocationPicker from "@/components/LocationPicker";
 import { fmtDate, StatusPill, SurveyForm, Tabs, ValuesDiff } from "@/components/SurveyData";
-import { Alert, Card, DataTable, PageTitle } from "@/components/ui";
+import { Alert, CarbonLoader, Card, DataTable, PageTitle } from "@/components/ui";
 import {
   downloadFile, errorText, sendApi, useMySubmissions, useSupervisorVillage, useSurveyFields,
 } from "@/lib/api";
@@ -30,7 +30,7 @@ function DataEntry({ user }: { user: User }) {
     refreshUser();
   }, [refreshUser]);
 
-  if (isLoading || !mine) return <div className="loading">Loading your village…</div>;
+  if (isLoading || !mine) return <CarbonLoader label="Loading your village…" />;
   const status = user.verification_status;
   return (
     <>

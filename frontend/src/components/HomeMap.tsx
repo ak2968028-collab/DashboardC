@@ -7,6 +7,7 @@ import { geoJSON, type Layer, type PathOptions } from "leaflet";
 import { GeoJSON, MapContainer, ScaleControl, TileLayer, useMap } from "react-leaflet";
 import { featureCode, useBoundaries } from "./RankingMap";
 import IndiaStatesLayer from "./IndiaStatesLayer";
+import { CarbonLoader } from "./ui";
 
 export interface MapClass { key: string; label: string; color: string }
 
@@ -65,7 +66,7 @@ export default function HomeMap({ classes, legend, onSelect, picked, focus, styl
         <FitPool geo={pool} />
         <ScaleControl position="bottomleft" imperial={false} />
       </MapContainer>
-      {!pool && <div className="loading home-map-loading">Loading village boundaries…</div>}
+      {!pool && <CarbonLoader compact className="home-map-loading" label="Loading village boundaries…" />}
     </div>
   );
 }

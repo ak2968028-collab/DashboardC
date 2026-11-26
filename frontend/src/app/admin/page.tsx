@@ -7,7 +7,7 @@ import { RequireRole } from "@/components/AuthContext";
 import ChangePassword from "@/components/ChangePassword";
 import LocationPicker from "@/components/LocationPicker";
 import { fmtDate, StatusPill, Tabs, ValuesDiff, VerificationPill } from "@/components/SurveyData";
-import { Alert, Card, DataTable, PageTitle } from "@/components/ui";
+import { Alert, CarbonLoader, Card, DataTable, PageTitle } from "@/components/ui";
 import {
   errorText, fileObjectUrl, refreshAll, sendApi, useSubmission, useSubmissions, useSurveyFields, useUsers,
   useVerifications,
@@ -66,7 +66,7 @@ function Approvals() {
       </div>
       {message && <Alert kind={message.kind}>{message.text}</Alert>}
       {isLoading ? (
-        <div className="loading">Loading submissions…</div>
+        <CarbonLoader label="Loading submissions…" />
       ) : submissions.length ? (
         <DataTable<Submission>
           rows={submissions}
@@ -115,7 +115,7 @@ function Review({ id, onDone }: { id: number; onDone: (message: string) => void 
   const [error, setError] = useState<string | null>(null);
 
   if (loadError) return <Alert kind="error">❌ {loadError.message}</Alert>;
-  if (!s) return <div className="loading">Loading submission…</div>;
+  if (!s) return <CarbonLoader label="Loading submission…" />;
 
   async function decide(action: "approve" | "reject") {
     if (action === "reject" && !comment.trim()) return setError("Write a comment so the supervisor knows what to fix.");
@@ -193,7 +193,7 @@ function Verifications() {
       </div>
       {message && <Alert kind={message.kind}>{message.text}</Alert>}
       {isLoading ? (
-        <div className="loading">Loading…</div>
+        <CarbonLoader label="Loading…" />
       ) : users.length ? (
         <DataTable<User>
           rows={users}
@@ -277,7 +277,7 @@ function VerificationReview({ user, onDone }: { user: User; onDone: (message: st
           <a className="btn" href={file.url} target="_blank" rel="noreferrer"><ExternalLink size={16} /> Open in new tab</a>
         </>
       ) : (
-        !error && <div className="loading">Loading certificate…</div>
+        !error && <CarbonLoader label="Loading certificate…" />
       )}
       {user.verification_status === "pending" ? (
         <div className="stack section-gap">

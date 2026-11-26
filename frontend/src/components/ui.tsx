@@ -82,6 +82,37 @@ export function DataTable<T>({ rows, columns, rowKey }: { rows: T[]; columns: Co
   );
 }
 
+/** Unified looping video loader (/icon/Carbon.mp4) used across all dashboard loading states. */
+export function CarbonLoader({
+  label = "Loading…",
+  compact = false,
+  className = "",
+}: {
+  label?: string;
+  compact?: boolean;
+  className?: string;
+}) {
+  return (
+    <div
+      className={`loading carbon-loader ${compact ? "is-compact" : ""} ${className}`.trim()}
+      role="status"
+      aria-live="polite"
+    >
+      <video
+        className="carbon-loader-video"
+        src="/icon/Carbon.mp4"
+        autoPlay
+        loop
+        muted
+        playsInline
+        disablePictureInPicture
+        aria-hidden="true"
+      />
+      {label && <span className="carbon-loader-label">{label}</span>}
+    </div>
+  );
+}
+
 /** Renders children only once the active village has loaded. */
 export function WithVillage({ children }: { children: (v: VillageDetails) => ReactNode }) {
   const { activeVillage, selectedPlace, districtCode, areaLabel } = useDashboard();
@@ -97,6 +128,6 @@ export function WithVillage({ children }: { children: (v: VillageDetails) => Rea
       </Alert>
     );
   }
-  if (!activeVillage) return <div className="loading">Loading village…</div>;
+  if (!activeVillage) return <CarbonLoader label="Loading village…" />;
   return <>{children(activeVillage)}</>;
 }

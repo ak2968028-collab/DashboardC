@@ -4,14 +4,14 @@ import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useDashboard } from "@/components/DashboardContext";
 import type { RankBand } from "@/components/RankingMap";
-import { PageTitle } from "@/components/ui";
+import { CarbonLoader, PageTitle } from "@/components/ui";
 import { fmt } from "@/lib/format";
 import type { NumericKey, Village } from "@/lib/types";
 
 // Leaflet needs the browser window, so the map is client-only.
 const RankingMap = dynamic(() => import("@/components/RankingMap"), {
   ssr: false,
-  loading: () => <div className="loading">Rendering village ranking map…</div>,
+  loading: () => <CarbonLoader label="Rendering village ranking map…" />,
 });
 
 // Rank 1 gets the first (darkest) colour of the metric's ramp.

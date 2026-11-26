@@ -31,6 +31,7 @@ import {
 import PageHero from "./PageHero";
 import SiteFooter from "./SiteFooter";
 import SiteHeader from "./SiteHeader";
+import { CarbonLoader } from "./ui";
 import { VillageToolbar } from "./VillageSelector";
 
 // Policy pages linked from the footer: no village controls, and readable while the API is down.
@@ -485,6 +486,6 @@ function NavDropdown({
 function DataGate({ children }: { children: ReactNode }) {
   const { loading, error } = useDashboard();
   if (error) return <div className="alert error">❌ Could not reach the API (SERVER DOWN IT MAY BE LIGHT CUT OR INTERNET DOWN): {error.message}</div>;
-  if (loading) return <div className="loading">Connection to server and load database</div>;
+  if (loading) return <CarbonLoader label="Connection to server and load database" />;
   return <>{children}</>;
 }

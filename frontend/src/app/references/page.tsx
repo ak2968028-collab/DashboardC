@@ -21,6 +21,7 @@ import {
 import { useReferences, referenceFileUrl } from "@/lib/api";
 import type { ResearchPaper } from "@/lib/types";
 import { ReadingArticle, type ReadingMode } from "@/components/AcademicReader";
+import { CarbonLoader } from "@/components/ui";
 
 export default function ReferencesPage() {
   const { data: papers = [], isLoading } = useReferences();
@@ -178,7 +179,7 @@ export default function ReferencesPage() {
 
       {/* Main Vertically Arranged Papers List */}
       {isLoading ? (
-        <div className="loading">Loading research library…</div>
+        <CarbonLoader label="Loading research library…" />
       ) : filteredPapers.length === 0 ? (
         <div className="references-empty">
           <BookOpen size={40} className="references-empty-icon" />

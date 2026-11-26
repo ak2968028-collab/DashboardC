@@ -6,7 +6,7 @@ import { FileChartColumn, FileText, Home, Lock, LogIn } from "lucide-react";
 import { useAuth } from "@/components/AuthContext";
 import { useDashboard } from "@/components/DashboardContext";
 import { ReportComparison } from "@/components/ReportContents";
-import { Alert, Card, PageTitle, WithVillage } from "@/components/ui";
+import { Alert, CarbonLoader, Card, PageTitle, WithVillage } from "@/components/ui";
 import { advancedReportUrl, downloadFile, errorText, reportPdfUrl } from "@/lib/api";
 import type { VillageDetails } from "@/lib/types";
 
@@ -22,7 +22,7 @@ export default function AdvancedReportPage() {
         <b> track</b> progress after updating the survey data on the dashboard.
       </p>
       {!ready ? (
-        <div className="loading">Checking login…</div>
+        <CarbonLoader label="Checking login…" />
       ) : user ? (
         <WithVillage>{(v) => <Download village={v} />}</WithVillage>
       ) : (

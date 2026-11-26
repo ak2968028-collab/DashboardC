@@ -8,7 +8,7 @@ import {
   Maximize2, Minimize2, Paperclip, PenLine, Send, Square, Trash2, User, Wrench, X,
 } from "lucide-react";
 import { DonutChart, SimpleBarChart } from "@/components/charts";
-import { DataTable } from "@/components/ui";
+import { CarbonLoader, DataTable } from "@/components/ui";
 import { errorText } from "@/lib/api";
 import {
   AREA_FILE_TYPES, askAssistant, uploadArea, useModelStatus,
@@ -19,7 +19,7 @@ import { fmt } from "@/lib/format";
 // Leaflet needs the browser window, so the map is client-only.
 const AssistantMap = dynamic(() => import("@/components/AssistantMap"), {
   ssr: false,
-  loading: () => <div className="loading">Loading map…</div>,
+  loading: () => <CarbonLoader compact label="Loading map…" />,
 });
 
 interface Message {

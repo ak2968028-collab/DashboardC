@@ -6,7 +6,7 @@ import { mutate } from "swr";
 import { LogIn } from "lucide-react";
 import { ApiError, authFetcher, sendApi, setAuthToken } from "@/lib/api";
 import type { Role, User } from "@/lib/types";
-import { Alert } from "./ui";
+import { Alert, CarbonLoader } from "./ui";
 
 const TOKEN_KEY = "varanasi-dashboard-token";
 
@@ -84,7 +84,7 @@ export const homeFor = (role: Role) => (role === "admin" ? "/admin" : "/supervis
 /** Renders children only for a logged-in user with the given role. */
 export function RequireRole({ role, children }: { role: Role; children: (user: User) => ReactNode }) {
   const { user, ready } = useAuth();
-  if (!ready) return <div className="loading">Checking login…</div>;
+  if (!ready) return <CarbonLoader label="Checking login…" />;
   if (!user) {
     return (
       <Alert kind="info">

@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import CarbonLabScene, { SOURCE_COLORS, type Emissions, type SourceKey } from "@/components/CarbonLabScene";
 import MitigationPanel, { DEFAULT_MITIGATION, type MitigationState } from "@/components/MitigationPanel";
-import { MetricCard } from "@/components/ui";
+import { CarbonLoader, MetricCard } from "@/components/ui";
 import {
   useCensusVillages,
   useDistrictCensusVillages,
@@ -209,7 +209,7 @@ export default function VisualizePage() {
   }, [allVillages, selectedCode]);
 
   if (!village) {
-    return <div className="loading" style={{ padding: 32 }}>Loading Carbon Lab 3D…</div>;
+    return <CarbonLoader label="Loading Carbon Lab 3D…" />;
   }
 
   return (
