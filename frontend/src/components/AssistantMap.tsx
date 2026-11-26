@@ -25,20 +25,41 @@ const RAMPS: Record<string, string[]> = {
   greys: ["#f7f7f7", "#cccccc", "#969696", "#636363", "#252525"],
 };
 const NO_DATA = "#cfd8dc";
-// Opens on all of India; results zoom in to their villages or area.
-const INDIA_CENTER: [number, number] = [22.6, 80.0];
-const INDIA_ZOOM = 5;
+// Starts centered on Varanasi district; results zoom further to specific villages or uploaded areas.
+const VARANASI_CENTER: [number, number] = [25.35, 82.95];
+const VARANASI_ZOOM = 10;
 // All-India GeoServer layers (media/scripts/boundaries/india_layers.py); village outlines draw from ~1:2M inwards.
 const INDIA_LAYERS = [
   { layer: "varanasi:india_villages", name: "India villages – Census 2011 (zoom in)", checked: true },
 ];
 
-/** Zooms to the focused villages, else an uploaded area, else the dashboard villages, whenever a new visual is
- *  shown. Before any result the map stays on all of India. */
+/** Keeps Leaflet sized properly inside popups/drawers and zooms to Varanasi, an area, or focused villages. */
 function Fit({ geo, focus, area, visualKey }: { geo: FeatureCollection | null; focus: string[]; area?: GeoJsonObject | null; visualKey: string }) {
   const map = useMap();
+  const fittedDefault = useRef(false);
+
   useEffect(() => {
-    if (visualKey === "none") return;
+    const container = map.getContainer();
+    const syncSize = () => map.invalidateSize({ pan: false });
+    const t = setTimeout(syncSize, 80);
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(syncSize) : null;
+    ro?.observe(container);
+    return () => {
+      clearTimeout(t);
+      ro?.disconnect();
+    };
+  }, [map]);
+
+  useEffect(() => {
+    map.invalidateSize({ pan: false });
+    if (visualKey === "none") {
+      if (geo?.features.length && !fittedDefault.current) {
+        fittedDefault.current = true;
+        map.fitBounds(geoJSON(geo).getBounds(), { padding: [24, 24], maxZoom: 12 });
+      }
+      return;
+    }
+    fittedDefault.current = true;
     if (area && !focus.length) {
       map.flyToBounds(geoJSON(area).getBounds(), { padding: [40, 40], maxZoom: 14, duration: 0.6 });
       return;
@@ -50,7 +71,7 @@ function Fit({ geo, focus, area, visualKey }: { geo: FeatureCollection | null; f
     map.flyToBounds(geoJSON({ type: "FeatureCollection", features } as FeatureCollection).getBounds(), {
       padding: [40, 40], maxZoom: set.size === 1 ? 14 : 13, duration: 0.6,
     });
-  }, [visualKey, geo?.features.length]);
+  }, [map, visualKey, geo, focus, area]);
   return null;
 }
 
@@ -181,7 +202,7 @@ export default function AssistantMap({ visual, visualKey, onDraw, clearDrawKey =
   return (
     <div className="map-wrap assistant-map-wrap">
       {/* pmIgnore={false}: with Geoman's opt-in mode the map itself must opt in to get the drawing toolbar. */}
-      <MapContainer center={INDIA_CENTER} zoom={INDIA_ZOOM} preferCanvas className="map assistant-map" pmIgnore={false}>
+      <MapContainer center={VARANASI_CENTER} zoom={VARANASI_ZOOM} preferCanvas className="map assistant-map" pmIgnore={false}>
         <IndiaStatesLayer />
         <LayersControl position="topright">
           <LayersControl.BaseLayer checked name="OpenStreetMap">

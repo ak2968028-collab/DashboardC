@@ -21,6 +21,7 @@ import { fmt } from "@/lib/format";
 import { useAuth } from "./AuthContext";
 import { useDashboard } from "./DashboardContext";
 import CarbonHero from "./CarbonHero";
+import { FloatingAssistant } from "./FloatingAssistant";
 import {
   GROUP_ICONS,
   NAV_GROUPS,
@@ -213,6 +214,7 @@ export default function Shell({ children }: { children: ReactNode }) {
         </div>
       </main>
       <SiteFooter />
+      <FloatingAssistant />
     </div>
   );
 }
@@ -483,6 +485,6 @@ function NavDropdown({
 function DataGate({ children }: { children: ReactNode }) {
   const { loading, error } = useDashboard();
   if (error) return <div className="alert error">❌ Could not reach the API (SERVER DOWN IT MAY BE LIGHT CUT OR INTERNET DOWN): {error.message}</div>;
-  if (loading) return <div className="loading">Loading village database…</div>;
+  if (loading) return <div className="loading">Connection to server and load database</div>;
   return <>{children}</>;
 }
