@@ -17,17 +17,45 @@ const STRIP_RESPONSE_HEADERS = new Set([
   "content-length",
 ]);
 
+const TRUSTED_HOST_PATTERNS = [
+  /^localhost(?::\d+)?$/i,
+  /^127\.0\.0\.1(?::\d+)?$/i,
+  /^(?:[a-z0-9-]+\.)*vercel\.app$/i,
+  /^(?:[a-z0-9-]+\.)*slcrdss\.in$/i,
+  /^(?:[a-z0-9-]+\.)*slcrdss\.xyz$/i,
+];
+
 function stripDefaultPort(host: string): string {
   return host.trim().toLowerCase().replace(/:(80|443)$/i, "");
 }
 
-function matchesHost(urlHeader: string | null, expectedHost: string): boolean {
-  if (!urlHeader || !expectedHost) return false;
+function extractHost(urlHeader: string | null): string {
+  if (!urlHeader) return "";
   try {
-    return stripDefaultPort(new URL(urlHeader).host) === stripDefaultPort(expectedHost);
+    return stripDefaultPort(new URL(urlHeader).host);
   } catch {
-    return false;
+    return "";
   }
+}
+
+function isTrustedDashboardHost(host: string): boolean {
+  const clean = stripDefaultPort(host);
+  return !!clean && TRUSTED_HOST_PATTERNS.some((re) => re.test(clean));
+}
+
+function matchesHost(urlHeader: string | null, expectedHost: string): boolean {
+  const parsed = extractHost(urlHeader);
+  if (!parsed || !expectedHost) return false;
+  return parsed === stripDefaultPort(expectedHost) || isTrustedDashboardHost(parsed);
+}
+
+function resolveWebsiteHost(req: NextRequest): string {
+  const originHost = extractHost(req.headers.get("origin"));
+  if (isTrustedDashboardHost(originHost)) return originHost;
+  const refererHost = extractHost(req.headers.get("referer"));
+  if (isTrustedDashboardHost(refererHost)) return refererHost;
+  const raw = (req.headers.get("x-forwarded-host") || req.headers.get("host") || "").split(",")[0].trim();
+  return stripDefaultPort(raw);
 }
 
 async function isAuthorizedWebsiteRequest(req: NextRequest): Promise<boolean> {
@@ -63,7 +91,7 @@ async function proxy(req: NextRequest, context: { params: Promise<{ path: string
 
   const { path } = await context.params;
   const targetUrl = `${API_URL}/api/${path.join("/")}${req.nextUrl.search}`;
-  const host = (req.headers.get("x-forwarded-host") || req.headers.get("host") || "").split(",")[0].trim();
+  const host = resolveWebsiteHost(req);
 
   const headers = new Headers();
   for (const name of ["authorization", "content-type", "accept", "range"]) {
@@ -71,7 +99,7 @@ async function proxy(req: NextRequest, context: { params: Promise<{ path: string
     if (val) headers.set(name, val);
   }
   headers.set("X-Website-Key", getWebsiteApiKey());
-  if (host) headers.set("X-Website-Host", stripDefaultPort(host));
+  if (host) headers.set("X-Website-Host", host);
 
   const hasBody = !["GET", "HEAD"].includes(req.method);
   const init: RequestInit & { duplex?: "half" } = {

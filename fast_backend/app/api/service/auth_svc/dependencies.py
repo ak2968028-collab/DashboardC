@@ -45,10 +45,10 @@ async def require_website_access(
             headers={"WWW-Authenticate": "WebsiteGatewayKey"},
         )
 
-    forwarded_host = (request.headers.get("x-website-host") or "").strip().lower()
+    forwarded_host = (request.headers.get("x-website-host") or "").split(",")[0].strip().lower()
     origin_host = urlsplit(request.headers.get("origin") or "").netloc.lower()
     referer_host = urlsplit(request.headers.get("referer") or "").netloc.lower()
-    candidate = forwarded_host or origin_host or referer_host or (request.headers.get("host") or "").strip().lower()
+    candidate = forwarded_host or origin_host or referer_host or (request.headers.get("host") or "").split(",")[0].strip().lower()
 
     if not _host_allowed(candidate):
         raise HTTPException(

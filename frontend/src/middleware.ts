@@ -10,10 +10,11 @@ export async function middleware(req: NextRequest) {
   const existing = req.cookies.get(GATEWAY_COOKIE)?.value;
   if (!(await verifyGatewayToken(existing))) {
     const token = await createGatewayToken();
+    const isHttps = req.headers.get("x-forwarded-proto") === "https" || req.nextUrl.protocol === "https:";
     res.cookies.set(GATEWAY_COOKIE, token, {
       httpOnly: true,
       sameSite: "lax",
-      secure: req.nextUrl.protocol === "https:",
+      secure: isHttps,
       path: "/",
       maxAge: 60 * 60 * 24,
     });
