@@ -17,10 +17,14 @@ const STRIP_RESPONSE_HEADERS = new Set([
   "content-length",
 ]);
 
+function stripDefaultPort(host: string): string {
+  return host.trim().toLowerCase().replace(/:(80|443)$/i, "");
+}
+
 function matchesHost(urlHeader: string | null, expectedHost: string): boolean {
   if (!urlHeader || !expectedHost) return false;
   try {
-    return new URL(urlHeader).host.toLowerCase() === expectedHost.toLowerCase();
+    return stripDefaultPort(new URL(urlHeader).host) === stripDefaultPort(expectedHost);
   } catch {
     return false;
   }
@@ -67,7 +71,7 @@ async function proxy(req: NextRequest, context: { params: Promise<{ path: string
     if (val) headers.set(name, val);
   }
   headers.set("X-Website-Key", getWebsiteApiKey());
-  if (host) headers.set("X-Website-Host", host);
+  if (host) headers.set("X-Website-Host", stripDefaultPort(host));
 
   const hasBody = !["GET", "HEAD"].includes(req.method);
   const init: RequestInit & { duplex?: "half" } = {

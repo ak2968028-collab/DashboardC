@@ -25,7 +25,12 @@ def _host_allowed(host: str) -> bool:
     clean = host.strip().lower()
     if not clean:
         return False
-    return any(fnmatch.fnmatch(clean, pattern.strip().lower()) for pattern in settings.ALLOWED_WEBSITE_HOSTS)
+    bare = clean.rsplit(":", 1)[0] if ":" in clean else clean
+    return any(
+        fnmatch.fnmatch(clean, pattern.strip().lower())
+        or fnmatch.fnmatch(bare, pattern.strip().lower())
+        for pattern in settings.ALLOWED_WEBSITE_HOSTS
+    )
 
 
 async def require_website_access(

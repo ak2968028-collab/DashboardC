@@ -40,7 +40,10 @@ class Settings(BaseSettings):
     # assistant-created rasters are short-lived and never appear in the user-upload workspace
     GEOSERVER_ASSISTANT_TEMP_WORKSPACE: str = "assistant_temp"
 
-    CORS_ORIGINS: list[str] = ["http://localhost:3000"]
+    CORS_ORIGINS: list[str] = [
+        "http://localhost:3000",
+        "https://carbon.slcrdss.in",
+    ]
 
     # Website-only API access control (public dashboard needs no user login, but direct API scraping is blocked)
     WEBSITE_API_KEY: str = "varanasi-slcr-web-gateway-2026"
@@ -52,6 +55,9 @@ class Settings(BaseSettings):
         "*.vercel.app",
         "*.slcrdss.xyz",
         "slcrdss.xyz",
+        "*.slcrdss.in",
+        "slcrdss.in",
+        "carbon.slcrdss.in",
     ]
     ENABLE_API_DOCS: bool = True
 

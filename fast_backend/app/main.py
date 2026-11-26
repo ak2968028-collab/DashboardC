@@ -53,6 +53,8 @@ app.add_middleware(GZipMiddleware, minimum_size=1000, exclude_content_types=("te
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
+    allow_origin_regex=r"https://([a-z0-9-]+\.)*(slcrdss\.(in|xyz)|vercel\.app)",
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
