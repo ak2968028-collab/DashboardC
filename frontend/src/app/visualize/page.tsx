@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   Beef,
   Bike,
@@ -21,12 +21,21 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import CarbonLabScene, { SOURCE_COLORS, type Emissions, type SourceKey } from "@/components/CarbonLabScene";
-import { useDashboard } from "@/components/DashboardContext";
 import MitigationPanel, { DEFAULT_MITIGATION, type MitigationState } from "@/components/MitigationPanel";
-import { MetricCard, WithVillage } from "@/components/ui";
-import { useEmissionFactors, useVillageScene } from "@/lib/api";
+import { MetricCard } from "@/components/ui";
+import {
+  useCensusVillages,
+  useDistrictCensusVillages,
+  useDistricts,
+  useEmissionFactors,
+  useStates,
+  useSubdistricts,
+  useVillage,
+  useVillageScene,
+  useVillages,
+} from "@/lib/api";
 import { fmt, num } from "@/lib/format";
-import type { NumericKey, VillageDetails } from "@/lib/types";
+import type { NumericKey, Village, VillageDetails } from "@/lib/types";
 
 // Mirrors fast_backend carbon.py: DEFAULT_FACTORS, overridden by the emission factor table when it matches.
 const DEFAULT_FACTORS: Record<SourceKey, number> = {
@@ -114,26 +123,134 @@ function SourceIcon({ source, size }: { source: Source; size: number }) {
 const tonnes = (s: Source, value: number, factor: number) => (value * (s.monthly ? 12 : 1) * factor) / 1000;
 const roundTo = (v: number, step: number) => Math.round(v / step) * step;
 
-export default function VisualizePage() {
-  return <WithVillage>{(v) => <CarbonLab key={v.village_code} village={v} />}</WithVillage>;
+const DEFAULT_STATE = 9;
+const DEFAULT_DISTRICT = 187;
+const DEFAULT_VILLAGE = "208818";
+
+const sameName = (a: string | null | undefined, b: string | null | undefined) =>
+  !!a && !!b && a.trim().toLowerCase() === b.trim().toLowerCase();
+
+interface LabLocationProps {
+  village: VillageDetails;
+  states: { state_code: number; state_name: string }[];
+  districts: { district_code: number; district_name: string }[];
+  subdistricts: { subdistrict_code: number; subdistrict_name: string }[];
+  stateCode: number | null;
+  districtCode: number | null;
+  subdistrictCode: number | null;
+  setStateCode: (code: number | null) => void;
+  setDistrictCode: (code: number | null) => void;
+  setSubdistrictCode: (code: number | null) => void;
+  areaLabel: string;
+  surveyedVillages: Village[];
+  allVillages: Village[];
+  selectedCode: string;
+  onSelectVillage: (code: string) => void;
 }
 
-function CarbonLab({ village }: { village: VillageDetails }) {
-  const {
-    states,
-    districts,
-    subdistricts,
-    stateCode,
-    districtCode,
-    subdistrictCode,
-    setStateCode,
-    setDistrictCode,
-    setSubdistrictCode,
-    areaLabel,
-    placeOptions,
-    selectedCode,
-    setSelectedCode,
-  } = useDashboard();
+export default function VisualizePage() {
+  const { data: rawVillages = [] } = useVillages();
+  const allVillages = useMemo(
+    () => [...rawVillages].sort((a, b) => a.village_name.localeCompare(b.village_name)),
+    [rawVillages],
+  );
+
+  // Independent location state for Carbon Lab 3D (never depends on GIS Explorer or global toolbar selection).
+  const [stateCode, setState] = useState<number | null>(DEFAULT_STATE);
+  const [districtCode, setDistrict] = useState<number | null>(DEFAULT_DISTRICT);
+  const [subdistrictCode, setSubdistrict] = useState<number | null>(null);
+  const [selectedCode, setSelectedCode] = useState<string>(DEFAULT_VILLAGE);
+
+  const { data: states = [] } = useStates();
+  const { data: districts = [] } = useDistricts(stateCode);
+  const { data: subdistricts = [] } = useSubdistricts(districtCode);
+  const subVillages = useCensusVillages(subdistrictCode);
+  const districtVillages = useDistrictCensusVillages(subdistrictCode ? null : districtCode);
+  const census = subdistrictCode ? subVillages : districtVillages;
+
+  const districtName = districts.find((d) => d.district_code === districtCode)?.district_name;
+  const subdistrictName = subdistricts.find((s) => s.subdistrict_code === subdistrictCode)?.subdistrict_name;
+  const areaLabel = subdistrictCode
+    ? [subdistrictName, districtName].filter(Boolean).join(", ")
+    : districtName ?? states.find((s) => s.state_code === stateCode)?.state_name ?? "";
+
+  const censusCodes = useMemo(() => new Set((census.data ?? []).map((c) => c.village_code)), [census.data]);
+  const surveyedInArea = useMemo(() => {
+    if (!districtCode) return allVillages;
+    if (census.isLoading) return [];
+    return allVillages.filter(
+      (v) => censusCodes.has(v.village_code)
+        || (sameName(v.district, districtName) && (!subdistrictCode || sameName(v.subdistrict, subdistrictName))),
+    );
+  }, [allVillages, censusCodes, census.isLoading, districtCode, districtName, subdistrictCode, subdistrictName]);
+
+  // If the selected block/district has surveyed villages, keep the active 3D village inside it.
+  const activeCode = useMemo(() => {
+    if (!allVillages.length) return selectedCode;
+    if (surveyedInArea.some((v) => v.village_code === selectedCode)) return selectedCode;
+    if (surveyedInArea.length > 0) return surveyedInArea[0].village_code;
+    if (allVillages.some((v) => v.village_code === selectedCode)) return selectedCode;
+    return allVillages[0].village_code;
+  }, [allVillages, surveyedInArea, selectedCode]);
+
+  const { data: fetchedVillage } = useVillage(activeCode);
+  const lastVillageRef = useRef<VillageDetails | null>(null);
+  if (fetchedVillage) lastVillageRef.current = fetchedVillage;
+  const village = fetchedVillage ?? lastVillageRef.current;
+
+  const setStateCode = (code: number | null) => { setState(code); setDistrict(null); setSubdistrict(null); };
+  const setDistrictCode = (code: number | null) => { setDistrict(code); setSubdistrict(null); };
+
+  useEffect(() => {
+    if (allVillages.length && !allVillages.some((v) => v.village_code === selectedCode)) {
+      const fallback = allVillages.find((v) => v.village_code === DEFAULT_VILLAGE) ?? allVillages[0];
+      if (fallback) setSelectedCode(fallback.village_code);
+    }
+  }, [allVillages, selectedCode]);
+
+  if (!village) {
+    return <div className="loading" style={{ padding: 32 }}>Loading Carbon Lab 3D…</div>;
+  }
+
+  return (
+    <CarbonLab
+      key={village.village_code}
+      village={village}
+      states={states}
+      districts={districts}
+      subdistricts={subdistricts}
+      stateCode={stateCode}
+      districtCode={districtCode}
+      subdistrictCode={subdistrictCode}
+      setStateCode={setStateCode}
+      setDistrictCode={setDistrictCode}
+      setSubdistrictCode={setSubdistrict}
+      areaLabel={areaLabel}
+      surveyedVillages={surveyedInArea}
+      allVillages={allVillages}
+      selectedCode={activeCode}
+      onSelectVillage={setSelectedCode}
+    />
+  );
+}
+
+function CarbonLab({
+  village,
+  states,
+  districts,
+  subdistricts,
+  stateCode,
+  districtCode,
+  subdistrictCode,
+  setStateCode,
+  setDistrictCode,
+  setSubdistrictCode,
+  areaLabel,
+  surveyedVillages,
+  allVillages,
+  selectedCode,
+  onSelectVillage,
+}: LabLocationProps) {
 
   const { data: factorRows } = useEmissionFactors();
   const { data: scene } = useVillageScene(village.village_code);
@@ -347,20 +464,35 @@ function CarbonLab({ village }: { village: VillageDetails }) {
                           </select>
                         </label>
                         <label className="scalgo-field">
-                          <span>Selected Village</span>
+                          <span>Selected Village {surveyedVillages.length > 0 ? `(${surveyedVillages.length})` : ""}</span>
                           <select
-                            value={selectedCode ?? ""}
-                            disabled={!placeOptions.length}
-                            onChange={(e) => e.target.value && setSelectedCode(e.target.value)}
+                            value={selectedCode}
+                            disabled={!surveyedVillages.length && !allVillages.length}
+                            onChange={(e) => e.target.value && onSelectVillage(e.target.value)}
                           >
-                            <option value="" disabled>Select village…</option>
-                            {placeOptions.map((p) => (
-                              <option key={p.village_code} value={p.village_code}>
-                                {p.village_name}{p.survey ? "" : " (No survey)"}
-                              </option>
-                            ))}
+                            {surveyedVillages.length > 0 ? (
+                              surveyedVillages.map((v) => (
+                                <option key={v.village_code} value={v.village_code}>
+                                  {v.village_name} ({v.block_name})
+                                </option>
+                              ))
+                            ) : (
+                              <>
+                                <option value="" disabled>No surveyed villages in this filter</option>
+                                {allVillages.map((v) => (
+                                  <option key={v.village_code} value={v.village_code}>
+                                    {v.village_name} ({v.block_name})
+                                  </option>
+                                ))}
+                              </>
+                            )}
                           </select>
                         </label>
+                        {districtCode && surveyedVillages.length === 0 && (
+                          <div style={{ fontSize: 11.5, color: "#92400e", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 6, padding: "6px 8px" }}>
+                            No surveyed villages in {areaLabel || "this filter"} yet. Choose any surveyed village above.
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
