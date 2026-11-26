@@ -485,7 +485,7 @@ function NavDropdown({
 
 function DataGate({ children }: { children: ReactNode }) {
   const { loading, error } = useDashboard();
-  if (error) return <div className="alert error">❌ Could not reach the API (SERVER DOWN IT MAY BE LIGHT CUT OR INTERNET DOWN): {error.message}</div>;
+  if (error) return <div className="alert error">(SERVER DOWN IT MAY BE LIGHT CUT OR INTERNET DOWN): {error.message}</div>;
   if (loading) return <CarbonLoader label="Connection to server and load database" />;
   return <>{children}</>;
 }
