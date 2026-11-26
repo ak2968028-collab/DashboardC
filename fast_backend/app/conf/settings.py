@@ -42,6 +42,19 @@ class Settings(BaseSettings):
 
     CORS_ORIGINS: list[str] = ["http://localhost:3000"]
 
+    # Website-only API access control (public dashboard needs no user login, but direct API scraping is blocked)
+    WEBSITE_API_KEY: str = "varanasi-slcr-web-gateway-2026"
+    ALLOWED_WEBSITE_HOSTS: list[str] = [
+        "localhost:3000",
+        "127.0.0.1:3000",
+        "localhost:8000",
+        "127.0.0.1:8000",
+        "*.vercel.app",
+        "*.slcrdss.xyz",
+        "slcrdss.xyz",
+    ]
+    ENABLE_API_DOCS: bool = True
+
     # AI assistant (local LLM served by Ollama; the model must support tool calling, e.g. llama3.1:8b)
     OLLAMA_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "llama3.1:8b"

@@ -2,11 +2,13 @@
 # VARANASI DISTRICT — VILLAGE ENVIRONMENT & CARBON DASHBOARD
 # REST API (FastAPI) serving the Next.js frontend
 # ====================================================================
+import hmac
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import app_router
@@ -28,7 +30,23 @@ app = FastAPI(
     description="Village-Level Environmental Resource Assessment and Carbon Emission Modeling",
     version="2.0.0",
     lifespan=lifespan,
+    docs_url="/docs" if settings.ENABLE_API_DOCS else None,
+    redoc_url="/redoc" if settings.ENABLE_API_DOCS else None,
+    openapi_url="/openapi.json" if settings.ENABLE_API_DOCS else None,
 )
+
+
+@app.middleware("http")
+async def enforce_website_gateway_for_media(request: Request, call_next):
+    """Also protects static assistant media under /api/media/temp from direct scraping."""
+    if request.url.path.startswith("/api/media/"):
+        key = request.headers.get("x-website-key") or ""
+        if not hmac.compare_digest(key, settings.WEBSITE_API_KEY):
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Unauthorized: API is accessible only through the official dashboard website."},
+            )
+    return await call_next(request)
 
 # Streams (the assistant's NDJSON events) are left uncompressed so each event reaches the browser at once.
 app.add_middleware(GZipMiddleware, minimum_size=1000, exclude_content_types=("text/event-stream", "application/x-ndjson"))

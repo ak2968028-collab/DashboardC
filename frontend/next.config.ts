@@ -1,9 +1,8 @@
 import type { NextConfig } from "next";
 import tunnel from "./tunnel.json";
 
-// Where the Next.js server proxies /api/* (FastAPI backend) and /geoserver/* (GeoServer WMS) requests.
-// Env vars win; otherwise the fixed Cloudflare named-tunnel hostname in tunnel.json.
-const API_URL = process.env.API_URL || tunnel.API_URL || "http://localhost:8000";
+// Where the Next.js server proxies /geoserver/* (GeoServer WMS/WFS) requests.
+// /api/* is handled by src/app/api/[...path]/route.ts so it can enforce website-only access and inject X-Website-Key.
 const GEOSERVER_URL = process.env.GEOSERVER_URL || tunnel.GEOSERVER_URL || "http://localhost:8080";
 
 const nextConfig: NextConfig = {
@@ -18,7 +17,6 @@ const nextConfig: NextConfig = {
   },
   async rewrites() {
     return [
-      { source: "/api/:path*", destination: `${API_URL}/api/:path*` },
       { source: "/geoserver/:path*", destination: `${GEOSERVER_URL}/geoserver/:path*` },
     ];
   },

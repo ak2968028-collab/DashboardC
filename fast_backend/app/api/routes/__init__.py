@@ -1,8 +1,9 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from app.api.routes import admin, auth, blog, chat, data_io, district, emissions, geo, locations, references, supervisor, villages
+from app.api.service.auth_svc.dependencies import require_website_access
 
-app_router = APIRouter()
+app_router = APIRouter(dependencies=[Depends(require_website_access)])
 
 app_router.include_router(
     district.router,
